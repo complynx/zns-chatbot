@@ -9,11 +9,9 @@ trust. The returned proof contains the verified Telegram profile, actual opaque
 subject, issuer/JTI, expiry and SHA-256 of the exact compact bytes.
 
 This is one component of the [trusted prelink operation](shuttle-telegram-prelink-plan.md).
-The [IAM adapter](shuttle-telegram-link-qa-2026-10-16.md) and
-[durable storage](shuttle-telegram-prelink-storage.md) already exist. The [private endpoint and startup wiring](shuttle-telegram-prelink-api.md) are
-now implemented. The [isolated hook](shuttle-zitadeltg-prelink-provider.md) and
-[private TLS route](shuttle-prelink-route-qa-2026-10-16.md) have scoped combined
-acceptance; main provider/backend activation remains open. The verifier alone
+The [private endpoint and startup wiring](shuttle-telegram-prelink-api.md) are
+now implemented.
+The verifier alone
 neither links an account nor prevents replay; it must precede receipt reservation,
 fresh IAM verification and the final local authority check.
 
@@ -62,35 +60,3 @@ fetch has an independent three-second bound and retains the originating context
 values. This fixes a review finding where one canceled caller could abort all
 waiters and consume the refresh throttle. No IAM access or DB connection is held
 by this verifier.
-
-## Verification and remaining gates
-
-Focused Windows behavioral checks passed. Strict identity-package lint reports
-zero issues. A first independent source review found the shared-cancellation
-issue; the fix and a blocked-JWKS/two-waiter regression passed. A fresh independent
-review found no actionable issue.
-
-The complete identity package passed under Linux race detection: 33 root tests,
-107 root/subtest pass events, no failures or skips. This includes signature/scope,
-expiry during fetch, malformed/duplicate claim JSON, invalid provider key sets,
-redirect/outage handling, cached-key outage, unknown-key throttling, concurrent
-proofs, rotation and waiter cancellation. It is not an end-to-end login test.
-
-Ignored evidence: `.cache/shuttle-work/prelink-verifier-qa/`, including the full
-JSON test stream, stderr/cgroup counters, terminal state and source hashes.
-The owned 2 GiB test container exited 0, with OOM false and memory `max`, `oom`,
-`oom_kill` counters zero, then was removed. No ports, network or private persistent
-volume were created; existing Go build/module caches were reused. Main stand,
-Telegram, IAM policies and the sibling zitadeltg checkout were not changed.
-
-The [service-authenticated endpoint](shuttle-telegram-prelink-api.md),
-[private TLS route](shuttle-prelink-route-qa-2026-10-16.md), and isolated hook now
-have [combined real-IAM/DB convergence](shuttle-prelink-combined-qa-2026-10-16.md)
-and [scoped outage/concurrency acceptance](shuttle-prelink-resilience-qa-2026-10-16.md),
-including matching receipt before relay. The [main bot image/schema33 cutover](shuttle-prelink-main-qa-2026-10-16.md)
-passed with prelink disabled. Main provider/backend activation, browser CA trust
-and real Telegram OIDC/final session-cookie relay remain separate gates.
-No production readiness, deployment or complete bidirectional login is claimed.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

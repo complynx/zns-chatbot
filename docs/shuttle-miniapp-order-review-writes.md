@@ -1,25 +1,11 @@
 # Native order reviewer writes
 
-Current owned runtime is schema49 / `mvp-56`; the
-[latest owned image gate](shuttle-session-fallback-primary-qa-2026-10-18.md)
-preserves the existing owner/reviewer forms, history and durable notices.
-[Native proof/review](shuttle-order-proof-native-qa-2026-10-17.md),
-[native-to-agent continuation](shuttle-order-review-late-real-qa-2026-10-18.md),
-[owner mixed workflows](shuttle-orders-owner-real-qa-2026-10-18.md) and
-[pure-agent review/cancellation](shuttle-order-reviewer-dialogue-qa-2026-10-18.md)
-have scoped real Telegram/IAM/Loom proof with a manual provider.
-The [isolated browser handoff](shuttle-order-browser-handoff-qa-2026-10-18.md)
-now also passes the original blocked agent commit→native form→same-agent flow,
-with distinct customer/ambassador identities and one financial review. It uses
+It uses
 mock Telegram and the actual shipped form/backend; the earlier real WebView input
-barrier remains separate. Fault/outage, unattended model and D23 money-policy
-questions remain open. Component versions below are historical milestones.
-
-Source schema 42 / manifest mvp-43. These routes complement the
-[reviewer reads](shuttle-miniapp-order-review-reads.md) and use the existing
-[shared review workspace](shuttle-order-review-workspaces.md). No store, schema,
-manifest or financial policy change was added at that milestone. Current owned
-runtime and its scoped real-service acceptance are linked above.
+barrier remains separate.
+Fault/outage, unattended model and D23 money-policy
+questions remain open.
+Component versions below are historical milestones.
 
 ## Requests
 
@@ -89,44 +75,3 @@ has separate source verification; [owner proof history](shuttle-miniapp-order-pr
 also has separate source verification. Authorized durable notice delivery now has separate
 [source verification](shuttle-order-notice-delivery.md). Activation was pending at
 that original component milestone; current installed state is linked above.
-
-## Verification and limits
-
-The focused Linux/PostgreSQL race gate passed 36 roots / 85 pass events:
-23 integration roots / 39 events and 13 API roots / 46 events. It covered native
-review reads/writes, shared workspace rules and the existing agent mutation API.
-No failures, skips or OOM occurred; all 921 frozen inputs matched before and after.
-Scoped API/integration lint passed with zero issues. Two initial independent source
-reviews and a fresh final review found no actionable defects in the write adapter.
-The shared store also has its earlier independent review and focused proofs.
-
-Four added HTTP behavioral roots cover both agent/form handoffs, exact retries,
-original save/cancel receipts, stale edits/cancellation, explicit consent/version
-fields, unknown role injection, foreign Origin, ordinary-owner denial, altered
-canonical proposal/decision, and logout/role loss while confirmation waits on an
-event lock. Recovery tests discard a successful response body, sign in with new
-signed Telegram initData, read the stored receipt and reopen the store. They do
-not simulate a transport disconnect or a hard process kill; those remain separate
-fault-matrix acceptance. The broader shared-store tests include canonical replay
-after completion/expiry and rollback/concurrency cases.
-
-Proof artifacts are in ignored .cache/shuttle-work/native-order-review-write-v2-qa/.
-Its exact containers and volume were removed; the ten main services were unchanged.
-The first failed snapshot remains in the v1 directory: same-second test initData
-was reused with a new nonce, so authentication correctly rejected a purported new
-launch after the decision had committed. The fixture now signs a new query_id;
-no authentication policy was relaxed. Initial lint findings about unnecessary
-serial subtest wrappers also remain recorded.
-
-These tests use real Go HTTP/store code and disposable PostgreSQL with test IAM /
-Telegram peers. They are not real Zitadel/Loom/Telegram manual acceptance. Native
-reviewer UI now has separate source/browser fixture verification.
-[Reviewer action metadata](shuttle-miniapp-order-review-context.md) also has separate
-source verification. [Owner proof history](shuttle-miniapp-order-proof-context.md)
-also has separate source verification. At that original write-component milestone,
-notice delivery, activation and real-service/fault QA were pending. Current
-installed state and scoped native/fresh mixed acceptance are linked at the top.
-Remaining gates do not imply production readiness or publication.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

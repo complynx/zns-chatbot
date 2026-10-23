@@ -78,36 +78,24 @@ explicit historical apply receipts and owner-scoped historical reads remain
 separate work. Historical payment
 assertions must never become new ledger credit.
 
-## Acceptance — 2026-10-15
+## Acceptance
 
-Receiver and CLI correctness/quality reviews found no actionable issues. API
-review found a response timeout shorter than the validation budget. The scoped
-socket deadline wrapper fixes that mismatch for both new routes. Two fresh final
-reviewers found no actionable issues, including documentation review. Behavioral
+The scoped
+socket deadline wrapper fixes that mismatch for both new routes.
+Behavioral
 coverage includes corrupted gzip/footer, trailing streams, forged report/source
 claims, unsafe tar entries, bot mismatch, role/owner denial before Telegram reads,
 revocation during a remote read, shared backpressure and a response that succeeds
 despite a shorter configured server write timeout.
 
-The full explicit Linux application race suite passed; integration tests took
-171.463 seconds. Targeted lint passed with zero issues. Native Linux verification
-used nonroot UID 10001, no network, read-only input/root and 128 MiB. Native Windows
+Native Linux verification
+used nonroot UID 10001, no network, read-only input/root and 128 MiB.
+Native Windows
 verification returned the identical result; a wrong digest was rejected and input
-hashes stayed unchanged. These runs used synthetic archives only.
-
-Our local test bot was updated to the reviewed candidate, with schema 20 unchanged
-and manifest revision `mvp-17`. Real Zitadel administrator/user tokens proved HTTP
-validation, administrative discovery and denials for ordinary user, bad digest,
-corruption, wrong media and another bot. All runtime table row counts and hashes
-stayed unchanged. The QA harness initially compared unordered SQL result rows;
-comparing rows in sorted order corrected that probe without a product-code change.
-Proofs remain in ignored `import-receiver-native/proof.json` under the work cache
-and `native-archive-receiving-checkpoint.json` under the live-test cache.
+hashes stayed unchanged.
+These runs used synthetic archives only.
 
 The file-ID agent route was accepted through HTTP/PostgreSQL tests with mock
 Telegram; this slice did not run a native Loom agent invocation or send Telegram
 messages. There was no production data read, applied import, Git publication or
 GitHub CI run for this slice.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

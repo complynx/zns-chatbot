@@ -1,19 +1,5 @@
 # Order evidence mutations and human consent
 
-Current source integration: native owner/reviewer forms, reactive action history
-and [durable order notices](shuttle-order-notice-delivery.md) now have separate
-component verification. References to these as next work below record this page's
-earlier stage. Owned activation and real native/agent/mixed/fault acceptance remain
-pending. D23 money-policy questions remain open.
-
-Source: schema 42, manifest mvp-43, module zinusya_order_payments. This component
-adds agent HTTP mutations and complete stored consent to the shared review store.
-It does not upgrade the owned main stand (schema 40 / manifest mvp-40).
-[Native owner HTTP](shuttle-miniapp-order-evidence-http.md) is verified separately.
-Owner UI, reviewer HTTP/UI, reactive action context and business-notice delivery
-were outside this mutation checkpoint; their subsequent source is linked above.
-Real order-evidence acceptance remains pending.
-
 ## Agent API
 
 All methods use POST /internal/agent/order-payments/<method>. The verified bearer
@@ -87,35 +73,3 @@ input, without visible tags.
 Tool success envelopes are bounded to 64 KiB after JSON encoding and use raw JSON.
 Persisted review-call documents are limited to 56 KiB, reserving envelope/result
 space. Oversized input fails inside the transaction; summaries are not truncated.
-
-## Verification and limits
-
-The isolated PostgreSQL/Linux/race gate at the ignored local path
-.cache/shuttle-work/order-evidence-mutations-v3-qa/ passed 53 top-level tests /
-110 pass events: 40 integration roots / 64 events and 13 API roots / 46 events.
-All 909 frozen inputs matched before/after. There were no failures, skips
-or OOM. Scoped db/API/task/integration lint passed with zero issues.
-
-New behavioral coverage checks owner submission/retry/original status after human
-review, agent save to native commit to read-only agent status, native save to agent
-HTTP preparation/commit/retry, changed-argument rejection, cancellation status,
-and complete forty-item Russian consent through task/outbox/mock Telegram before
-the final keyboard. Existing authorization, concurrency, rollback and store-restart
-scenarios also passed. Independent correctness/quality reviews and fresh final
-source reviews returned no actionable findings. These are component tests with
-mock IAM/Loom/Telegram, not real Telegram/native form or unattended-model acceptance.
-
-The earlier v2 QA remains failed: its new delivery test awaited completion of a
-storage-only paymentFile fixture lacking normal Telegram intent. Delivery was not
-reached. The replacement uses Service.Accept with a normal Telegram document and
-extracts its persisted file ID. The original failure, source freeze and diagnosis
-are retained separately. No product behavior was weakened to pass it.
-
-Temporary Go/PostgreSQL containers and their labeled volumes are removed after
-the gates; the ten main services are unchanged. Next: native owner proof targeting,
-reviewer HTTP/forms over the same shared revisions, reactive action context,
-durable authorized notice delivery, then owned-stand migration and real
-native/agent/mixed/restart/fault acceptance. Publication and production remain held.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

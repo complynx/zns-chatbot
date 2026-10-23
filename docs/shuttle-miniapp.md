@@ -1,20 +1,10 @@
 # Embedded account session
 
-The initial session slice provides account login and logout for a Telegram Mini
-App. Later slices add [protected registration fields](shuttle-miniapp-registration-details.md)
-and an [orders draft form](shuttle-orders-selection.md), each with its own rollout
-and acceptance boundary. The orders draft form and native /orders entry are installed on the owned
-runtime at schema38, subsequently upgraded to schema39. [Four-path acceptance](shuttle-orders-selection-qa-2026-10-16.md)
-uses actual Telegram, real IAM/Loom and direct form APIs with locally signed proofs
-and a manual provider; trusted WebView and unattended model checks remain open. It does not
-submit orders or payments. A subsequent read-only
-[owner registration/status view](shuttle-account-status.md) is implemented with
-its own acceptance boundary. IAM calls remain server-side; Loom is
-not involved. Architecture decisions are in [the plan](shuttle-miniapp-plan.md).
+The embedded Mini App provides account bootstrap, profile and logout plus domain forms through owner-scoped APIs. IAM calls stay server-side. Saving or reading a form does not start an unsolicited Loom run. See [registration details](shuttle-miniapp-registration-details.md), [order selection](shuttle-orders-selection.md) and [account status](shuttle-account-status.md).
 
 ## Enablement
 
-Apply migration 24 before starting this candidate. For production, set `mini_app_origin` in the
+The origin contract is configured through `mini_app_origin` in the
 startup YAML, or `SHUTTLE_MINI_APP_ORIGIN`, to one exact HTTPS origin such as
 `https://app.example.invalid`. An empty value disables all `/app/` routes.
 Use lowercase hostnames, omit the default HTTPS port, and include no trailing
@@ -28,14 +18,6 @@ over trusted HTTPS and configure its launch URL in Telegram separately. Enabling
 the routes does not configure BotFather or prove a Telegram WebView launch.
 
 ## Local Telegram launch redirect
-
-The owned desktop test stand can use the existing server redirect:
-
-```yaml
-mini_app_origin: "http://localhost:18382"
-mini_app_launch_url: "https://complynx.net/testbot/18382/app/"
-mini_app_allow_local_http: true
-```
 
 Environment overrides are `SHUTTLE_MINI_APP_ORIGIN`,
 `SHUTTLE_MINI_APP_LAUNCH_URL` and `SHUTTLE_MINI_APP_ALLOW_LOCAL_HTTP`.
@@ -55,31 +37,6 @@ enabled Mini App origin and a canonical HTTPS URL with a clean path ending in
 allowed. A local HTTP origin requires an explicit HTTPS launch URL. The launch
 host does not become a trusted request origin.
 
-Python `full_link` in `zns-chatbot/config.py` uses this same redirect mechanism.
-A read-only live probe on 2026-10-16 confirmed that
-`https://complynx.net/testbot/18382/app/` returns 302 to
-`http://localhost:18382/app/`, preserving query parameters. The nginx configuration
-in `server_configs/configs/complynx/nginx/complynx.conf` also supports alphabetic
-localhost subdomains, but the Go HTTP exception intentionally accepts only
-`localhost`. No server configuration was changed.
-
-The source implementation passed independent reviews, a broad Linux race gate
-of 118 tests (205 pass events), and a final focused gate of 18 tests (72 pass
-events) after the configuration helper was changed to a free function. Strict
-lint passed. Both gates preserved their frozen source inputs and the ten main
-stand services; disposable containers and volumes were removed. The first broad
-attempt had an incorrect subprocess-helper inventory and later lint issues;
-those results remain separate from the passing gates.
-
-The owned runtime now includes this configuration at schema39. Actual Telegram
-initData authentication, a form save, reload recovery and logout passed in a
-separate top-level browser tab opened with the exact Telegram-generated launch
-URL. After Daniel approved the browser permission, the same Telegram Web iframe
-passed opening, authenticated reads, draft writes, logout and re-entry. Mixed
-agent/form workflows and payment-review writes there remain open. See the [local launch QA record](shuttle-miniapp-local-launch-qa-2026-10-16.md). Loopback means the machine running Telegram;
-this does not expose the developer's server to a remote phone. Zitadeltg CA/provider
-interactive acceptance remains a separate handoff.
-
 Runtime settings use the existing administrative settings update protocol:
 
 | Field | Default seconds | Allowed seconds |
@@ -93,9 +50,7 @@ skew is a fixed 30 seconds. Session expiry is absolute, independent of IAM refre
 
 ## Public protocol
 
-- `GET /app/` serves the page. Source exposes only app.js, orders.js,
-  payment-reviews.js and app.css. All four are included in the current owned
-  schema39 candidate.
+- `GET /app/` serves the embedded page and its shipped, explicitly allowlisted assets. The allowlist is defined by the current application routes.
 - `POST /app/session/bootstrap` accepts JSON `init_data` and `bootstrap_nonce`.
   The nonce is 32 random bytes encoded as canonical unpadded base64url. The proof
   is validated before DB access or IAM calls. The response contains the local
@@ -160,31 +115,3 @@ has a separate contract: it persists owner/event IDs, operation UUID, versions a
 exact quantities before dispatch, and blocks new saves if that storage fails. CSP permits only the app assets and official
 Telegram SDK, with Telegram Web as the allowed iframe ancestor. Actual Telegram
 iframe/storage behavior remains a separate acceptance gate.
-
-## Verification boundary
-
-Independent proof reviews and DB correctness/security/quality reviews found no
-actionable defects. HTTP/UI review found stale-capability handling, launch/account
-isolation and noncanonical Origin configuration defects; these were fixed. A fresh
-lifecycle review found no actionable issue. The post-correction full Linux race
-gate passed: all 164 enumerated integration tests in 11 fresh bounded groups,
-plus the explicit cmd/internal/migrations packages. Strict lint reported zero
-issues. Seven dependency-free Node
-behavior tests now pass, including account switching, same-attempt lost replies,
-transient IAM failure, rejected sessions and logout.
-
-Owned native real-IAM fixture acceptance passed; see [the native QA record](shuttle-miniapp-qa-2026-10-15.md).
-The later [local launch check](shuttle-miniapp-local-launch-qa-2026-10-16.md) proves
-Telegram-issued initData in both a top-level tab and the Telegram Web iframe after
-browser permission approval. Embedded draft writes and logout/re-entry also pass.
-It does not prove local trusted HTTPS or production readiness. Daniel's
-local CA installation and later interactive zitadeltg checks remain deferred.
-
-Earlier test failures are preserved in local evidence: an ambiguous SQL column was
-qualified; a test compared time-zone representations instead of instants; an
-internal-auth test supplied no body and reached JSON validation before auth; lint
-found fatal test assertions in a worker goroutine, which were moved to the test
-goroutine. These are separate from later passing results.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

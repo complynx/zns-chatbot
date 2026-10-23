@@ -73,16 +73,3 @@ source record IDs are durable idempotency keys. Do not choose a new subject or
 operation to bypass a conflict. Replay also checks current account/IAM access.
 The additive receipt migration refuses automatic Down after receipts exist;
 imported application users are not automatically deleted on rollback.
-
-## Acceptance boundary
-
-Synthetic PostgreSQL tests cover creation/reuse, immutable replay across store
-reopen, conflict and final-authorization rollback, preservation of existing
-profiles/preferences, owner-history/avatar reads and stranger/revoked denial,
-and absence of new live work. CLI tests cover current operator authority, exact
-IAM binding inputs, final authorization loss and private input validation.
-A real-IAM account import, the permitted count-only production-copy dry-run,
-updated release-image installation and server cutover remain separate gates.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk

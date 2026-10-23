@@ -1,36 +1,5 @@
 # Massage specialist access and timetable
 
-Updated: 2026-10-18. The primary owned runtime is schema49 / `mvp-56` after
-[specialist notification installation](shuttle-massage-specialist-preferences-runtime-qa-2026-10-18.md)
-and the [reboot resume checkpoint](shuttle-reboot-resume-qa-2026-10-18.md).
-The binding store was introduced in migration48;
-[its forward installation passed](shuttle-massage-staff-install-qa-2026-10-18.md).
-Native staff reads and the administrative agent/form happy paths now pass
-[real Telegram QA](shuttle-massage-staff-mixed-real-qa-2026-10-18.md). Complete
-parity, fault/outage coverage and live-controller rollback acceptance remain open. Separate mock-Telegram QA stands use schema48 / `mvp-54` with real
-IAM and Loom. Scoped [native HTTP and actual Loom staff acceptance](shuttle-isolated-domain-qa-2026-10-18.md)
-passes there, including current grant/revoke and native booking/cancellation
-visibility. Real native staff reads and administrative happy-path handoffs now
-pass their linked scoped gates; complete parity remains open.
-The historical [catalog contract image activation](shuttle-catalog-contract-install-qa-2026-10-18.md)
-changes catalog guidance only; staff contracts are unchanged.
-Exact binding write/status/pending HTTP has component acceptance below.
-Both specialist read and administrative binding forms have source component
-acceptance. Owned forward installation and scoped real native/agent/mixed
-staff workflows pass. This is not complete massage parity.
-
-[Real Telegram native staff QA](shuttle-massage-staff-native-real-qa-2026-10-18.md)
-now passes administrator grant/revoke/restore without an agent run, no-pass
-specialist timetable/own-client/contact reads after removing temporary IAM admin
-roles, one actual Loom read/reply, and same-container bot restart. Synthetic
-fixture bookings and manual provider responses bound this acceptance. Temporary
-admin grants were removed. The subsequent [real approval handoff gate](shuttle-massage-staff-mixed-real-qa-2026-10-18.md)
-also passes an agent-only revocation and both form/agent directions: three canonical
-effects, original proposal/expiry preserved, six tasks completed and nine expected
-messages delivered. Its final fixture binding is revoked at version6, temporary
-IAM grants are again removed and no task is pending. Complete live-controller
-rollback, unattended model behavior and production acceptance remain open.
-
 ## Complete next workflow
 
 A global administrator grants/revokes a known local account's private event-bound
@@ -52,19 +21,12 @@ unrelated `food.admins` list. New grants require global administration.
 
 Instant booking in Python reserves the specialist's own time with themselves as
 client and specialist (`massage.py:1004-1013`); it does not grant arbitrary
-third-party booking. Specialist notification preferences/delivery now have their
-linked scoped runtime acceptance. [Instant self reservation](shuttle-massage-instant.md)
-has domain/store, HTTP and isolated shipped-form acceptance, including lost-reply
-recovery and both direct agent HTTP/form handoffs. Scoped
-[actual Loom/graceful behavior](shuttle-massage-instant-runtime-qa-2026-10-19.md)
-is verified with retained QA probe failures and read-back reconciliation. Actual
-Loom/native handoffs, owner-reminder presentation and real Telegram acceptance
-remain open; source migration50 / `mvp-57` is uninstalled on the schema49 /
-`mvp-56` primary. Atomic rescheduling remains a later complete workflow.
+third-party booking.
+See [instant self reservation](shuttle-massage-instant.md) for its shared operation and recovery contract.
+Atomic rescheduling remains a later complete workflow.
 
 Telegram specialist-access approval now displays the canonical human terms
-without a redundant machine-argument block. [Source and actual runtime proof](shuttle-specialist-approval-readable-qa-2026-10-18.md)
-retain exact internal argument/hash binding and plain conversational consent.
+without a redundant machine-argument block.
 Empty descriptions retain the existing literal fallback.
 
 ## Binding store contract
@@ -99,34 +61,14 @@ still checks the event and binding versions, but needs no current schedule alias
 Neither bindings nor operation history are physically deleted. Migration down
 refuses populated tables. Private bindings do not appear in public schedule JSON.
 
-## Verified component and remaining gates
-
-The Linux Go 1.27.2/PostgreSQL 17 race gate passed 12 roots with zero failures/skips:
-seven binding/atomic-revocation cases and five neighboring schedule/booking cases.
-It checks grant/revoke/regrant, original receipt replay after newer changes and
-expiry, changed-body rejection, IAM callback failure, expired approval, multiple
-aliases per human, forbidden transfer, removal/readdition, revoked target/module,
-receipt-write rollback, schedule-write rollback and stale grant rejection after
-schedule replacement. Both runs preserved source and all ten main Compose
-fingerprints. Exact Go/PostgreSQL containers and private volumes were removed;
-no OOM occurred. Limits were 2 GiB for Go and 512 MiB for PostgreSQL and no swap.
-
-The first compile found an invalid error symbol; it was corrected to the existing
-scoped missing-row convention. First lint reported one exported comment prefix;
-that was corrected after the first 11-root gate. Final configured DB/integration
-lint reports zero issues. Independent correctness/quality and fresh final source
-reviews found no actionable findings. Their additional stale-proposal coverage
-suggestion is included in the final 12-root gate. Evidence is retained under
-`.cache/shuttle-work/massage-staff-store-v1-qa/` and `massage-staff-store-v2-qa/`.
-This is binding store acceptance, not full staff authorization or real-service QA.
-
 ## Shared staff reads
 
 The agent and Mini App Store entry points share current-authority event discovery,
-schedule, timetable/client-list and own-client detail implementations. Read HTTP
+schedule, timetable/client-list and own-client detail implementations.
+Read HTTP
 routes, binding writes and manifest methods are implemented in source.
-Both specialist read and administrative forms have source component acceptance
-below; owned forward installation passes, while full real-Telegram workflow acceptance remains open. No participant pass is required. Disabling the massage module retains staff reads; public specialist IDs,
+No participant pass is required.
+Disabling the massage module retains staff reads; public specialist IDs,
 passes and unrelated event roles do not grant staff access.
 
 Event-wide timetable pages include non-cancelled bookings across all specialist
@@ -157,30 +99,6 @@ reads present current event-local offsets; booking terms retain their historical
 timezone, service labels, price and occupied interval. Price is not payment
 confirmation. Native reads use one transaction/connection, including session
 validation; they do not call agent or participant authorization paths recursively.
-
-## Shared-read component verification
-
-The final Linux Go 1.27.2/PostgreSQL 17 race gate passed 21 roots and 28 passing test
-events with zero failures/skips. Seven new roots cover no-pass staff access,
-event-wide versus own contacts/detail, several aliases without duplicate events,
-module disabling, deployment isolation, grant/local identity revocation, native
-session/generation/expiry and single-connection use, revocation/logout after an
-event-lock wait, equal-start chronological continuation, filter-bound cursors,
-range overlap, cancellation exclusion, retained past bookings, frozen terms and
-byte-trimmed pages without missing rows. Neighboring binding, schedule, booking
-guard and native handoff/lock-wait cases also pass. Initial two source snapshots
-passed the same 21 roots/28 events; their lint failures remain recorded. Four
-initial lint issues and then one cognitive-complexity issue were corrected by
-normalizing the typed SQL page limit once. Final configured DB/integration lint
-reports zero issues. Independent correctness/quality and fresh final reviews
-found no actionable findings.
-
-All three runs preserved their frozen source and all ten main Compose service
-fingerprints. Their exact temporary Go/PostgreSQL containers and private volumes
-were removed, with no OOM. Limits were 2 GiB/512 MiB, respectively, and no swap.
-Evidence: `.cache/shuttle-work/massage-staff-reads-v1-qa/`, `-v2-qa/`, `-v3-qa/`.
-This accepts the Store component only. Agent/native HTTP, UI, real IAM/Loom/
-Telegram specialist acceptance, full massage parity and production remain open.
 
 ## Agent and native read HTTP
 
@@ -240,51 +158,16 @@ return canonical proposals once, and reactive context must retain the current
 user's admin expectations without an unsolicited agent turn.
 
 The canonical Store and reactive admin context components are implemented and
-verified below. Write HTTP is verified in the later section. The specialist read
-form has source acceptance; the administrative form also has source acceptance below. The
+verified below.
+Write HTTP is verified in the later section.
+The
 owned Loom preparation wire accepts only `prepared` with a future expiry; do not
 invent a `completed` preparation status or renew an expired canonical approval
-for recovery. The actor-scoped proposal-status read supplies completed recovery.
+for recovery.
+The actor-scoped proposal-status read supplies completed recovery.
 Binding write tools and native routes now implement this verified HTTP contract.
-Schema48 is installed on the owned stand. Preserve its migration bytes; any
+Preserve its migration bytes; any
 further schema change needs a new migration and the corresponding acceptance.
-
-## Read HTTP component verification
-
-The final Linux Go 1.27.2/PostgreSQL 17 race gate passes 31 roots and 38 passing test
-events: 27 integration roots/34 events and four API roots/events, with zero failures
-or skips. Five new integration roots exercise no-pass non-admin staff across all
-four agent/native read types, own versus foreign contact/detail, grant revocation,
-no extra agent task, native admin configuration/target reads, agent target lookup,
-role denial, revoked-target diagnostics, origin/event/limit/session rejection,
-same-operation binding effects/replay across interfaces and logout while a binding
-write waits for the event. Existing Store, schedule, native booking and global
-admin discovery checks also pass. Four API roots include consumer-readable
-manifest parsing and bounded timetable/cursor schema validation.
-
-The initial 31-root gate was green but did not cover an omitted `own_only` field.
-Independent final review found that Huma required it although discovery made it
-optional. The query field is now optional while the cursor field stays required;
-the final gate includes a real agent HTTP request omitting the filter and verifies
-that it returns the same event-wide records. This was a review finding, not a
-failure caught by the initial test suite. Earlier lint runs found 26 then two
-schema-construction issues; final configured DB/API/integration lint reports zero.
-Independent correctness/quality and fresh final review report no actionable
-findings after the optional-filter fix. Their earlier finding remains retained.
-
-Both gates preserved frozen source and all ten main Compose service fingerprints,
-with no OOM. Their exact temporary Go/PostgreSQL containers and private volumes
-were removed. Limits were 2 GiB/512 MiB with no swap. Evidence:
-`.cache/shuttle-work/massage-staff-api-v1-qa/` and `massage-staff-api-v2-qa/`.
-This is mocked-peer HTTP plus real-PostgreSQL component acceptance, not real IAM/
-Loom/Telegram specialist acceptance, new forms, fresh-operation handoff or rollout.
-At this read gate, runtime was schema47 / `mvp-51` and source was schema48 /
-`mvp-52`. The later binding HTTP milestone below used `mvp-53`; current
-source is `mvp-54`.
-
-The later owned forward installation now passes at schema48 / `mvp-54`.
-Next exercise native/agent/mixed paths with real IAM/Loom/Telegram before accepting
-the complete feature; full live-controller rollback remains unproven. No production activation is authorized.
 
 ## Canonical binding continuation Store verification
 
@@ -314,86 +197,9 @@ expires; a cursor for another event cannot select an event-filtered page.
 These Store methods require current global administrator authorization at the API
 boundary; they do not independently verify IAM roles.
 
-The Linux Go 1.27.2/PostgreSQL 17 race gate passes 35 roots/44 test events:
-31 integration roots/40 events and four API roots/events, zero failures or skips.
-Four new roots cover fresh-operation native-to-agent and agent-to-native handoff,
-concurrent application, original receipt replay after revoke/expiry, exact
-proposal/arguments/actor isolation, expired adoption, alias-insert rollback,
-failed authorization without effects, expired native sessions and discovery of
-all 21 proposals across a page boundary after cursor expiry. The previous
-31-root read HTTP/binding/schedule/native booking suite also passes.
-
-Independent quality review found that the first bounded pending list hid entries
-after twenty; pagination and the 21-proposal test correct that finding. Correctness
-and two fresh final reviews report no actionable findings. Initial lint/typecheck
-failures (complexity, formatting, an invalid embedded initializer and sqlc column
-ambiguity) were corrected before the final gate. Final DB/integration lint has
-zero issues. The frozen source and all ten main service fingerprints stayed
-unchanged; no OOM occurred. Both exact temporary containers and their private
-PostgreSQL volume were removed. Evidence:
-`.cache/shuttle-work/massage-binding-canonical-v1-qa/`.
-
-This is Store/component acceptance with mock peers, not real-service handoff or
-activation. At this Store gate, source was schema48 / `mvp-52` and runtime was
-schema47 / `mvp-51`. The later binding HTTP milestone below used `mvp-53`; current source is `mvp-54`.
-The later HTTP section adds agent/native write support. The specialist read UI
-now has source acceptance, as does the administrative form. Complete real IAM/
-Loom/Telegram native/agent/mixed QA remains open.
-
-## Reactive administrator context verification
-
-An explicit user request now includes up to five canonical pending specialist
-access proposals and five original receipts, newest first in each list. Interface
-aliases cannot duplicate those records. Pending proposals must be unexpired and
-created before the accepted task. Completed effects must have their original
-receipt timestamp before that task; a preparation created earlier but applied
-later is excluded from that task's receipt history. A module being disabled does
-not erase historical results.
-
-The task path first reads only an authenticated actor's history-presence bit.
-When history exists, it resolves the caller's IAM principal and requires the
-current `zinusya.admin` role in this deployment before reading private payloads.
-The Store rechecks current local identity and task/actor/event deployment scope.
-`RecentMassageBindingContext` itself requires the caller to perform IAM global
-administrator authorization; it does not implement its own IAM client. This uses
-the existing token lifecycle/cache policy. The role-loss test explicitly
-invalidates that user's token cache before the next request.
-
-Context is available to a new reactive Loom run and to steering of an existing
-run after a bot restart. Creating a preparation, adopting it or applying through
-the native Store path creates no agent task. Prompt instructions classify this
-history as untrusted metadata, never consent or a new request; require current
-state/status reads, exact human approval, unchanged arguments and original expiry.
-Original receipts describe old effects, not present access. No session bearer,
-IAM token or extra user profile is included.
-
-The Linux Go 1.27.2/PostgreSQL 17 race gate passes 41 roots/50 test events:
-37 integration roots/46 events and four API roots/events, zero failures or skips.
-Three new roots cover 5+5 bounds, before-task cutoffs, post-task application,
-expiry, missing/foreign tasks, actor/deployment isolation, module-disabled history,
-no proactive run, canonical alias deduplication, explicit creation and steering
-after restart, original receipts and withholding context after role loss with
-cache invalidation. Existing owner-massage and order-review reactive context
-paths also pass, alongside the previous canonical/read HTTP tests.
-
-Configured DB/task/integration lint reports zero issues. Independent correctness,
-quality and fresh final review report no actionable findings. Frozen source and
-all ten main Compose service fingerprints stayed unchanged; no OOM occurred.
-The exact temporary Go/PostgreSQL containers and private database volume were
-removed. Evidence: `.cache/shuttle-work/massage-binding-context-v1-qa/`.
-This uses real PostgreSQL and the actual bot task loop with mock IAM/Loom/Telegram
-peers. It does not accept real-service specialist handoff or install the feature.
-
-At this context gate, source was schema48 / `mvp-52` and runtime was schema47 /
-`mvp-51`. The later binding HTTP milestone below used `mvp-53`; current source is `mvp-54`.
-The following HTTP component exposes write/status/pending tools. Both forms now
-have source acceptance; next complete real IAM/Loom/Telegram native/agent/mixed QA
-before accepting the complete feature.
-
 ## Exact agent and native binding HTTP contract
 
-The binding HTTP milestone introduced these tools in `mvp-53`. Current source
-manifest `mvp-54` dynamically advertises three additional global
+The binding manifest dynamically advertises three additional global
 administrator tools. `set_massage_specialist_binding` is an idempotent write with
 an exact-parameters preparation and operation-status path. The two other tools
 are reads. Discovery never substitutes for backend IAM authorization.
@@ -448,47 +254,37 @@ The reactive prompt now names the actual pending/proposal/write tools for handof
 
 ## Binding HTTP component verification
 
-The final Linux Go 1.27.2/PostgreSQL 17 race gate passes 46 roots/55 test events:
-41 integration roots/50 events and five API roots/events, zero failures or skips.
 Four new integration roots cover native preparation -> fresh agent adoption/apply,
 agent preparation -> fresh native adoption/apply, canonical pending discovery,
 original status/replay after revocation, completed preparation reconciliation,
 explicit false/zero/confirmation rejection, origin and idempotency failures,
 expired consent, malformed selectors, non-admin denial on all new paths and IAM
-role loss while apply waits for an event lock. The complete mixed HTTP path uses
+role loss while apply waits for an event lock.
+The complete mixed HTTP path uses
 one real PostgreSQL connection and an intake acceptor that fails if invoked; no
-agent task or proactive run is created. Queue workers are not started in this
-one-connection fixture. The API wire-schema root verifies exact
+agent task or proactive run is created.
+Queue workers are not started in this
+one-connection fixture.
+The API wire-schema root verifies exact
 confirmation/status/idempotency paths, optional adoption metadata and required
-explicit false/zero fields. Existing binding/staff/owner/order-context tests pass.
+explicit false/zero fields.
 
-Two failed gates remain preserved. The first passed its API unit roots but
-integration server construction panicked: the original native operation-status
-route overlapped the existing event schedule route under Go ServeMux. The fixed
+Two failed gates remain preserved.
+The fixed
 `status/operations` and `status/proposals` namespace has disjoint fixed second
-segments. Textual reviews before that gate did not catch the overlap. The second
-gate passed 45 roots, but the one-connection test fixture incorrectly started the
-task queue, which requires at least two connections. The fixture now builds the
+segments.
+Textual reviews before that gate did not catch the overlap.
+The fixture now builds the
 actual HTTP API directly on the limited Store; queue requirements and business
-checks were not relaxed. The final gate repeats all 46 expected roots.
+checks were not relaxed.
 
-Initial compile/lint failures were corrected before the gates: one missing
-wire-field constant and seven constant/shadowing findings. Final configured
-API/task/integration lint reports zero issues. Independent correctness/quality
-reviews and fresh final review of the corrected source report no actionable
-findings. The second gate explicitly recorded unchanged source/main state. The successful
-final gate retained frozen source and all ten main Compose fingerprints, with
-no OOM. Failed resources were explicitly aborted/removed; the final
-exact Go/PostgreSQL containers and private volume were removed after verification.
-Evidence: `.cache/shuttle-work/massage-binding-http-v1-qa/`,
-`massage-binding-http-v2-qa/` and `massage-binding-http-v3-qa/`.
+Final configured
+API/task/integration lint reports zero issues.
 
 This is actual HTTP plus real PostgreSQL with mock IAM/Loom/Telegram peers.
 It does not accept specialist/admin UI, a real Loom write conversation or real
-Telegram mixed handoff. That HTTP milestone used source schema48 / `mvp-53`, uninstalled; the owned
-runtime at that checkpoint was schema47 / `mvp-51`. The specialist read form milestone follows below;
-owned installation now passes, while real-Telegram native/agent/mixed acceptance remains open. No production readiness is claimed.
-
+Telegram mixed handoff.
+No production readiness is claimed.
 
 ## Specialist read form and retained window discovery
 
@@ -514,31 +310,26 @@ DST overlaps. Frozen terms/timezone remain unchanged in records and API response
 Client data are not stored in browser session storage; logout, session expiry,
 access denial and stale-response guards clear the private view.
 
-The final source gate passed 48 Linux/PostgreSQL race roots / 57 pass events,
-143 Mini App JS tests under Node process TZ=Pacific/Honolulu, zero-issue targeted
-lint and independent correctness/quality/final reviews. A proposed switch to frozen
+A proposed switch to frozen
 booking display timezone was rejected against the explicit event-local display
-requirement; the differing-zone UI test covers this decision. Earlier failed gates
+requirement; the differing-zone UI test covers this decision.
+Earlier failed gates
 remain preserved: a `_windows.go` filename implicitly excluded the new files on
 Linux, then a test compared time representations rather than equal instants.
 
-Loopback browser QA used actual HTML/CSS/JS with mock data. It verified event
+Loopback browser QA used actual HTML/CSS/JS with mock data.
+It verified event
 selection, own detail/contact href without following it, foreign contact isolation,
 DST offsets, Russian labels/prices, own-client filtering and clearing after grant
-revocation/session expiry. A preview-only bootstrap syntax error was fixed before
-that inspection. This is not real IAM/Loom/Telegram or unattended-model acceptance.
-The preview server was stopped and its temporary tab closed. Full evidence and
-remaining gates are in [the form QA record](shuttle-massage-staff-ui-qa-2026-10-18.md).
-
-At that form checkpoint the staff feature was uninstalled on schema47. It is now
-installed at schema48 / `mvp-54`; the administrator form has source acceptance below.
-Real-Telegram native/agent/mixed acceptance remains next. No production readiness or deployment is claimed.
-
+revocation/session expiry.
+A preview-only bootstrap syntax error was fixed before
+that inspection.
+This is not real IAM/Loom/Telegram or unattended-model acceptance.
+The preview server was stopped and its temporary tab closed.
 
 ## Native administrator binding form
 
-The Mini App administrative form now has source component acceptance. No new API
-or migration is introduced: source and the owned runtime use schema48 / `mvp-54`.
+The Mini App administrative form now has source component acceptance.
 Forward installation passes; complete real-Telegram workflow acceptance remains open.
 
 ### Using the source workflow
@@ -614,27 +405,17 @@ disabled. Unreadable recovery storage shows an explicit blocked explanation and
 retains identifiers. Late replies cannot restore private data after logout or
 account change. These UI controls supplement the existing backend authorization.
 
-The source gate passes six selected Linux/PostgreSQL race roots (four critical
-binding HTTP cases plus two API/asset/schema cases), 167 Mini App JS tests including
-24 administrative cases, zero-issue API lint and independent correctness, quality
-and fresh final review. This targeted gate builds on the earlier 48-root staff
-component gate; it is not a new full-Go-suite or real-service acceptance claim.
-Reviews found and fixed the overly strict revoke schedule check and hidden startup
-errors, with behavioral coverage. Three early failed PII-clearing assertions were
+Three early failed PII-clearing assertions were
 caused by an inaccurate DOM fixture; its `replaceChildren` now clears text as the
-browser does. No product workaround was added for that fixture problem.
+browser does.
+No product workaround was added for that fixture problem.
 
-Actual-assets loopback browser QA passed grant, revoke, RU preview, synthetic
-agent-proposal continuation, a lost reply after application followed by page-reload
-recovery (effect count unchanged at three), initial outage recovery, server-reported
-consent expiry, and clearing after administrator revocation. This used mock data,
-not real IAM/Loom/Telegram. The temporary tab/server and exact QA containers/private
-volume were removed. See [the administrative form QA record](shuttle-massage-admin-ui-qa-2026-10-18.md).
+This used mock data,
+not real IAM/Loom/Telegram.
 
-Forward installation is now accepted on the owned stand at schema48 / `mvp-54`.
-Native administrator and roleless specialist real-Telegram QA now pass. Next
-perform agent-only administrative writes and both form/agent approval handoffs. Complete live-controller rollback, full massage parity, unattended-model behavior
-and production readiness remain unaccepted. Production and release publication remain unauthorized.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk
+Native administrator and roleless specialist real-Telegram QA now pass.
+Next
+perform agent-only administrative writes and both form/agent approval handoffs.
+Complete live-controller rollback, full massage parity, unattended-model behavior
+and production readiness remain unaccepted.
+Production and release publication remain unauthorized.

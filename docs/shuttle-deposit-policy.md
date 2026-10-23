@@ -31,7 +31,7 @@ Do not run old writers for new assignments after enabling deposit policy: they d
 not understand this policy. A deliberate rollback requires preserving the child
 records; it does not make old assignment logic enforce partial-payment terms.
 
-Introduced in `mvp-7`, current manifest revision `mvp-8` includes the optional event policy in context summaries
+The event contract includes the optional event policy in context summaries
 and the frozen snapshot in registration/pass results. The authenticated operator
 configuration API, owner registration reads, agent tools and exact administrator
 assignment all share these records.
@@ -41,20 +41,10 @@ confirmed ledger, balances and payment-state transitions are not implemented yet
 No payment is credited, and expiry never cancels an assigned pass or forfeits money.
 Those are the next roadmap slice.
 
-Acceptance on 2026-10-13: independent correctness and quality reviews, then a fresh
-final review found no actionable findings. Full Linux/PostgreSQL race suite passed
-(integration 32.586 seconds), focused final checks passed (3.660 seconds), and lint
-reported zero issues. Behavioral cases cover share/amount precedence, upward
+Behavioral cases cover share/amount precedence, upward
 rounding, large exact integers, invalid configuration, authorization, frozen price
 and policy, later assignment using edited terms, restart and original receipt replay.
 
-Owned native stand: real Zitadel acceptance passed, including actual bot restart
-and policy/price edits after assignment. Real Loom exact approval and schema-validated
-broker assignment passed on the isolated seal fixture; preparation included the
-30.87 BYN threshold. Provider responses were manual scenario mailbox data.
+Provider responses were manual scenario mailbox data.
 No new Telegram messages were sent; Telegram UI acceptance remains pending.
 Ignored evidence: `deposit-policy-proof.json`, `native-deposit-assignment-proof.json`.
-Candidate image: `sha256:1ca6946e1b08142c5aabd6de4beeba3ba1eee87d19e31de4f4f292bfca221a85`.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

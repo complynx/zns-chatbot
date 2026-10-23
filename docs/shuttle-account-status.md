@@ -1,11 +1,11 @@
 # Owner registration and payment status
 
 The source adds a read-only account view to the embedded Mini App and the same
-owner read to the agent toolbox. It creates no registration, pass, payment,
-expectation, event choice or Loom run. The selected architecture is in
-[the plan](shuttle-account-status-plan.md). Source checks and owned native fixture
-acceptance passed; [the QA record](shuttle-account-status-qa-2026-10-15.md) preserves
-the separate Telegram WebView gate.
+owner read to the agent toolbox.
+It creates no registration, pass, payment,
+expectation, event choice or Loom run.
+The selected architecture is in
+[the plan](shuttle-account-status-plan.md).
 
 ## API
 
@@ -73,30 +73,18 @@ Future forms/actions need their own durable receipts and reactive agent context.
 
 ## Current checks and limits
 
-Architecture and senior Go consultations converged before implementation. Three
-independent correctness/security/quality reviews and a fresh final review found
-no actionable defects. Focused Linux race checks cover waitlists, unpaid/partial/
+Architecture and senior Go consultations converged before implementation.
+Focused Linux race checks cover waitlists, unpaid/partial/
 fully paid state, pending evidence, ended events, disabled modules, owner/admin/
 bot/org isolation, one-connection operation, pagination, restart/logout and session
-expiry while a DB read is delayed. Final lint reports zero issues. Twelve Node
-behavior tests pass, including account rendering, timezone/exact money, retry,
-disabled details, revocation and the existing authentication lifecycle.
+expiry while a DB read is delayed.
 
 The first delayed-read test failed because it searched for handwritten `SELECT *`
-text, while sqlc emits explicit columns. It now observes the actual ungranted
-PostgreSQL relation lock. This was a test-observation correction; later critical
-checks passed. Initial lint findings concerned scoped formatting, a named page
-limit and that same test query. Original failing logs remain in local evidence.
+text, while sqlc emits explicit columns.
+It now observes the actual ungranted
+PostgreSQL relation lock.
+Original failing logs remain in local evidence.
 
-All 168 enumerated integration tests and other explicit Go packages passed under
-race in bounded fresh processes. A later UI-only DST correction passed a new
-behavioral reproduction, all twelve Node scenarios, fresh review and embedded API
-race checks. The served native JS matches that final source byte-for-byte.
-Real IAM/MiniApp and real Loom script reads passed, including exact owner/admin
-registration UUIDs, pagination and bot restart, without business/event-pin changes.
-Actual Telegram launch, trusted HTTPS and WebView behavior remain the deferred CA
-gate from [Mini App session acceptance](shuttle-miniapp-qa-2026-10-15.md). No
+The served native JS matches that final source byte-for-byte.
+No
 production readiness is claimed.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

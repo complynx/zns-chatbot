@@ -1,12 +1,10 @@
 # Shared payment review workspaces
 
 This is the typed store layer for the [native reviewer plan](shuttle-native-payment-review-plan.md).
-[Focused store QA](shuttle-payment-review-workspaces-qa-2026-10-16.md) passes.
 The [agent HTTP adapter](shuttle-payment-review-workspace-api.md) now passes component checks.
 The [native session store](shuttle-miniapp-payment-review-store.md) now passes component checks;
 the [HTTP/proof adapter](shuttle-miniapp-payment-review-http.md) also passes component checks.
-The form and complete mixed runtime workflow remain open. Source migration 00039 adds
-two tables; the owned runtime still uses schema 38 and has not received this change.
+The form and complete mixed runtime workflow remain open.
 
 ## Exact decisions and identities
 
@@ -57,12 +55,14 @@ snapshots. Their Current/state fields describe the original snapshot; use a fres
 for current workflow state. Prepared state does not imply the proposal is unexpired,
 the evidence still pending or the balance unchanged. Execution rechecks all of these.
 
-PaymentReviewWorkspaceOperation takes only L and checks current access. A pending commit
+PaymentReviewWorkspaceOperation takes only L and checks current access.
+A pending commit
 returns the workspace and original outer preparation, allowing recovery after a lost
-prepare response. It also checks for the bound canonical receipt. If another approved
-interface has completed C, status returns that original review read-only, even when L
-has no stored execution result. It does not write an outer receipt or imply that L
-itself executed. A later commit of L can persist its alias receipt without new money.
+prepare response.
+It also checks for the bound canonical receipt.
+It does not write an outer receipt or imply that L
+itself executed.
+A later commit of L can persist its alias receipt without new money.
 
 Pending operation reads also expose unavailable_reason for cancellation, supersession
 or expiry, using database time and locked canonical preconditions.
@@ -78,17 +78,10 @@ The existing canonical description continues to show event-local IANA deadlines.
 
 ## Integration still required
 
-- Actual form and native entry for the implemented session-bound HTTP/store adapters.
-- Real Loom/runtime acceptance of the implemented agent adapter and its mapping for L.
-- Event queue/detail form, human-readable payer presentation and native menu/notification entry.
-- Bounded redacted native action context on the next explicit agent run/continuation,
-  including prepare/edit/cancel. No proactive invocation.
+No proactive invocation.
 - Localized exact money presentation, full mixed-path tests and owned real-service QA.
 
 Agent entry points retain agent provenance; native wrappers atomically check the session
 and record miniapp provenance on completed calls. Native journal context and browser
 exposure still require their adapters. Evidence file access, policy and notification delivery behavior otherwise
 remain owned by the existing payment implementation.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

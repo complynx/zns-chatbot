@@ -1,13 +1,4 @@
-# Avatar draft finalization — work in progress
-
-Source schema56 introduced the storage foundation for finalizing a saved avatar draft.
-The current tool manifest is mvp65. The installed primary is still schema49/mvp56.
-The [avatar delivery worker](shuttle-avatar-delivery.md) is now implemented. There
-are shared [native/agent finalization APIs](shuttle-avatar-finalization-api.md).
-The [Generate/send UI](shuttle-avatar-send-ui.md) is implemented; administrative repair has separate
-[agent HTTP tools](shuttle-avatar-delivery-resolution.md).
-A pending delivery row is an intent, not proof of
-Telegram delivery. The form exposes generation, current delivery status and download separately.
+# Avatar draft finalization
 
 ## Persistence contract
 
@@ -63,36 +54,3 @@ history. It refuses either kind of new history. Export/retention precedes any
 separate deliberate destructive removal; export does not bypass this guard.
 Empty Down/Up keeps legacy artifacts. Tests of historical migrations20/55 now
 remove extension56 first and restore it after recreating the older tables.
-
-## Verification and remaining work
-
-Final isolated PostgreSQL acceptance passed all30 avatar roots: six finalization
-roots and24 existing generation, transform, draft, preview and rollback roots.
-The new cases cover edited snapshots, current state versus immutable replay,
-concurrent native/agent commits, wrong provenance/processor, stale versions,
-foreign owners, pre-commit logout, post-commit logout, mixed-origin quota,
-legacy receipt bytes, partial-origin rejection and rollback during an active
-writer. These call store APIs with real PostgreSQL and mock peers; they do not
-establish a public HTTP finalization or real-agent flow.
-
-The first command passed29 roots and failed the old draft rollback fixture
-because extension56 still referenced its table. The fixture now rolls migrations
-back in dependency order. No CAS/authentication/provenance checks were relaxed.
-Initial lint found one unused test result; the final lint passed with zero issues.
-Independent initial and fresh final source reviews found no actionable defect.
-Linux and resource results are recorded in the ignored source gate.
-
-Ignored evidence is `.cache/shuttle-work/avatar-finalization-v1-qa/`, including
-both separate PostgreSQL attempts/dumps/logs, lint, consultations and reviews.
-Consultation advice that processor versions were unchecked was rejected against
-source: `MatchesTransform` already validates both supported versions.
-
-The [delivery lifecycle](shuttle-avatar-delivery.md) now includes attempt fencing,
-startup recovery to unknown and retry-after. The shared native/agent APIs and native action metadata are implemented.
-The explicit Generate/send button includes pending-operation recovery.
-[Owned runtime/browser QA](shuttle-avatar-runtime-qa-2026-10-19.md) now passes native-only
-with Loom unavailable, agent-only and both handoffs, including normal bot restart.
-Actual Telegram WebView and unattended model acceptance remain open.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk

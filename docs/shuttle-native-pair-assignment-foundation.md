@@ -1,11 +1,5 @@
 # Native pair assignment: canonical continuation foundation
 
-Status: DB/API component checks pass for source schema 62 / `zinusya/mvp-70`.
-This source is uninstalled. The owned primary remains schema 61 / `mvp-69` as
-accepted in the [solo assignment installation report](shuttle-native-pass-assignment-primary-qa-2026-10-19.md).
-The native pair workspace, session/IAM fences, native action history and complete
-four-path runtime acceptance remain next in this same pair workflow.
-
 ## Shared operation contract
 
 The existing six-field `PairAssignment` and atomic two-pass transaction remain
@@ -55,36 +49,3 @@ the event, then actor authority and the canonical proposal row. This matches the
 receipt trigger's namespace lock and avoids inversion with an original-key
 confirmation. Existing capacity, membership, version, legal-details and quote
 checks still run before the atomic two-pass write.
-
-## Verified scope
-
-The same 45 PostgreSQL root scenarios pass before and after the participant
-receipt extraction, with no failures or skips. They include the new DB/API
-continuation and migration-retention cases plus existing pair/native membership,
-privacy and atomicity paths. Eleven focused post-lint scenarios also pass.
-DB/API unit checks, lint and isolated sqlc compile/generate pass; all three
-generated Go files reproduce byte for byte. These local Go checks use Go 1.27.2
-on Windows with `CGO_ENABLED=0`; they do not establish Linux/race acceptance.
-
-Two review rounds each ended with clean independent correctness and code-quality
-reviews. The first lint run's seven findings remain recorded; embedded-field
-spacing, shadowing, a shared schema-field constant and exact participant receipt
-extraction resolved them. This is source/component evidence, not actual native
-form, real IAM/Loom or unattended-agent acceptance for pair assignment.
-
-The bounded component PostgreSQL and its volume were archived and removed;
-final stop was exit 0 without OOM. Read-only custody confirms the primary's
-11 services and 134 Loom runs unchanged. Local ignored evidence is under
-`.cache/shuttle-work/native-pair-assignment-v1/`: `scope-v2.json`,
-`pg/pg-behavior-v2.json`, lint/unit logs, `sqlc-verify/result.json`,
-`primary-preserved.json` and `pg/postgres.json`. No staging, commit or push was
-performed for this component stage.
-
-Next: add the native pair administrator session, owner-scoped form reads and
-immutable native history, then the two-recipient form and the complete native,
-agent and both handoff runtime paths. The broader
-[registration/pass acceptance matrix](shuttle-registration-pass-parity-plan.md)
-remains open.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk

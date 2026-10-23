@@ -47,13 +47,10 @@ that work was delivered or money confirmed. Compare `_sum` and `_count` only
 over matching labels and time windows. Concurrent callbacks can overlap.
 
 The implementation and verification sequence is tracked in the
-[bounded plan](shuttle-worker-duration-plan.md). Source checks cover all three
+[bounded plan](shuttle-worker-duration-plan.md).
+Source checks cover all three
 actual callbacks with PostgreSQL/River and HTTP peers, blocked execution before
-return, IAM snooze, corrupt-checkpoint errors and unknown delivery. Native
-acceptance and all 225 integration race scenarios are recorded in the
-[acceptance record](shuttle-worker-duration-qa-2026-10-15.md). Native proof uses
+return, IAM snooze, corrupt-checkpoint errors and unknown delivery.
+Native proof uses
 safe no-op callback paths; it does not repeat source delivery/failure tests.
 Dashboards, SLOs, utilization and tracing redesign remain outside this slice.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

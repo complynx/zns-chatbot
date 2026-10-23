@@ -25,14 +25,9 @@ Unknown/duplicate combinations invalidate a snapshot. Keep one independent
 30-second cache and 250 ms acquisition/query budget, with honest failure/freshness
 gauges and no stale counts presented as current after a failed collection.
 
-Acceptance requires preserved existing collector behavior, real River schema and
-due/future/state/kind/queue isolation tests, fixed-label exporter checks, timeout
-and independent-family checks, full source review/gates, and bounded native queue
-behavior on the owned stand. Include an overdue snooze/promotion and backlog drain,
-not just inserted-row format checks. No worker semantics, pause controls, scheduler,
+Include an overdue snooze/promotion and backlog drain,
+not just inserted-row format checks.
+No worker semantics, pause controls, scheduler,
 new dependency, configuration or speculative index is part of this slice.
 
 This is a plan, not acceptance or production readiness.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

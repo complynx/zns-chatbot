@@ -87,13 +87,7 @@ configuration. A brief IAM/app ingress interruption is expected; native IAM and
 bot/Loom/database need no recreation for this route alone. Endpoint enablement,
 schema migration and bot/provider image replacement are separate gates.
 
-An isolated native TLS preflight passed18 route/header checks with a synthetic
-upstream; all10 main container IDs/images/start times remained unchanged. Both
-fixtures and their isolated network were removed. See
-[prelink route evidence and limits](../../../docs/shuttle-prelink-route-qa-2026-10-16.md).
-The owned main gateway was then recreated and passed six further TLS checks;
-prelink remains disabled in the bot application. See the same QA record for
-cutover evidence and retained harness failures.
+For the private prelink route and its authorization boundary, see the [prelink API contract](../../../docs/shuttle-telegram-prelink-api.md).
 
 The dedicated browser network reserves gateway address172.29.253.2. A later
 zitadeltg service must trust only the verified gateway hop, not the whole Docker
@@ -124,21 +118,9 @@ No production or developer-owned Traefik, IAM or Loom service is involved.
 
 ## Acceptance
 
-The owned stand passed native preflight and canonical-port cutover on 2026-10-15.
-The gateway now owns loopback18443/18444; native IAM has no host publication.
-Discovery keeps the original issuer. A fresh user token worked with the bot's
-owner API and real Loom session creation; the existing poller completed a fresh
-cycle. App/Loom/PostgreSQL container identities and business-state hashes stayed
-unchanged. See [the QA record](../../../docs/shuttle-browser-ingress-qa-2026-10-15.md)
-for the initial failed preflight, its correction and acceptance boundaries.
+Validate canonical TLS routes and the original issuer independently from browser behavior. See the [Mini App contract](../../../docs/shuttle-miniapp.md).
 
-Browser CA, real Telegram-issued initData, cookie relay and actual Telegram OIDC
-remain interactive gates. The temporary header echo fixture was removed. The
-`/tg` route is reserved for the provider. Its [isolated Linux runtime](zitadeltg.md)
-passed native route/key/restart checks, then was removed after QA; no real
-provider is running or attached to an IAM login policy yet. A separate disposable
-IdP definition exists only for [explicit-link QA](../../../docs/shuttle-telegram-link-qa-2026-10-16.md),
-with no login-policy attachment or automatic account creation.
+Browser trust, real Telegram-issued initData, cookie relay and actual Telegram OIDC require interactive checks. The provider route follows the [isolated runtime instructions](zitadeltg.md) and the [explicit-link contract](../../../docs/shuttle-telegram-prelink-plan.md).
 
 Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
 on behalf of Daniel Drizhuk

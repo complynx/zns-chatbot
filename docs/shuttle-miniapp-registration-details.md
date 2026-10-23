@@ -1,14 +1,8 @@
 # Protected registration details: Mini App backend
 
 The working tree implements private legal-name and passport-number forms and
-their transactional Mini App backend. Native event registration now passes the
-scoped [Telegram/form API proof](shuttle-registration-details-native-qa-2026-10-16.md);
-the later [solo prerequisite matrix](shuttle-registration-details-paths-qa-2026-10-16.md)
-also covers event-specific agent/mixed routes with a manual provider. This follows the [schema36 conversational rollout](shuttle-conversational-runtime-qa-2026-10-16.md).
-The owned stand now runs [candidate ebd1bdf](shuttle-registration-details-native-qa-2026-10-16.md)
-on schema37 with its local protection
-key enabled. Bot-only activation and mixed form/agent runtime acceptance passed
-with real IAM/Telegram/Loom and a manual provider. Trusted Telegram WebView,
+their transactional Mini App backend.
+Trusted Telegram WebView,
 unattended model interpretation and remaining registration/pass workflows remain open.
 
 ## API
@@ -67,31 +61,6 @@ Down migration locks the journal before checking retained history. It refuses to
 remove a nonempty journal, including an insertion committed while rollback waits
 for the lock. Export retained history before attempting rollback.
 
-## Component verification, 2026-10-16
-
-The extraction was checked against the unchanged prior full Linux/race source
-freeze, then the same16 neighboring behavioral scenarios passed after extraction.
-Its independent textual review found no actionable findings.
-
-The backend proof passed22 root scenarios /22 pass events on Linux Go1.27.2 with
-race detection, real disposable PostgreSQL17 and mock IAM/Loom/Telegram. It covers
-form-to-agent completion of one persisted expectation, exact retry after restart,
-historical receipt versus current state, no proactive run or implicit registration,
-wrong-owner access, stale/conflicting/invalid requests, origin enforcement,
-logout, expiry during a database lock wait, atomic rollback on journal failure,
-redacted reactive context, disabled routes, and concurrent migration retention.
-The run includes16 existing details/request/profile scenarios. All810 frozen
-release/test inputs and the ten main-service fingerprints stayed unchanged.
-
-Independent source review found a migration rollback race. The lock and a
-behavioral reproduction were added; a fresh full scoped review found no actionable
-findings. Scoped API/db/task/integration lint reported0 issues. The initial QA
-failure was only an incorrect404 expectation for disabled POST; its logs remain
-preserved. The final accepted proof is ignored
-.cache/shuttle-work/miniapp-details-api-v3-qa/. Containers and the owned volume
-were removed with terminal0/noOOM. PostgreSQL cleanup uses SIGINT and is not an
-application restart acceptance test. No commit, push or deployment was performed.
-
 ## HTML forms and recovery
 
 The existing Mini App page now has RU/EN single-field forms with explicit Save
@@ -131,91 +100,16 @@ identifies the owner. The same owner can recover; a different owner never querie
 that earlier receipt. Logout retains the pointer for a later same-owner login,
 while clearing private drafts immediately even if logout temporarily fails.
 
-## UI component verification, 2026-10-16
+## Compatibility
 
-The Node browser-behavior suite passes30 scenarios, including14 private-form
-scenarios. These intercept all storage writes and check that synthetic private
-values never enter them. They cover exact unknown-result retries, historical
-receipt versus current state, explicit same-key reentry, stale CAS recovery,
-lookup outages, missing storage, session denial, owner/launch changes, disabled
-module, unrelated draft retention, and logout failure. The16 preexisting session,
-profile and account scenarios remain green. CI already runs this test file.
-Evidence: ignored .cache/shuttle-work/miniapp-details-ui/node-tests-v3.log and
-source-freeze-v3.json.
-
-A separate bounded Linux Go1.27.2/race gate passes27 roots /27 events: the22
-backend/neighboring scenarios above, four Mini App identity/session scenarios,
-and the public assets/CSP route test. It uses real disposable PostgreSQL17 and
-mock IAM/Loom/Telegram. All810 release/Go-test inputs stayed frozen; the UI script
-and its Node tests have a separate four-file freeze. All ten main-service
-fingerprints stayed unchanged. Evidence: ignored
-.cache/shuttle-work/miniapp-details-ui-wire-qa/. Exact labelled containers and the
-owned volume were removed with terminal0/noOOM; this cleanup is not application
-restart acceptance.
-
-Manual browser QA uses a loopback-only fixture API and a non-authorizing Telegram
-SDK fixture. Production app.js and CSS are served directly. The HTML differs
-only by replacing Telegram's SDK URL with the local fixture script. No real IAM,
-Loom or Telegram authentication is claimed for this browser run. The actual DOM
-confirmed required validation, Enter, both-field draft retention, retries with a
-disabled submitted input, recovery after a committed lost response, and explicit
-original-key reentry after an unaccepted request. Six POST attempts produced four
-receipts; both duplicate attempts retained the original operation and body hash.
-Final inputs were blank and saved values hidden.
-
-The core browser run retains its original asset hashes. Final small CSS,
-accessibility and logout changes were then reloaded and checked separately:
-full-page visual inspection, associated hints, and clearing/hiding both drafts on
-logout. Browser read-only evaluation does not expose sessionStorage, so direct
-real-browser storage inspection is not claimed; storage privacy is supported by
-source review and Node interception. Geometry from the reconstructed DOM was not
-used as layout proof. Screenshots were displayed inline; there is no saved image
-artifact. Evidence: ignored
-.cache/shuttle-work/miniapp-details-ui/browser-v2/core-acceptance.json and
-completed-core-state.json. The fixture process and temporary browser tab were
-removed after acceptance.
-
-Independent privacy review was clean. Usability review found that a successful
-single-field save cleared the other draft; this was fixed and covered behaviorally.
-Fresh complete reviews were clean, including the final logout/CSS/accessibility
-changes. This UI component gate performed no commit, push or runtime rollout;
-the subsequent owned activation is described below.
-
-## Image and isolated migration acceptance
-
-Candidate image sha256:7645802278be3867dd84179b3daad04847bf0db9a67d458ac95118c7ba4ee3de
-was built for linux/amd64 with the unmodified release Dockerfile. Its711 frozen
-release inputs match the accepted behavioral-gate inputs. The dedicated builder
-used2GiB/no swap, two CPUs and one concurrent build step. The image is retained;
-the builder and its cache were removed. Evidence: ignored
-.cache/shuttle-work/miniapp-details-images-qa/checkpoint.json.
-
-The actual candidate binary migrated a fresh owned PostgreSQL snapshot from36
-to37. Hashes of all74 preexisting application/runtime tables remained identical;
-the new redacted action journal was empty. The clone used bounded tmpfs storage
-and network=none; only its loopback database was reachable by the migrator. No
-worker, IAM client, Telegram sender or Loom client was started. Windows bind paths
-were canonicalized, mounted readonly and checked for changes. All ten live
-service fingerprints stayed unchanged. The exact labelled clone and migrator
-were removed with terminal0/noOOM and no persistent clone volume. Evidence:
-ignored .cache/shuttle-work/miniapp-details-schema-qa/checkpoint.json.
-
-The operational helper passed fresh independent review after fixing the
-PostgreSQL temporary-server readiness race and adding separate failed-run cleanup.
-The successful proof exercises normal cleanup; the abort path is source-reviewed,
-not claimed as fault-injection acceptance. This image/snapshot proof preceded
-the owned activation below and does not itself close real-service form acceptance.
-
-## Owned activation checkpoint
-
-The owned shuttle-live-test bot now runs the candidate image and schema37. The
+The
 poller and bot were drained/stopped; a fresh private database dump was verified
-before migration. All74 old tables were preserved before startup; startup changes
-were restricted to River lease/queue heartbeat fields, with names, creation time,
-metadata and paused state compared against the backup. The empty journal was the
-only new table. Settings, mounts, limits and security were retained, adding only
-the optional local encryption key. Eight companions, including Loom, retained
-their exact container/image/start/restart fingerprints. The same poller was
+before migration.
+The empty journal was the
+only new table.
+Settings, mounts, limits and security were retained, adding only
+the optional local encryption key.
+The same poller was
 restored and completed a fresh successful cycle.
 
 The first-activation guard checks both effective environment and semantic YAML
@@ -227,27 +121,9 @@ Down or backup restore was performed. Unknown Compose outcomes are recovered by
 observing the same candidate rather than recreating it.
 
 A delegated real Zitadel owner token read both profile and redacted details with
-no business mutations. The probe receipt is bound to the activation ID, exact
-candidate fingerprint, key hash, subject, target and timestamp. This is an owner
-API probe, not mixed-flow or trusted WebView acceptance. Evidence is ignored
-.cache/shuttle-live-test/miniapp-details-main-cutover/checkpoint.json and its
-owner-probe.json. Independent operational review findings were fixed before
-mutation; the final complete review was clean. No production, commit or push.
-
-## Mixed runtime acceptance and next gates
-
-The [owned mixed-flow acceptance](shuttle-miniapp-registration-details-qa-2026-10-16.md)
-passed real IAM/form APIs, Telegram ingress and Loom broker orchestration: form,
-agent, form and agent continued the same owner record and run. It includes same-bot
-restart/replay, stale-version refusal, redacted context and preserved business data.
-A QA-only script/write transport error was retained and recovered through native
-module_call in the same run. The provider was driven manually.
-
-Trusted Telegram WebView entry still requires the separate CA/browser step.
-The [scoped event-specific solo matrix](shuttle-registration-details-paths-qa-2026-10-16.md)
-now passes with a manual provider. Remaining registration/pass menu parity and
-unattended model interpretation remain open. Completing these global fields does not by itself
-close registration/pass four-path acceptance.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk
+no business mutations.
+The probe receipt is bound to the activation ID, exact
+candidate fingerprint, key hash, subject, target and timestamp.
+This is an owner
+API probe, not mixed-flow or trusted WebView acceptance.
+No production, commit or push.

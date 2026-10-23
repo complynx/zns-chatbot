@@ -1,14 +1,8 @@
 # Agent event configuration plan
 
-Bounded administration slice after
-[worker duration acceptance](shuttle-worker-duration-qa-2026-10-15.md).
-Architecture and Go consultations agreed on the design below. Migration 31,
-the transactional store, agent routes and discovery are implemented and accepted
-on the owned stand. All 242 integration race scenarios, other Go packages,
-strict lint and fresh independent source reviews passed. Native real-IAM/Loom
-exact creation/replacement, restart, original-receipt recovery and scoped
-preservation checks passed after the retained failures below. The stand runs
-schema 31 / manifest mvp-30. See [evidence and limits](shuttle-event-change-qa-2026-10-15.md).
+Architecture and Go consultations agreed on the design below.
+The stand runs
+schema 31 / manifest mvp-30.
 This is bounded local acceptance, not production readiness.
 
 Existing administrator agent `events` and `event` reads remain unchanged. Add
@@ -60,20 +54,27 @@ allocation, authority, payment ledger and historical receipts remain intact.
 Current module access checks still apply after configuration changes.
 
 Before choosing route/body/result limits, measure representative full module
-and tier configurations against actual Loom broker limits. Existing global
-8192-byte input and 16384-byte result defaults may be insufficient. Use bounded
-method-specific limits and never truncate the exact approval or result. The
+and tier configurations against actual Loom broker limits.
+Existing global
+8192-byte input and 16384-byte result defaults may be insufficient.
+Use bounded
+method-specific limits and never truncate the exact approval or result.
+The
 implemented limits are 128 KiB for prepare/confirm bodies and 256 KiB for tool
-results. A full Go/Huma document with 100 maximum-length module IDs and 100
-tiers measured 32,089 bytes for confirmation. The first preparation was
+results.
+A full Go/Huma document with 100 maximum-length module IDs and 100
+tiers measured 32,089 bytes for confirmation.
+The first preparation was
 128,754 bytes because it repeated full documents in the description; native
-Loom rejected that description before approval. The corrected preparation
+Loom rejected that description before approval.
+The corrected preparation
 measures 33,349 bytes and carries a bounded scalar summary plus complete
-normalized arguments. A maximum-name test also covers escaped control
+normalized arguments.
+A maximum-name test also covers escaped control
 characters and multibyte names against Loom's 4,000-byte description limit.
-Real Loom broker creation/replacement and recovery passed with complete
-100-module/100-tier arguments; descriptions measured 1,144 and 1,149 bytes. Keep unrelated endpoint
-limits unchanged. No new framework or dependency is needed.
+Keep unrelated endpoint
+limits unchanged.
+No new framework or dependency is needed.
 
 Telegram approval delivery appends the complete pretty-printed arguments as
 literal code before the final message's buttons. Existing rendering splits
@@ -93,12 +94,11 @@ lost-response reconciliation, restart and historical receipts after later edits.
 Include an assigned pass whose frozen terms remain unchanged. Verify discovery,
 strict nested schemas and a representative full document through the broker.
 
-Finish with fresh source review loops, focused and required full checks, updated
-documentation, and owned native exact approval of synthetic event creation and
-replacement through Loom. Prove replay/restart, authorization and unchanged
-pre-existing business data. Review fixture effects and exact cleanup before
-execution. Migration down must refuse to discard proposal history; compensation
-is a newly approved versioned replacement. Deletion APIs, allocation, additional
+Prove replay/restart, authorization and unchanged
+pre-existing business data.
+Migration down must refuse to discard proposal history; compensation
+is a newly approved versioned replacement.
+Deletion APIs, allocation, additional
 financial policy, production edits and cutover remain outside this slice.
 
 Source review reproduced one wire-contract bug: Huma required the tier's
@@ -110,6 +110,3 @@ already accepted by Huma, so no nullability tags were changed. Real PostgreSQL
 COMMIT-reply loss returns HTTP 503 and recovers the original event after restart
 without another mutation. Assigned-pass terms and payment rows remain unchanged
 through configuration replacement.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

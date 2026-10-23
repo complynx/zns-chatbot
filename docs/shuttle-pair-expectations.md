@@ -42,29 +42,22 @@ snapshots, not one globally atomic snapshot; every write rechecks current state.
 
 ## Accepted owned-stand boundary
 
-Architecture and Go consultations preceded implementation. Focused race checks
-passed, including expiry equality/DST representation, bounded cursor/JSON output,
-multiple invitations with an independent name request, saved retry payloads and
-fresh answer/steering inputs. Independent correctness, quality and privacy/protocol
-reviews found no remaining issues; a fresh final review after lint fixes was also
-clean. The final complete explicit-package race run passed (integration 234.928 s),
-and the application linter reported zero issues. The source still uses manifest
+Architecture and Go consultations preceded implementation.
+The source still uses manifest
 `mvp-21` and schema 22 because no API or schema contract changed.
 
-Owned native acceptance used two synthetic invitations to the current Telegram
-owner, together with existing name and payment expectations. The actual run
+The actual run
 received all three contexts and refreshed incoming invitations through a real
-Loom script read. An ambiguous “yes” produced a clarification question without
-creating a pair. The owner then requested an unrelated joke; that same run
+Loom script read.
+An ambiguous “yes” produced a clarification question without
+creating a pair.
+The owner then requested an unrelated joke; that same run
 continued without accepting/declining either invitation or changing name/payment
-state. After a bot restart, both invitations remained readable and no pair had
-been created. Only the authorized current test-bot chat was used.
+state.
+After a bot restart, both invitations remained readable and no pair had
+been created.
+Only the authorized current test-bot chat was used.
 
 Mock-peer checks prove context delivery and absence of automatic business effects.
-The native provider was the manual Codex mailbox, so native acceptance proves
-real-service plumbing for these choices, not an unattended model's consent accuracy.
 Existing explicit accept/decline API behavior was preserved rather than rewritten.
 Production and browser CA/zitadeltg acceptance remain separate gates.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

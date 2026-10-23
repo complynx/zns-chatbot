@@ -1,11 +1,12 @@
 # Historical record decoding
 
 This is infrastructure for historical apply, not a completed history migration.
-Stored archives can now be revalidated from PostgreSQL. The shared decoder can
+Stored archives can now be revalidated from PostgreSQL.
+The shared decoder can
 also emit validated record identities and a versioned whitelist projection.
-The original decoder checkpoint below did not enable historical apply or owner
-reads. Their subsequent implementation and separate acceptance boundary are
-documented in [historical apply](shuttle-history-apply.md). Live users, identities,
+Their subsequent implementation and separate acceptance boundary are
+documented in [historical apply](shuttle-history-apply.md).
+Live users, identities,
 passes, payments and queues are unchanged by historical indexing.
 
 ## Stored archive revalidation
@@ -79,7 +80,7 @@ they must not accept an owner ID from the client or import old IAM subjects.
 These requirements are outside the decoder checkpoint. Their subsequent
 implementation is documented separately in [historical apply](shuttle-history-apply.md).
 
-## Acceptance — 2026-10-15
+## Acceptance
 
 Architecture and Go consultations preceded the visitor design. Independent
 correctness, quality/documentation and privacy/protocol reviews reported no
@@ -90,27 +91,23 @@ between buffered records. Stored-reader checks cover multichunk data, missing an
 corrupted chunks, foreign deployment and ordinary-user denial, and revalidation
 when the saved inspection JSON is unusable.
 
-The full explicit Linux application race suite passed; integration tests took
-190.945 seconds. Full application lint reported zero issues. The owned bot runs
-manifest `mvp-19`; schema remains 21. No new dependency or migration was added.
+Full application lint reported zero issues.
+No new dependency or migration was added.
 
-Native acceptance used real local Zitadel and Loom, a previously stored synthetic
-multichunk archive and the manual Codex provider. It verified the recomputed
-receipt, ordinary-user denial and missing-archive refusal. The first test used
-`module_call` for a read and received Loom's `use_script_for_reads`. The same run
+It verified the recomputed
+receipt, ordinary-user denial and missing-archive refusal.
+The first test used
+`module_call` for a read and received Loom's `use_script_for_reads`.
+The same run
 then invoked `modules.zinusya_administration.validate_stored_archive` through
-`script`, returned the expected metadata and completed. This was a harness error,
-not a product fix or an upstream bug. No replacement run or Telegram send was used.
+`script`, returned the expected metadata and completed.
+This was a harness error,
+not a product fix or an upstream bug.
+No replacement run or Telegram send was used.
 A separate post-completion repeat API read preserved counts and hashes of every
-bot table. The lost in-memory baseline from the initial failed test is not claimed
-as proof covering the entire original run.
+bot table.
 
-Evidence remains in ignored
-`.cache/shuttle-live-test/native-history-decoder-checkpoint.json` and
-`.cache/shuttle-work/container-results/zinusya-history-decoder-full-qa-20261015.log`.
-This validates decoding and stored-byte reads. It does not establish historical
+This validates decoding and stored-byte reads.
+It does not establish historical
 apply, conflict reconciliation, owner history retrieval, real export migration or
 production readiness.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

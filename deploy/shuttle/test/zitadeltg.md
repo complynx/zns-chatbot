@@ -75,16 +75,7 @@ reviews without actionable findings. The sibling checkout remained unchanged.
 
 ## Remaining identity gates
 
-The recorded baseline provider verifies Telegram OIDC and relays a signed assertion
-but has no trusted Zinusya prelink hook. The separate patched provider has passed
-[combined provider/API/real-IAM fixtures](../../../docs/shuttle-prelink-combined-qa-2026-10-16.md)
-for provider-first and Mini-App-first identity convergence, explicit opaque-subject
-linking, lost-response retry, conflicts, revocation and completed-login restart.
-A [resilience fixture](../../../docs/shuttle-prelink-resilience-qa-2026-10-16.md)
-adds concurrent first logins and actual IAM stop/recovery. The separate
-[backend remote-write gate](../../../docs/shuttle-prelink-remote-write-qa-2026-10-19.md)
-checks recovery after IAM accepts account/link writes but responses or read-back
-are unavailable, including graceful bot restarts and original-receipt replay.
+The [provider/API contract](../../../docs/shuttle-zitadeltg-prelink-provider.md) defines canonical identity convergence and the trusted prelink hook. Check concurrent first login and identity outages against the [trust contract](../../../docs/shuttle-telegram-prelink-plan.md). Lost account/link write responses require reconciliation through the [durable storage contract](../../../docs/shuttle-telegram-prelink-storage.md), retaining the original proof and receipt.
 
 These fixtures use synthetic Telegram proofs or assertions; the combined fixture
 also uses a synthetic final IAM relay. They do not establish real Telegram login

@@ -1,12 +1,5 @@
 # Knowledge notice delivery resolution
 
-Status: source mvp83, additive migration67. The primary remains schema65/mvp81.
-The preceding mvp82 delivery acceptance is recorded separately in
-[the runtime report](shuttle-knowledge-notices-runtime-qa-2026-10-20.md).
-The separate [real-IAM/Loom runtime gate](shuttle-knowledge-resolution-runtime-qa-2026-10-20.md)
-now passes direct diagnostics/resolution and a controlled free-text consent
-dialogue through graceful restart. No main installation is claimed.
-
 ## Administrative workflow
 
 `zinusya_knowledge.notifications` still lists bounded recipient-owned delivery
@@ -62,42 +55,3 @@ The down migration refuses to discard knowledge resolution history or dismissed
 notices. Export and decide any intentional history removal separately. Preceding
 binary compatibility has a separate linked report; runtime installation still
 requires its own proof.
-
-## Focused verification
-
-The full knowledge and existing notification-resolution Linux/PostgreSQL race
-selection passes 34 roots and 63 terminal cases, with no failures, skips or OOM.
-It applies migration67 and uses mocked IAM, Loom and Telegram HTTP peers. It
-is not a full real-IAM/Loom runtime gate. The new behavioral scenarios cover
-HTTP prepare/confirm, explicit retry or dismissal, current administrative
-access, metadata redaction, original receipt replay after expiry and later
-delivery, changed/stale proposals, revoked recipients and retained event origin
-after the event ends. Existing payment, pair, order and massage resolution
-families are included in the same successful selection.
-
-All affected API, DB, task and observability package tests pass. Pinned sqlc
-compiles and regenerates without a diff. The Linux amd64 binary builds with
-CGO disabled. Source correctness, quality and final acceptance reviews found
-no actionable findings.
-
-The first two PostgreSQL selections each retained 33 passing roots and one
-failing new HTTP test. The first test sent confirmation fields to read/prepare
-schemas; the second compared JSONB/HTTP receipt whitespace instead of values.
-Both test assertions were corrected. Neither original failure was relabeled as
-a pass; their logs and decoded database dumps remain separate. A broad formatter
-also touched archived dependency copies; those incidental changes were fully
-restored. Final test line endings were normalized only after successful race
-cleanup, with a recorded byte-equivalence check excluding CRLF/LF differences.
-
-All three temporary PostgreSQL/test-container projects are archived and removed.
-The primary stand remains unchanged. Ignored proof lives under
-`.cache/shuttle-work/knowledge-notice-resolutions-source-v1/`,
-`knowledge-notice-resolutions-pg-v1/`, `knowledge-notice-resolutions-pg-v2/`,
-`knowledge-notice-resolutions-pg-v3/` and `knowledge-notice-resolutions-build-v1/`.
-The linked full runtime gate now passes with a controlled provider. The [mvp82 binary compatibility gate](shuttle-knowledge-resolution-compat-qa-2026-10-20.md)
-also passes83/82/83 and, in a separate fresh fixture,83/81/83 against populated
-schema67. Main installation and autonomous model quality remain separate
-acceptance work. No production readiness is claimed.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk

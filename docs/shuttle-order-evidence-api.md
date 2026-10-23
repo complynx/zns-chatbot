@@ -1,18 +1,13 @@
 # Order evidence read API
 
-Current source integration: native owner/reviewer forms, reactive action history
-and [durable order notices](shuttle-order-notice-delivery.md) now have separate
-component verification. References to these as next work below record this page's
-earlier stage. Owned activation and real native/agent/mixed/fault acceptance remain
-pending. D23 money-policy questions remain open.
-
 Read-API checkpoint: manifest `mvp-42`, dynamic module `zinusya_order_payments`.
-This read-API gate used schema 41. The subsequent
+This read-API gate used schema 41.
+The subsequent
 [shared review store](shuttle-order-review-workspaces.md) advances source to schema 42;
 [mutations and human consent](shuttle-order-evidence-mutations.md) add agent writes
-at manifest mvp-43. These components are not activated on the owned main stand,
-which remains schema 40 / manifest mvp-40. Native controls and notice delivery
-were pending at the read-API checkpoint. The sections below describe the accepted read-API checkpoint.
+at manifest mvp-43.
+Native controls and notice delivery
+were pending at the read-API checkpoint.
 
 ## Routes and authorization
 
@@ -39,9 +34,11 @@ is denied. Owner and reviewer file purposes remain explicit, including when the
 reviewer also owns the proof. Authority never broadens generic owner file routes.
 
 An original admission receipt remains pending even after a subsequent confirmed
-review. Use evidence reads for current state. `operation` returns status not_found
+review.
+Use evidence reads for current state. `operation` returns status not_found
 without a result for a missing actor/phase receipt; this means unknown, not proof
-of non-execution. No read submits a claim, confirms money or releases capacity.
+of non-execution.
+No read submits a claim, confirms money or releases capacity.
 
 ## Files and response bounds
 
@@ -67,30 +64,3 @@ follow it as after. UUID order is not submission priority. Owner history include
 reviewed claims; the reviewer queue excludes them. Exact reviewer reads still
 permit historical evidence by ID. A single oversized result fails explicitly;
 fields are never silently truncated.
-
-## Verification and remaining acceptance
-
-The ignored `.cache/shuttle-work/order-evidence-http-v1-qa/` gate passed 37 top-level
-scenarios / 85 pass events: 24 integration roots / 39 events and 13 API roots / 46 events.
-It used isolated PostgreSQL and Linux/race with mock IAM, Loom and Telegram peers.
-There were no failures, skips or OOM; all 894 frozen inputs matched before/after.
-All five new HTTP roots passed, including their six file-race subcases. The byte
-pagination case retained 22 claims with long literal review reasons and verified
-complete ordered traversal under the actual HTTP envelope bound. Adjacent existing
-order, registration-detail and pass-file contracts also passed.
-
-Scoped API/db/integration lint passed after local lint fixes. Two independent
-initial reviews and a fresh final review returned no actionable findings. No
-functional test failed. The temporary PostgreSQL and Go containers and their
-labeled volume were removed after the successful gate. All ten main-service
-fingerprints remained unchanged. This is developer HTTP/component proof,
-not actual Telegram, Mini App, unattended-agent, application-kill or production
-acceptance. The main stand is not upgraded by this increment.
-
-Shared review revisions and agent mutation APIs are now component-verified in the
-linked documents. Next: native proof targeting/reviewer controls, notice delivery
-and real native/agent/mixed/restart acceptance. No standalone mutation may bypass
-a newer shared pending revision. The unresolved partial/mixed/late policy remains.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

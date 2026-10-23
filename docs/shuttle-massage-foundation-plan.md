@@ -74,7 +74,7 @@ Non-goals: booking/rescheduling/cancellation, specialist self-service, money/FX,
 notification delivery, recurring schedules, production import and timetable UI.
 These remain later lifecycle work, not completed by configuration or candidates.
 
-## Implementation checkpoint (2026-10-15)
+## Storage contract
 
 The pure schedule model, candidate calculation and PostgreSQL storage layer are
 implemented. Migration 25 adds separate versioned schedules, exact five-minute
@@ -85,29 +85,17 @@ snapshot; candidate calculation runs after that snapshot releases its connection
 Incompatible later event-bound edits return a conflict rather than clipping work.
 
 Model review fixed oversized raw JSON ingestion and UTC/local year boundaries.
-Three independent DB reviews found no actionable findings. Focused Linux race
-checks passed for massage, DB and neighboring orders/account/MiniApp scenarios;
-strict lint passed with zero issues. Isolated PostgreSQL DDL checks verified an
+Isolated PostgreSQL DDL checks verified an
 empty rollback and refusal of a populated rollback with the schedule retained.
-Temporary QA containers and the isolated rollback schema were removed afterward.
 
-The subsequent API slice is also implemented and accepted on the owned stand:
-static `zinusya_massage` reads, permission-scoped administrative discovery and exact
-prepare/apply/status. Fresh API reviews, all 173 integration race tests, other Go
-packages and full zero-issue lint passed. The owned runtime now uses schema 25 and
-manifest `mvp-25`; real IAM/Loom exact approval, unpaid owner reads, DST offsets,
-module denial, stale-version rejection, restart and original receipt replay passed.
-See [the contract](shuttle-massage-schedules.md) and
-[native evidence and limits](shuttle-massage-qa-2026-10-15.md). No booking is implemented.
+No booking is implemented.
 
 ## Gates
 
 Focused behavior checks cover normalization, required zero/false fields,
 references/bounds, overnight/DST windows, disjoint spans, full-block fit, zero
-tables, limits/cursors and stale versions. DB/API acceptance adds unpaid access,
+tables, limits/cursors and stale versions.
+DB/API acceptance adds unpaid access,
 waitlist/admin/foreign/revoked/module denial, exact approval/replay/changed retry,
-event edits and restart. Fresh independent review loops, bounded race/lint gates
-and owned real IAM/Loom QA precede acceptance. No production state is read or changed.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk
+event edits and restart.
+No production state is read or changed.

@@ -8,8 +8,7 @@ notification documents/outcomes before intentionally dropping the new table.
 No historical payment notification backfill is performed.
 
 Evidence submission atomically creates submitted notices for the currently active
-ambassadors/event administrators in this event and deployment. No current recipient
-means no push notice; the evidence still exists in the authorized review queue.
+ambassadors/event administrators in this event and deployment.
 A later authority grant does not send an unsolicited backlog automatically.
 Confirmation/rejection atomically creates a decision notice for the evidence owner.
 Replaying the original payment operation does not recreate either kind of notice.
@@ -33,13 +32,15 @@ ambassador/administrator authority for that event. A reviewed submission alert i
 blocked as obsolete. Removing the registrations module blocks delivery too.
 
 The sender obtains/verifies the recipient's user token, then checks local event
-access again while reserving the notice under the event lock. This is a current
+access again while reserving the notice under the event lock.
+This is a current
 check before IO, not a claim that revocation can retract a message already in flight.
-Token/transport outages before send retain the pending notice. Confirmed Telegram
-rejection with a retry delay schedules a later attempt; permanent rejection is
-visible as delivery_failed. The reservation and exact payload are committed before
-network IO. Uncertain send or crash during send becomes delivery_unknown and is
-not automatically resent. Successful receipts persist message/chat IDs.
+Token/transport outages before send retain the pending notice.
+The reservation and exact payload are committed before
+network IO.
+Uncertain send or crash during send becomes delivery_unknown and is
+not automatically resent.
+Successful receipts persist message/chat IDs.
 
 The user permits a duplicate message only as a last resort when delivery cannot
 be established and completion requires repeating it. Inspect stored receipts and
@@ -91,11 +92,11 @@ terminal queue state and does not assert Telegram delivery. Dismiss remains poss
 when the event module is disabled. Ledger, evidence decisions and passes are unchanged.
 
 The operation atomically stores its original result, previous state/Telegram receipt,
-actor, reason and timestamp. Exact replay returns that result after expiry, delivery
-or restart. Changed arguments or proposal identity conflict. POST the same operation
-ID to /resolve_notification/status or /resolve_notification/reconcile to retrieve the
-original receipt. `not_found` means no committed receipt was observed; it does not
-prove that a message was never delivered. Neither endpoint sends anything.
+actor, reason and timestamp.
+Exact replay returns that result after expiry, delivery
+or restart.
+Changed arguments or proposal identity conflict.
+Neither endpoint sends anything.
 
 Apply 00013 then 00014 before exposing manifest mvp-12. Older binaries do not expose
 operator resolution. Binary rollback retains both tables. Export proposals, receipts
@@ -103,28 +104,10 @@ and notifications before any intentional schema rollback, in reverse migration o
 No historic notification rows are created by these migrations.
 ## Acceptance boundary
 
-Focused HTTP/PostgreSQL/Telegram-peer race tests pass for queued submission,
-operation replay, restart, owner deposit status, ru fallback, superseded alerts,
-rejection messages, source/recipient revocation, IAM downtime, Telegram retry_after,
-unknown receipt without automatic resend and repair past 100 waiting recipients.
-Two independent reviewers found scheduler starvation and an unqualified historical
-status; both were fixed with focused behavioral assertions. Fresh independent
-review found no actionable defects. The full Linux/PostgreSQL race suite and lint
-passed after those fixes. The subsequent shared page-limit binding passed focused
-notification and fairness race tests, lint and a fresh independent review.
-
-Focused resolution race tests pass for last-resort retry, dismiss, scoped access,
-expired/changed proposals, original receipt replay after delivery/expiry/restart
-and no payment credit. Two independent source reviews found no actionable defects.
-The final full Linux/PostgreSQL race suite and zero-issue lint passed for mvp-12.
-
 Native submission/confirmed notifications, queue recovery through simultaneous
 IAM/Loom downtime and bot restart, and real Loom exact dismiss approval/status pass.
 Unknown-receipt dismiss used an explicit SQL fixture after visible Telegram delivery;
-native retry was not attempted for that known-delivered message. See
-[native QA and its limits](shuttle-notification-qa-2026-10-14.md).
-PDF rendering remains a separate failed gate (Loom issue #4). No production rollout
+native retry was not attempted for that known-delivered message.
+PDF rendering remains a separate failed gate (Loom issue #4).
+No production rollout
 or historical payment import is claimed.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

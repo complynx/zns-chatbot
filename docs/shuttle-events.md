@@ -73,31 +73,6 @@ status lookup after a lost response, restart, concurrent retries/edits, bot scop
 role denial, invalid or naive timestamps, and local revocation. Time-zone checks
 cover Moscow, Minsk, Ekaterinburg and the Berlin DST transition.
 
-## Real-service acceptance
-
-Actual Zitadel administrator delegation and the private HTTP API created and
-read Moscow, Minsk and Ekaterinburg fixtures. Replay and operation lookup returned
-the original version after a later update removed orders from the Minsk fixture.
-Applying migration 00003 preserved the pre-migration users/tasks/outbox counts
-of 2/7/7. The accepted event build was
-sha256:299ae2576531855e40f777896385ef0c31db979e59fd18a03b3626f407cdeba8.
-The subsequent recovery build includes the same event implementation.
-
-Three independent review passes covered this slice. The first found PostgreSQL
-precision loss; explicit submicrosecond rejection fixed it. The remaining passes
-were clean. Behavioral PostgreSQL checks, full Linux race tests, generated sqlc
-reproducibility and golangci-lint passed. No registration or payment acceptance
-is implied by these catalogue checks.
-
-Written by Codex (gpt-6/Codex desktop), Shuttle developer
-on behalf of Daniel Drizhuk
-
-Optional event registration configuration is now persisted in an additive child
-table by migration 00005, with the same CAS and immutable event receipt. See
-[registration rules](shuttle-registration-rules.md) for exact field/rollback
-semantics and native previous-binary acceptance. It grants no pass/module access
-by itself; later registration/assignment acceptance is recorded in the roadmap.
-
 ## Agent configuration writes (migration 31)
 
 The separate `zinusya_administration.change_event` tool is implemented after the
@@ -147,15 +122,3 @@ keeps this additive history. Its down migration refuses to discard any proposal,
 including an expired or failed preparation. Export and reconcile history before
 an explicit schema rollback. A compensating configuration change is a newly
 approved versioned write, not deletion of the original receipt.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk
-
-The complete-parameter presentation subsequently passed a separate actual
-Telegram Web fixture check, including literal JSON reconstruction and rejection.
-See [its scope and limits](shuttle-approval-display-qa-2026-10-15.md); this uses a
-harmless mock RPC leaf and does not claim an actual Telegram administrator event
-write.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

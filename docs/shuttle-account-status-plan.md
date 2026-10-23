@@ -36,11 +36,4 @@ creates no conversation, Loom run, registration, payment, expectation or user
 action mutation. Registration/payment forms and event-selection actions remain
 separate work, including their durable agent context.
 
-Acceptance: behavioral owner/bot/org/admin isolation, waitlist/unpaid/partial/full
-states, pending-vs-confirmed money, ended events, module disablement, expiry/
-revocation/logout, page bounds, timezone and exact UI amounts; fresh independent
-correctness/security/quality reviews; bounded full race/lint checks; owned native
-real-IAM reads and restart. Real Telegram launch remains the deferred CA gate.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk
+Real Telegram launch remains the deferred CA gate.

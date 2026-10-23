@@ -10,15 +10,19 @@ name-only IAM update. The agreed onboarding and durable name-sync requirements a
 in the [specification](shuttle-spec.md#агентские-ожидания-и-пользовательский-контекст).
 
 The IAM adapter now provides `ReadProfileName` and `SyncProfileName` for a
-persisted user binding. It checks the exact subject, organization, verified
-synthetic email and active account. Its partial
+persisted user binding.
+It checks the exact subject, organization, verified
+synthetic email and active account.
+Its partial
 [Zitadel update](https://zitadel.com/docs/reference/api/user/zitadel.user.v2.UserService.UpdateUser)
 contains only separate given and family names and requires matching read-back.
-An uncertain write remains an error; a later attempt reads the current value
-before writing again. Populated IAM names do not establish user confirmation.
-The adapter is not an agent endpoint. The structured-name store and River
-worker described below are implemented. The agent and Mini App APIs now accept
-separate name components. First-use onboarding, trusted IAM name reuse and the
+Populated IAM names do not establish user confirmation.
+The adapter is not an agent endpoint.
+The structured-name store and River
+worker described below are implemented.
+The agent and Mini App APIs now accept
+separate name components.
+First-use onboarding, trusted IAM name reuse and the
 Telegram `/name` agent-dialog port are still pending.
 
 ## Structured names and IAM synchronization
@@ -169,6 +173,3 @@ an unchanged unpaid pass after name expiry, exact manifest output validation,
 fresh dispatch context, immutable uncertain-create retries, textual answer and
 steering context, profile-storage outages and notification language choice.
 Native owned-stand acceptance is recorded separately when complete.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk

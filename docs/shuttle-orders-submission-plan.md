@@ -117,11 +117,7 @@ and durable operation recovery working across bot/Loom/IAM outages.
 
 ## Acceptance and delivery sequence
 
-First implement and review the store/migration with real disposable PostgreSQL:
-submit exact quote; lost commit receipt; two operation IDs for one draft;
-simultaneous draft save/submit and cancel; stale proposal; later catalog edit;
-foreign/revoked/disabled/waitlist denial; deadline equality/DST; rollback retaining
-history. These are component gates, not a finished user feature.
+These are component gates, not a finished user feature.
 
 Then expose API/agent and native form/context together. Run focused behavioral
 happy/critical paths and independent correctness/quality/security review loops.
@@ -130,6 +126,3 @@ agent-only, native-to-agent and agent-to-native continuation of one prepared
 submission, plus cancellation and restart/lost-reply recovery. Preserve failures.
 Only then mark this submitted/unpaid stage accepted. Full proof/capacity/review,
 meal lifecycle, real-model and production acceptance remain separate required work.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

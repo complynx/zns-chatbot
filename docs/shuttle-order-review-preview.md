@@ -9,26 +9,3 @@ All amounts, frozen order lines, charges, capacity notes, identity references,
 reason and deadlines remain in the saved summary. Technical IDs remain available
 for reconciliation. This change does not parse arbitrary Markdown or HTML, change
 confirmation arguments, or retranslate frozen terms when the UI language changes.
-
-## Verification on 2026-10-20
-
-All 347 Mini App behavior tests pass, including 20 order-review tests. The new
-cases cover English and Russian titles, literal HTML and embedded backticks,
-unrecognized summaries, and proof inspection before explicit confirmation.
-Existing lost-response and same-key recovery checks also pass.
-
-A separate headless Edge check uses the actual order-review HTML section, JS and
-CSS with an in-page API fixture. English at390px and Russian at390px and1280px
-preserve the complete summary, produce no horizontal page overflow, create no
-injected HTML elements and send no business writes. Manual inspection of the
-390px Russian preview confirms the title, wrapped references, amounts and expiry
-are readable. Fixture terms intentionally stay in their saved language.
-
-This is presentation verification. It does not add IAM, Loom, real Telegram
-WebView, deployed-image or production acceptance. At that fixture checkpoint,
-the primary stand and its pending installation candidate were unchanged. The later
-[knowledge installation](shuttle-knowledge-primary-qa-2026-10-20.md) does not include
-this preview. Subsequent [preview installation](shuttle-order-preview-primary-qa-2026-10-20.md)
-is accepted separately; the fixture evidence retains its original scope. Local browser evidence is in
-`.cache/shuttle-work/readable-order-preview-v1/browser-proof.json` in the primary
-checkout. Independent textual review found no actionable code findings.

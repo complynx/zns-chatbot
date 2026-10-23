@@ -80,30 +80,3 @@ Migration 30 adds the dedicated durable proposal/result table. Its down migratio
 works only while that table is empty; pending preparations and committed receipts
 both require export before destructive downgrade. This prevents loss of approval
 and audit history.
-
-## Verification boundary
-
-Focused real-PostgreSQL behavioral race tests cover exact approval, stale state,
-expiry after a lock wait, concurrent delivery, reciprocal/self operator writes,
-atomic rollback, scope and role denial, restart, historical receipts, and cache
-invalidation after identity rebinding. The COMMIT-loss tests drop an actual
-PostgreSQL COMMIT acknowledgment after the database commits, separately for
-preparation, confirmation and self-revocation recovery. Fresh independent store
-and API correctness/quality reviews found no actionable defects.
-
-The overall regression gate passed: all 221 listed integration scenarios and
-the other explicit Go packages passed under the race detector, with zero-issue
-strict lint and matching pinned sqlc output. Fifteen bounded integration batches,
-enumeration and package checks produced 17 successful container exits without OOM.
-All 304 frozen source hashes remained unchanged through the gate.
-
-Real Zitadel/Loom exact approval, other-administrator recovery, restart and
-previous-binary compatibility with retained schema 30 passed on the owned stand.
-The accepted stand now runs schema 30 / manifest `mvp-29`. Self-revocation was
-accepted at tool-result/owner-denial/independent-receipt level; its paused run was
-cancelled for cleanup, with no final owner model response claimed. See the
-[native QA record, retained failures and limits](shuttle-user-revocation-qa-2026-10-15.md).
-Production has not been changed.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

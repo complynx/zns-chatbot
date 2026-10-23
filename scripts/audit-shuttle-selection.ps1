@@ -2,7 +2,7 @@
 param([string]$LoomRoot = (Join-Path $PSScriptRoot '../../clx-scripter'))
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
-$output = Join-Path $root 'docs/dependency-audit/2026-10-12'
+$output = Join-Path $root '.cache/shuttle-work/dependency-audit'
 New-Item -ItemType Directory -Path $output -Force | Out-Null
 $headers = @{ 'User-Agent' = 'Shuttle-dependency-audit' }
 $loomLockPath = Join-Path $LoomRoot 'tools/dependencies.lock.json'

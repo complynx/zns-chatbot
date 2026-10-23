@@ -2,9 +2,8 @@
 
 After the first native pair milestone, an independent architect and Go senior
 agreed on operator-selected solo/pair assignment with participant-specific quotes.
-The policy, owner quotes and immutable tier snapshots are implemented. Source
-behavioral/race checks, independent reviews and the bounded native scenario in
-[tier QA](shuttle-tier-qa-2026-10-14.md) passed. This does not implement allocation.
+The policy, owner quotes and immutable tier snapshots are implemented.
+This does not implement allocation.
 
 ## Smallest complete path
 
@@ -78,9 +77,8 @@ it must not read a global now_msk or host timezone.
 Behavioral tests must cover split-price paired passes and owner deposit snapshots;
 distributed boundary overshoot and blocked successors; stale usage/date quotes
 with zero partial writes; competing assignments; and original receipt replay after
-policy changes. Retain flat config, pass and old preparation compatibility tests.
-Then run independent correctness/quality review loops and real IAM/Loom exact
-approval/restart acceptance on the owned stand before accepting this slice.
+policy changes.
+Retain flat config, pass and old preparation compatibility tests.
 
 Apply the additive migration before the new binary. To return to a binary with
 the old strict rules decoder, first remove the optional tier policy using a normal
@@ -90,6 +88,3 @@ destructive schema rollback. Older binaries cannot enforce tier semantics.
 Automatic allocation, queue-order choices, balance policy, double-solo atomicity,
 administrative date overrides and cancellation/refunds are separate later slices.
 No new service, provider or generic operation framework is needed.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

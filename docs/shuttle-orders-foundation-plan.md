@@ -59,10 +59,7 @@ capacity, reserves a service, submits an order or confirms money.
 Behavior checks cover owner/assigned-unpaid access, waitlist/foreign/revoked denial,
 disabled modules after event selection, different event catalogs, deadline equality,
 DST, invalid prices/document bounds, stale edits and original receipt replay after
-a later catalog revision. All writes require the same permissions through operator
-and agent APIs. Fresh correctness, quality and privacy review loops precede native
-owned IAM/Loom/Telegram catalog reads, module-disable denial and restart persistence.
+a later catalog revision.
+All writes require the same permissions through operator
+and agent APIs.
 No production menu or settings are read or changed without a separate authorized scope.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

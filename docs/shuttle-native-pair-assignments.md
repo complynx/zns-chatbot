@@ -1,14 +1,7 @@
 # Native pair pass assignment
 
-Status: implemented and installed on the owned local primary at schema64 /
-`zinusya/mvp-77`; see [mvp77 primary installation](shuttle-pair-terms-primary-qa-2026-10-20.md).
-The [schema63/mvp72 report](shuttle-native-pair-assignment-primary-qa-2026-10-19.md) records the earlier installation. This extends the
+This extends the
 [canonical pair foundation](shuttle-native-pair-assignment-foundation.md).
-Source/component checks and the owned browser/real-IAM/Loom four-path gate pass.
-Local-primary installation and binary rollback on the expanded schema pass.
-The broader [registration/pass matrix](shuttle-registration-pass-parity-plan.md)
-remains open.
-
 ## Permission and shared operation
 
 An active Mini App owner needs current global `zinusya.admin` permission or
@@ -90,73 +83,9 @@ alias or result cannot enter an earlier task's context. The agent can read the
 original proposal/result and adopt an unexpired proposal under a new operation
 key, then ask for fresh exact approval. Native writes do not create agent tasks.
 
-## Acceptance boundary
+## Participant identity reads
 
-The initial `mvp-71` full local Go run passed 1037 root scenarios with no failures and six
-platform/helper skips. These checks use Go 1.27.2 on Windows with CGO disabled;
-they do not establish race or Linux runtime acceptance. All 285 Node UI behavior
-cases pass, including sixteen pair-assignment cases. Final DB/API/task unit
-checks and lint pass. Isolated sqlc compile/generate reproduces all three Go
-files byte for byte. The final Linux/amd64 binary cross-build also passes.
-
-A subsequent bounded `mvp-72` follow-up makes the same participant display
-identities available to agent candidates and actor-owned exact/pending proposal
-reads. An event-only administrator no longer needs an unrelated global user
-lookup to identify the pair. Current event authority still scopes every read;
-revoked candidates are filtered before pagination. The shared helper reads no
-revoked profile name and changes no frozen description, command hash or quote.
-Tool guidance asks for both recognizable names and Telegram IDs before approval.
-Fifty-eight affected PostgreSQL root scenarios, affected unit checks, lint and
-two fresh independent reviews pass. Isolated sqlc reproduction and the new Linux
-cross-build pass. The earlier full run is retained as the `mvp-71` baseline; it
-was not repeated for this bounded follow-up. Evidence is under
-`.cache/shuttle-work/pair-agent-identities-v1/`. Both temporary PostgreSQL fixtures
-were archived, fully decoded, stopped cleanly and removed with their volumes.
-
-Three review rounds end with clean independent correctness and quality reviews.
-Two substantive findings were fixed: unreadable recovered recipients and blocked
-read-only server recovery after a local journal error. The first scoped database
-run retained an expiry-observation timeout whose exact cause was not proven;
-the strengthened observation uses the held connection and checks the specific
-denial. The next run retained a duplicate profile fixture failure, corrected
-before the passing full run. Initial lint findings, a cross-realm JavaScript
-fixture assertion and a Windows sqlc verification-path failure are also retained.
-
-Ignored local evidence is under
-`.cache/shuttle-work/native-pair-assignment-session-v1/`: reviewed `scope-v3.json`,
-`review-loop-final.json`, `pg/pg-full-v1.json`, final lint/unit/UI logs,
-`sqlc-verify/result.json`, `linux-build-v2.json` and `primary-preserved.json`.
-At that source-stage checkpoint, the owned primary remained eleven services,
-schema61/mvp69 and 134 Loom runs.
-
-## First runtime attempt (not accepted)
-
-The isolated `pair-assignment-r1` stand used the mvp72 image
-`sha256:e2a078b2b8ef897b80d943bb2b31d71d92b528028acb37cf7b0a22712308cc43`,
-real Zitadel and Loom, mock Telegram and actual headless Edge.
-Ten synthetic identities and four waitlisted pairs were created through APIs.
-
-With Loom stopped, the form assigned two distinct passes atomically. The
-confirmation committed with HTTP 200 and its response was deliberately lost.
-The browser controller then reused one-time Telegram initData for a second
-launch; the application rejected that replay. The failed attempt remains in
-local evidence. A separate fresh authenticated launch recovered the exact
-original proposal and complete receipt through reads only, with zero Loom runs.
-No prepare or confirm was repeated.
-
-The event-only administrator agent path read both names and Telegram IDs through
-real Loom tools and reached a pending approval, without assigning passes.
-Acceptance stopped because the delivered approval showed frozen account UUIDs
-but omitted recognizable participant identities. Supplying names in Loom's
-`confirmation_text` does not display them in agent reply mode. At that point, the whole four-path runtime gate was not accepted. The source
-fix and subsequent r2 acceptance are recorded below.
-
-Ignored evidence is under
-`.cache/shuttle-work/native-pair-assignment-runtime-v1-qa/`: `runtime-findings.json`,
-original and recovery browser results, the approval transcript and
-`cleanup-proof.json`. All three database archives were fully decoded before the
-nine owned services, volumes and networks were removed. The primary remained
-unchanged. This failed attempt is not an installation or production acceptance.
+Agent candidates and actor-owned exact/pending proposal reads include participant display identities. An event-only administrator needs no unrelated global user lookup to identify the pair. Current event authority scopes every read; revoked candidates are filtered before pagination. The shared helper reads no revoked profile name and changes no frozen description, command hash or quote. Both recognizable names and Telegram IDs must be shown before approval.
 
 ## Approval presentation follow-up
 
@@ -172,74 +101,6 @@ If the form has already completed this same operation, the prompt explicitly
 asks to reconcile its historical result. It does not suggest assigning again.
 Other approval methods retain their existing routing.
 
-Four focused delivery behavior roots and ten related PostgreSQL scenarios
-passed (14 total, no failures or skips). Affected unit checks, final lint and
-Linux amd64 cross-build passed. Two independent final reviewers found no
-issues. The original lint/formatting failures remain in ignored evidence under
-`.cache/shuttle-work/pair-approval-display-v1/`, alongside `scope-v3.json`,
-`component-acceptance.json` and the PostgreSQL results. Its temporary database
-was archived, fully decoded and removed. This did not rerun the earlier full
-1037-test baseline or establish Linux/race acceptance.
+## Frozen display terms
 
-## Corrected owned runtime gate
-
-The fresh isolated `pair-assignment-r2` stand passed all four paths on image
-`sha256:6e1ca865cb8095c8456822c58763b91d32d5c388f0792b99322ce3ec88caefd8`:
-
-- Form only, with Loom stopped: one confirmation committed, its response was
-  lost, and a fresh browser context recovered the exact receipt through reads.
-  Each simulated Telegram launch used new one-time initData; zero Loom runs.
-- Agent only: an administrator of just that event read and displayed both actual
-  names and Telegram IDs, obtained explicit approval and completed the operation.
-- Form to agent: the agent adopted the original proposal and terms. A normal
-  bot restart while awaiting consent preserved the same task/run, approval,
-  proposal, alias and native history. Explicit approval completed that operation.
-- Agent to form to agent: the form confirmed the original agent proposal, then
-  Loom reconciled that complete receipt and succeeded without another assignment.
-
-The result is eight assigned registrations, four assigned pairs, eight distinct
-passes, four canonical proposals and four assignment receipts, one adoption
-alias and four native action records. All three Loom runs and Shuttle tasks
-completed, and all outbox records were delivered. Resolution output was checked
-against the complete original receipt and a succeeded operation on the same run.
-Both mixed-path recent-history inspections made no mutation calls.
-
-The measured bot stop took 0.703 seconds, exited zero and did not use OOM/kill
-recovery. The original pending approval and durable business snapshots survived.
-The browser screenshots were visually inspected for participant names, local
-Minsk deadlines and historical receipt state.
-
-A QA counter initially included the fixture's separate invitation-acceptance
-receipt. The failed observation is retained in `checkpoint.json`. The counter
-was corrected to `kind='assign'`, reviewed, and the existing pending approval
-was revalidated by reads before its first confirmation; no begin request was
-replayed. This was a controller error, not an extra pass assignment.
-
-Ignored r2 evidence is under
-`.cache/shuttle-work/native-pair-assignment-runtime-v2-qa/`:
-`runtime-acceptance.json`, `controllers-final.json`, browser results/screenshots,
-`checkpoint.json` and `cleanup-proof.json`. Three complete database archives
-were decoded before the nine owned services, volumes and networks were removed.
-The eleven-service primary stayed schema61/mvp69 with its 134 Loom runs.
-
-This gate uses a controlled synthetic model provider with actual Loom, Zitadel,
-mock Telegram and headless Edge. It does not establish autonomous model
-comprehension, real Telegram WebView acceptance, Linux/race coverage, the whole
-registration/payment matrix or production readiness. The subsequent local
-primary installation and binary rollback are accepted in the linked report.
-Next are the remaining participant payment, top-up and ambassador-confirmation
-paths and the complete registration-through-assignment journey.
-
-
-## Deposit presentation follow-up
-
-The [source mvp76 follow-up](shuttle-pair-deposit-presentation-2026-10-20.md)
-shows the original minimum amount/share in both pending and historical views.
-The [mvp77 structured terms follow-up](shuttle-pair-assignment-terms-2026-10-20.md)
-now replaces technical description text for new proposals. Old proposals retain
-an original-description fallback. Both directions now pass the separate
-[owned binary compatibility gate](shuttle-pair-terms-binary-runtime-qa-2026-10-20.md).
-The primary is now mvp77; installation and rollback pass in the separate primary report.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk
+New preparations retain structured display terms for the original participants, price, configured deposit minimum amount/share, effective required deposit and deadlines. Historical proposals without structured terms retain the original-description fallback. Presentation does not change the proposal, expiry, action hash or confirmation arguments.

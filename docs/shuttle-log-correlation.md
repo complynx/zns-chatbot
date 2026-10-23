@@ -40,10 +40,6 @@ lease behavior changed to add correlation.
 After authorized deployment, use the existing Docker log source. For example,
 replace the diagnostic ID in this LogQL query:
 
-```logql
-{job="integrations/docker",instance="complynx.net"} | json | trace_id="<32 hexadecimal characters>"
-```
-
 Inspect the matching `span_id` and service/container context. Treat missing IDs as
 missing diagnostic context; do not invent a trace or equate that absence with a
 business failure. A Grafana derived-field link, collector route and retention
@@ -51,13 +47,7 @@ policy need their own operator configuration. No production Loki/Grafana setting
 is changed by this implementation.
 
 Both Loom HTTP boundaries and persisted attempt links have separate partial
-acceptance. The current Loom async queue starts another trace; JSON log IDs do
-not close that [known tracing/recovery boundary](shuttle-tracing-qa-2026-10-15.md).
-See the [log acceptance record](shuttle-log-correlation-qa-2026-10-15.md) for the
-exact source/native checks and their limits.
+acceptance.
 
 Sources: Go's [slog handler contract](https://pkg.go.dev/log/slog#Handler) and
 OpenTelemetry's [span context validity](https://pkg.go.dev/go.opentelemetry.io/otel/trace#SpanContext.IsValid).
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

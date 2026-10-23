@@ -1,16 +1,9 @@
 # Native pair invitation API foundation
 
 The source now exposes owner-scoped Mini App endpoints for the existing pair
-invitation lifecycle. Native and agent entry use the same business transaction,
-versions, holds, notifications and immutable operation receipts. Source remains
-schema59 / agent manifest `mvp-68`; no dependency, migration, IAM role, configuration
-option or agent method was added.
-
-This is a component API/store/context gate. The native pair screen, Telegram entry
-buttons and full real-IAM/Loom/WebView pairing workflow are not yet implemented
-or accepted by this stage. The new binary has not been installed on the primary
-stand or production. Existing notification text and partner deep links retain
-their current behavior.
+invitation lifecycle.
+Native and agent entry use the same business transaction,
+versions, holds, notifications and immutable operation receipts.
 
 ## Native endpoints
 
@@ -75,45 +68,3 @@ event/invitation IDs, receipt state and completion time, without partner names,
 credentials or money. They are explicitly untrusted historical facts, not new
 instructions, consent or necessarily current state. Form writes do not start
 an agent run. The agent must refresh current state before acting.
-
-## Component verification and remaining work
-
-All31 selected PostgreSQL root scenarios pass, with no failures or skips. They
-include the six new native roots and existing pair/assignment/notification paths:
-native-only and both interface directions; opaque agent-key recovery through native
-POST/GET; harness service restart and reopened DB connection replay; decline/revoke
-hold release; foreign-owner denial; expired, logged-out, wrong-generation and locally
-revoked sessions; logout during an event-lock wait; two concurrent events while
-an owner read holds SHARE; and owner-only reactive prompt history.
-
-All22 internal Go packages pass or have no test files (19 tested,3 without tests).
-Strict lint reports0 issues. The final Linux/amd64 binary is built from a frozen
-560-file source closure. It remains uninstalled. The actual primary retains its
-previous image, schema59/mvp68,11 service identities and133 Loom runs; domain data
-and outstanding-work checks are unchanged.
-
-The first five-root pass missed two defects that independent correctness/quality
-reviews found: the owner lock upgrade and UUID-only operation recovery. Both were
-fixed and the expanded gate passed. The first lint had14 issues, then one function
-length issue; final lint is clean. A later syntax complaint was disproved directly
-with Go1.27.2 and the candidate build. Historical results remain separate from the
-final gate. Fresh correctness and quality reviews have no actionable findings.
-
-One isolated512MiB PostgreSQL was used. Its dump was taken before shutdown and
-validated by pg_restore without restoring a database. During cleanup, a checkpoint
-prevented PostgreSQL from finishing inside the requested5-second timeout; Docker
-stopped it with137, without OOM. The failed cleanup assertion, state and logs are
-retained. The stopped container and its labeled volume were then removed. The
-short-lived dump-validation container was also removed. Future database cleanup
-needs a longer timeout; this is distinct from the bot's1/5-second shutdown contract.
-No primary service or Loom developer stand was changed.
-
-Ignored evidence is `.cache/shuttle-work/native-pairs-api-v1/`. This gate does not
-establish real-model decisions, real Telegram pair forms, native registration/pass
-parity, production readiness or full roadmap completion. Next: implement the pair
-form/menu entry with exact-operation recovery and explicit decisions, then run the
-four native/agent paths on the owned real-IAM/Loom mock-Telegram stand before real
-Telegram acceptance. Keep the pending CA/zitadeltg interactive gate separate.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk

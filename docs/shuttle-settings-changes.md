@@ -6,8 +6,6 @@ approval. Every call requires current global administrator authorization under
 the configured IAM cache policy and an active local account. Startup YAML,
 environment variables and secrets are outside this API.
 
-Implementation, independent reviews, the complete 206-test race gate and bounded
-native acceptance passed. See the [dated verification record](shuttle-settings-change-qa-2026-10-15.md).
 This is not production readiness.
 
 ## Prepare and confirm
@@ -87,10 +85,6 @@ previous operator CAS/audit and task-closure paths retain their contracts. Binar
 rollback keeps proposals and receipts. Schema downgrade refuses to discard any
 proposal or result; export/reconcile audit before intentional schema removal.
 
-User revocation has its own [agent contract](shuttle-user-revocations.md),
-with [bounded native acceptance](shuttle-user-revocation-qa-2026-10-15.md). Settings remain a
+Settings remain a
 separate approval operation; see their
 [bounded implementation plan](shuttle-settings-change-plan.md).
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

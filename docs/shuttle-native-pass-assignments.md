@@ -1,9 +1,6 @@
 # Native solo pass assignment
 
-Status: source/component checks and the isolated
-[four-path owned-runtime gate](shuttle-native-pass-assignment-runtime-qa-2026-10-19.md)
-pass. [Local-primary installation and binary rollback](shuttle-native-pass-assignment-primary-qa-2026-10-19.md)
-are accepted on schema 61 / `mvp-69`; broader parity remains pending. This stage
+This stage
 extends the source checkpoint from 2026-10-19.
 It does not establish complete registration/pass/payment parity.
 
@@ -103,40 +100,3 @@ no native action starts a proactive Loom run.
 Schema 60 owns transport aliases. Both new migrations protect populated data
 from destructive downgrade; retain expanded schema for binary rollback. A
 schema downgrade requires deliberate export and reconciliation first.
-
-## Verification boundary
-
-The final Go component run passes 12 new PostgreSQL root scenarios with no
-failures or skips, including shared native/agent receipts, current session and
-authority, blocked recipient expiry, list privacy/paging, pair exclusion,
-recent-operation recovery, and bounded task history. A broader preceding run
-passes 34 roots including existing pair/avatar session consumers. DB/API/task
-unit checks pass and scoped lint reports zero issues. The subsequent full local
-Go run passes 1,014 root tests, with six platform/helper skips, on Windows with
-`CGO_ENABLED=0`. Linux/race acceptance remains separate.
-
-An earlier disposable PostgreSQL run exhausted its 256 MiB tmpfs on migration
-catalog/WAL growth. Its failed output and failed dump attempt were retained;
-that run remains a failure. The successful reruns use a separate disk volume
-with the same 512 MiB container RAM limit. No OOM occurred. This is fixture
-storage correction, not a product restart/recovery acceptance result.
-
-Four source review passes ended with two clean independent reviews of the
-final scope. The 57 focused/common lifecycle UI cases and all 269 UI cases pass.
-Actual browser, real IAM and Loom results are recorded in the
-[owned-runtime report](shuttle-native-pass-assignment-runtime-qa-2026-10-19.md).
-[Local-primary installation and binary rollback](shuttle-native-pass-assignment-primary-qa-2026-10-19.md)
-are accepted on schema 61 / `mvp-69`. Production readiness is not established.
-
-Reproduce component checks with a disposable PostgreSQL URL in
-`SHUTTLE_TEST_DATABASE_URL`:
-
-```sh
-go test -count=1 ./integration -run '^Test(MiniAppAssignment|NativeAssignmentContext)'
-go test -count=1 ./internal/db ./internal/api ./internal/task
-node --test tools/test-miniapp-ui.cjs tools/test-miniapp-assignments-ui.cjs
-golangci-lint run ./internal/db ./internal/api ./internal/task ./integration
-```
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk

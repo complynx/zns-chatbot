@@ -1,27 +1,30 @@
-# Pair registration design (implementation in progress)
+# Pair registration design
 
-The architecture discussion with independent architect and Go reviewers agreed to
-retain owner registrations, immutable participant passes and payment decisions.
-Pair consent is a separate aggregate. Pairing must never combine balances, rewrite
+Pair consent is a separate aggregate.
+Pairing must never combine balances, rewrite
 an assigned price or mark a submitted proof as paid.
 
-Migration 00015 adds schema and domain types. The store now supports invitation,
-acceptance, decline, revoke and immutable operation replay. Solo assignment checks
+Migration 00015 adds schema and domain types.
+The store now supports invitation,
+acceptance, decline, revoke and immutable operation replay.
+Solo assignment checks
 pending outgoing holds and active membership in both preparation and execution.
-The agent API exposes participant-only invitation reads. The background service
-releases expired invitations from durable database state. The store supports exact
+The agent API exposes participant-only invitation reads.
+The background service
+releases expired invitations from durable database state.
+The store supports exact
 paired assignment preparation and confirmation, exposed through an authenticated
-API and dynamic agent manifest. Participant metadata reads and uncoupling are also
-exposed through the API and agent manifest. Directed invitation writes, participant
-listing, policy context and operation receipts are exposed. Durable invitation
-delivery is implemented. The first native pair milestone used schema 17 and
+API and dynamic agent manifest.
+Participant metadata reads and uncoupling are also
+exposed through the API and agent manifest.
+Directed invitation writes, participant
+listing, policy context and operation receipts are exposed.
+Durable invitation
+delivery is implemented.
+The first native pair milestone used schema 17 and
 manifest mvp-13; the historical tier-pricing checkpoint used schema 18 and mvp-14.
-The latest [partner-entry QA](shuttle-partner-entry-qa-2026-10-15.md) records the
-current owned stand's schema 25 and mvp-26.
-Native invitation delivery, Telegram consent through Loom, and exact paired-pass
-assignment have passed. Native participant uncoupling and bot restart now pass with
+Native participant uncoupling and bot restart now pass with
 a confirmed synthetic partial payment and exact preservation of both owner passes.
-See [native pair QA](shuttle-pair-qa-2026-10-14.md) for evidence and limitations.
 This accepts the first bounded pair milestone, not the full stage 3 lifecycle.
 
 ## Current source verification
@@ -41,19 +44,22 @@ This endpoint does not discover a target or deliver an invitation.
 
 Current global or event administrators can prepare and confirm paired pass
 assignment; payment ambassadors alone
-cannot assign passes. Preparation freezes both participant account IDs, current
+cannot assign passes.
+Preparation freezes both participant account IDs, current
 event price/currency, payment window, deposit minimum and event-local final deadline.
-Without a tier policy, each participant uses the configured event price. Optional
+Without a tier policy, each participant uses the configured event price.
+Optional
 [tier pricing](shuttle-tier-pricing.md) freezes and rechecks each owner's price,
 tier and deposit quote; paired role quotas can produce different participant prices.
 Confirm requires the same actor,
 operation, proposal and argument hash, and rechecks event/pair/registration versions,
 active membership, active accounts, both role capacities and expiry after locks.
-Both pass snapshots share one final database instant. Each remains a separate owner
-pass with its own deposit record. A committed receipt replays after proposal expiry,
-but current administrator access is still required. Native Loom exact assignment
-passed with the fixture administrator; participant consent used the authorized
-Telegram account. This is manual mailbox-provider QA, not autonomous model evaluation.
+Both pass snapshots share one final database instant.
+Each remains a separate owner
+pass with its own deposit record.
+A committed receipt replays after proposal expiry,
+but current administrator access is still required.
+This is manual mailbox-provider QA, not autonomous model evaluation.
 
 The zinusya_pairs module exposes participant metadata and uncoupling tools to active
 users. Assignment and its prerequisite reads are discovered only for a current
@@ -92,16 +98,22 @@ failure leaves the row available for the next sweep or application restart.
 A directed invitation names an existing local target account in the same deployment.
 It holds the inviter out of allocation without reserving or mutating the target.
 There is one pending outgoing invitation per inviter; incoming invitations may
-compete. Username search and Telegram-ID enumeration are not introduced.
+compete.
+Username search and Telegram-ID enumeration are not introduced.
 The owner can read `zinusya_pairs.partner_code` to share their own account UUID
-and, when verified Telegram bot metadata is available, a deep link. Raw UUID
-sharing remains supported. Opening the link gives the agent an untrusted target
-hint; it creates no invitation, hold or registration. The opener may subsequently
-explicitly invite the code owner, who must separately accept. The code identifies
-the target but is not authentication, proof of sharing or consent. No directory
-or rotating-secret table is introduced. A code alone does not complete delivery
-or target acceptance. See [entry contract](shuttle-partner-entry.md) and
-[source/native/client QA](shuttle-partner-entry-qa-2026-10-15.md).
+and, when verified Telegram bot metadata is available, a deep link.
+Raw UUID
+sharing remains supported.
+Opening the link gives the agent an untrusted target
+hint; it creates no invitation, hold or registration.
+The opener may subsequently
+explicitly invite the code owner, who must separately accept.
+The code identifies
+the target but is not authentication, proof of sharing or consent.
+No directory
+or rotating-secret table is introduced.
+A code alone does not complete delivery
+or target acceptance.
 
 The invitations read in zinusya_pairs returns incoming or outgoing invitation views
 scoped to the current participant. It defaults to incoming/pending; state=all reads
@@ -121,17 +133,23 @@ remain available for cleanup when the module is disabled; new invites/acceptance
 still require enablement and valid deadlines. Target eligibility failures are generic
 and do not reveal another account's pass or profile.
 
-Each write has operation-only status/reconcile suffixes compatible with Loom. These
-return actor- and kind-scoped original receipts after current identity checks. A
+Each write has operation-only status/reconcile suffixes compatible with Loom.
+These
+return actor- and kind-scoped original receipts after current identity checks.
+A
 creation receipt may still say pending after the target accepted: use invitations
-for current state. Missing status is unknown and must not cause a blind replacement
-operation. Creating an invitation currently proves database acceptance, not Telegram
-delivery. Migration 16 adds durable notification intents in the same transaction
-as invitation creation, decisions, and lazy or background expiry. A storage failure
-rolls back the invitation effect and its receipt. The target receives pending and
+for current state.
+Missing status is unknown and must not cause a blind replacement
+operation.
+Migration 16 adds durable notification intents in the same transaction
+as invitation creation, decisions, and lazy or background expiry.
+A storage failure
+rolls back the invitation effect and its receipt.
+The target receives pending and
 revoked intents; the inviter receives accepted, declined, and expired intents.
 Each invitation version and recipient has one intent, including after replay or
-restart. Ready-intent scans are deployment-scoped and bounded to 100 records.
+restart.
+Ready-intent scans are deployment-scoped and bounded to 100 records.
 
 The River worker repairs committed intents with a bounded cyclic cursor. Before
 sending it verifies the recipient through IAM, then rechecks local access and the
@@ -142,15 +160,19 @@ disablement. Messages use plain text, en/ru with the common language fallback, a
 event-local expiry with the IANA zone. They include the event/invitation references;
 pending notices identify the inviter and required role and request explicit consent.
 
-The attempt ID and payload commit as send_inflight before Telegram IO. Known
+The attempt ID and payload commit as send_inflight before Telegram IO.
+Known
 retryable rejection follows Retry-After; ambiguous sends become delivery_unknown
-without automatic resend. Startup recovery runs under the exclusive deployment
-lock. Focused PostgreSQL tests use mock IAM and Telegram; they do not establish native
-delivery. The owned stand now uses an account-filtered poller and an HTTPS Telegram
-guard. Native probes verify the existing CA/hostname, expected bot metadata and
+without automatic resend.
+Startup recovery runs under the exclusive deployment
+lock.
+Focused PostgreSQL tests use mock IAM and Telegram; they do not establish native
+delivery.
+Native probes verify the existing CA/hostname, expected bot metadata and
 local rejection of forbidden recipients; those probes send no Telegram messages.
 Separate native QA accepted invitation delivery, consent, assignment and safe
-uncoupling with restart. Other delivery-resolution branches and the broader stage 3
+uncoupling with restart.
+Other delivery-resolution branches and the broader stage 3
 lifecycle remain open; see the native pair QA report linked above.
 
 Global administrators can inspect pair_notifications and pair_notification under
@@ -277,6 +299,3 @@ Binary rollback retains pair tables/history/receipts. Export before any intentio
 schema rollback; migration Down drops new tables before removing supporting keys.
 No registrations, passes, payment decisions or historical receipts are migrated or
 deleted by the expand migration.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

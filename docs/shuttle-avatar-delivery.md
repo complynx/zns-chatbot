@@ -1,15 +1,10 @@
-# Avatar document delivery — source implementation
-
-Source schema57 / manifest mvp65 includes a task-free avatar document worker.
-It consumes committed finalization intents through the existing River service;
-no Loom run, event or task outbox record is required. The installed primary is
-still schema49/mvp56. This source has not been installed there or in production.
+# Avatar document delivery
 
 Shared [native/agent finalization APIs](shuttle-avatar-finalization-api.md),
 owner status/content reads and bounded native-action context are implemented.
 The [Mini App Generate/send UI](shuttle-avatar-send-ui.md) is implemented with
-isolated browser proof. [Owned runtime/browser QA](shuttle-avatar-runtime-qa-2026-10-19.md)
-now passes all four paths with real IAM/Loom and mock Telegram. Actual Telegram
+isolated browser proof.
+Actual Telegram
 WebView and unattended model acceptance remain open.
 
 ## Send and authorization
@@ -36,10 +31,13 @@ No mutable Telegram source or draft is fetched during delivery.
 ## Attempts, duplicate jobs and recovery
 
 Finish requires the exact delivery ID, reserved version, attempt fence and
-send_inflight state. A stale worker cannot finish a later attempt. Definite
+send_inflight state.
+Definite
 not-started/retryable results retain a due retry timestamp; explicit Telegram
-retry-after is respected. Ambiguous HTTP/receipt outcomes become delivery_unknown.
-A wrong chat in a nominal success receipt is also unknown. Unknown, failed and
+retry-after is respected.
+Ambiguous HTTP/receipt outcomes become delivery_unknown.
+A wrong chat in a nominal success receipt is also unknown.
+Unknown, failed and
 blocked intents are not automatically requeued as fresh sends.
 
 The attempt fence is a non-secret deterministic UUID derived from delivery ID,
@@ -83,21 +81,7 @@ during a live send, retry-after, revoked/changed/IAM-denied recipients, eligibil
 changes during IAM I/O, transient IAM failure, startup recovery, stale attempts,
 graceful stop during a send and failure to record a Telegram outcome.
 
-The initial38-root command passed. Review then found that a failed finish write
-could strand inflight work until restart; a focused trigger-injection test
-reproduced it before the job-bound recovery/gate fix. The next broad command
-passed40 of41 roots: its duplicate-job fixture incorrectly required scheduled
-state, while River deliberately keeps short snoozes available. The final fixture
-requires an attempted, postponed job in either supported state and still checks
-that the live delivery is unchanged and sends once. These attempts remain
-separate. Final PostgreSQL/Linux/lint counts and cleanup are in the source gate.
+These attempts remain
+separate.
 
-Ignored evidence is `.cache/shuttle-work/avatar-delivery-v1-qa/`, including
-separate PostgreSQL dumps/logs, initial/final lint, reviews and focused failure
-reproduction. No real Telegram, installed real IAM/Loom runtime acceptance,
-production changes, publication or image installation occurred in this stage.
-[Owned runtime completion](shuttle-avatar-runtime-qa-2026-10-19.md) now passes native-only,
-agent-only and both handoffs. Actual Telegram WebView and unattended model remain open.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk
+Actual Telegram WebView and unattended model remain open.

@@ -1,11 +1,7 @@
 # Structured solo registration
 
 The working tree adds /register event/role navigation and solo waiting-list
-requests without Loom. The owned main stand now runs imagefffc16debed6/schema34.
-The image-only rollout preserved all65 table hashes, passed a real-IAM owner read,
-and restored the same Telegram poller with a fresh successful cycle. Scoped
-[native Telegram and real-Loom acceptance](shuttle-structured-registration-qa-2026-10-16.md)
-passed for all four entry/continuation paths with a manually driven provider.
+requests without Loom.
 This is a participant entry slice, not full registration/pass parity: administrator
 allocation, pass assignment choices, pair entry, payment forms and configured
 name/passport prerequisites remain separate work.
@@ -69,44 +65,3 @@ Both interfaces use the same registrations and receipts. Selecting an event by
 buttons followed by a meaningful agent request has an event breadcrumb; no agent
 run is started by navigation or the role button itself. Context transport alone
 is not acceptance of unattended model interpretation.
-
-## Verification and rollout
-
-Architecture and Go-senior discussion identified the canonical receipt-hash trap
-and final locked-expiry requirement before implementation. A separate source
-review found untranslated saved role values; these were fixed through the shared
-role renderer. Strict lint prompted separating event listing and role presentation.
-A compile-only attempt during that extraction rejected an omitted nested literal
-type; it was fixed without a lint suppression and the failed attempt was retained.
-The initial scoped Linux/race run passed69 root tests /148 root-and-subtest pass
-events before those changes, with no failures or skips. Its exact Go/PG containers
-exited0/noOOM and were removed; evidence remains under ignored
-.cache/shuttle-work/structured-register-qa/. The final expanded Linux/race run at
-the corrected source passed92 root tests /174 root-and-subtest pass events:
-all32 db,11 API and10 task roots plus39 selected registration/assignment/structured/
-name integration roots. All eight new structured registration roots passed. No
-failures or skips occurred. Source hashes and all ten main-service fingerprints
-stayed unchanged. The final Go/PG containers exited0/noOOM and were removed by
-verified identity; receipts are under structured-register-final-qa/. Final strict
-lint reports zero issues and a fresh independent source review found no actionable
-findings. This is scoped verification, not the full integration suite.
-
-Behavioral proof includes command/event/role navigation with Loom unavailable,
-restart and duplicate callbacks, canonical receipt status, wrong-message/foreign/
-stale-event rejection, recovery of a committed receipt after choice expiry,
-opposite-role conflict, recorded selection context and shared agent/API state,
-expiry while blocked on the owner row, uncertain prompt delivery denial, Russian
-role output, and a pending agent question surviving registration and restart.
-The mixed test uses synthetic peers/authenticated API calls; it does not prove
-native model interpretation or a real-Loom tool decision.
-
-No new schema, dependency, worker or authorization subsystem is introduced.
-Existing binaries cannot process the new callback/checkpoint path: stop ingress
-and drain/reconcile accepted tasks and undelivered outbox before rolling back the
-binary. Retain existing registration receipts and database data. Native Telegram
-and real-IAM/Loom mixed continuation passed the scoped waiting-list acceptance
-linked above. Full registration/pass workflow and unattended model acceptance
-remain open; the waiting-list slice does not close those gates.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

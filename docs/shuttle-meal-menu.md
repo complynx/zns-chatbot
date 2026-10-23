@@ -1,20 +1,16 @@
 # Meal menu: composition and durable drafts
 
 The meal module provides typed catalogs, pure composition evaluation, durable
-owner drafts and financial checkout. Migration53 introduced the draft store;
-the installed primary now runs schema69 / mvp-89. See the
-[installation record](shuttle-meal-primary-qa-2026-10-21.md) for current runtime
-and CI evidence. The chronological component checkpoints below retain the
-source and installation state at each earlier gate.
+owner drafts and financial checkout.
 
 [Financial checkout](shuttle-meal-order-submission.md#browser-checkout-source)
 and [shared proof/review](shuttle-meal-payment-evidence.md) use the existing order
-engine. The [bounded runtime check](shuttle-meal-financial-runtime-qa-2026-10-21.md)
-records native checkout/recovery, Loom writes/consent, restart and native proof
-review. The [controlled-agent payment check](shuttle-meal-agent-payment-qa-2026-10-21.md)
-adds actual Loom proof submission and explicit reviewer consent. These bounded
+engine.
+These bounded
 checks do not establish autonomous model quality or exact native-preparation
-adoption. No new runtime dependency is required. The
+adoption.
+No new runtime dependency is required.
+The
 [frozen terms builder](shuttle-meal-terms.md) remains a pure component reused by
 financial integration; calling that builder alone creates no order or payment.
 
@@ -62,32 +58,6 @@ persisted state, then check the affected sales windows using database time.
 Unchanged closed services can remain while another open service changes.
 Removal/clear is also a change.
 
-## Composition verification
-
-All 20 `internal/orders` test roots pass on Windows and Linux/amd64 Go 1.27.2,
-including seven new meal roots and existing quote/capacity tests. No skips were
-counted. Tests cover incomplete-to-complete combo progression, all lunch modes,
-optional dinner, invalid references/categories/mode fields, canonical sets,
-amount overflow and explicit zero. The time case verifies both occurrences of
-02:30 across the Europe/Berlin autumn transition and exclusive sales cutoffs.
-The package linter reports 0 issues. Independent correctness and quality reviews
-found no actionable issues; the final normalization change received fresh review.
-
-The Linux check used one network-disabled container, read-only source/module
-cache/root filesystem, a 768 MiB memory limit with no extra swap and two CPUs.
-Its first run compiled but could not execute the test binary because `/tmp` was
-mounted noexec. That failed log/checkpoint remains retained. A fresh container
-with exec enabled only on its temporary filesystem passed the unchanged source.
-Both containers were removed and neither was OOM-killed. The first lint command
-also used Go 1.27.0 from PATH and did not check the package; the corrected command
-used Go 1.27.2, found one complexity issue, and the simplified implementation then
-passed. These failed observations were not rewritten as successful runs.
-
-Ignored evidence: `.cache/shuttle-work/meal-foundation-v1-qa/`. Existing order
-source files remain unchanged. The installed primary stays schema49 / `mvp-56`.
-The last built schema52 / `mvp-59` candidate predates this source-only foundation;
-it does not prove the new component's installation or runtime acceptance.
-
 ## Durable catalog and draft store
 
 Migration53 adds immutable event/catalog versions, administrative preparations
@@ -127,42 +97,6 @@ conservative rule means editing even an unselected item in a closed service can
 block another draft edit. Administrators must retain that closed definition or
 reopen its window. Currency or scale changes also count as changed terms.
 
-## Store verification and next step
-
-The isolated PostgreSQL acceptance run passed all 18 selected integration roots
-without skips: ten new meal roots and eight existing catalog/selection roots.
-They cover incomplete/complete/clear/reload, original receipt recovery after
-catalog changes, concurrent editors, current entitlement, native/owner mixed
-writes, atomic journal rollback, independent lunch/dinner cutoffs, removed
-services, administrative deadline extension, proposal expiry during authority
-checking, retained-history rollback refusal and empty migration down/up.
-SQLC compile passes and generation is idempotent. The database/integration linter
-reports 0 issues. The final local unit run passed 20 orders roots and eight database
-roots; 25 database roots skipped without a DSN and are not counted as PostgreSQL
-acceptance. Independent final code reviews found no actionable findings. Review
-caught the expiry-after-authority-check gap; the implementation and behavioral
-proof now cover it.
-
-The first PostgreSQL run passed all ten meal roots but failed one old API test
-that pinned manifest `mvp-43` while source already published `mvp-59`. That test
-now verifies a nonempty discovery revision while retaining its behavior checks.
-The unchanged failure record remains; the fresh 18-root run passed. Each run used
-its own PostgreSQL container/volume, 512 MiB memory limit with no extra swap and
-two CPUs. Both were removed without OOM. The failed run retains a validated
-387,053-byte database archive; the successful run's 861-byte archive is metadata
-only because successful fixtures drop their schemas. It is not a business-data
-backup. Both runs checked that primary data and application sources were
-preserved; the second also checked unchanged integration-test sources.
-
-Argument-free recovery now has a store entry point for Loom status probes. It
-privately resolves the receipt's event under the authenticated owner, releases
-that transaction and rechecks current entitlement in event-to-owner lock order
-before returning the original result. A separate isolated PostgreSQL run passed
-four receipt/history/access roots, including owner isolation, module removal and
-restoration, and revocation. Its temporary container and volume were archived and
-removed; the primary remained unchanged. Independent diff review found no
-actionable findings. This adds no public endpoint or manifest method.
-
 ## Agent HTTP contract
 
 The static `zinusya_meals` module is independent of service orders. Its methods
@@ -193,25 +127,13 @@ and rechecks the binding in event-to-owner order. Administrator status never gra
 an assigned pass for owner catalog reads. Bounded schemas publish final prices,
 explicit instants, ru/en labels and the supported composition fields.
 
-The accepted component run passed 16 selected PostgreSQL integration roots with
-no skips, including three new HTTP roots for owner recovery/access, exact admin
-approval/history/authority and incomplete/dinner-only composition. The full API
-package passed all17 root tests without skips. The API/database/integration linter
-reports 0 issues; fresh final code review found no actionable findings. This uses
-real isolated PostgreSQL with the integration harness's IAM/Telegram/Loom peers;
-it is not actual IAM/Loom runtime or browser acceptance.
-
-Failures remain retained: the first run found a Huma name collision between the
-domain and persisted `MealCatalog`; a distinct transport result type fixes it.
 The next run found that Huma forbids a nullable tag on a referenced object;
-optional HTTP fields now accept omission/null without that tag. Review also found
-a shallow test copy that mutated the expected historical receipt, and the initial
-required-field mismatch with the manifest. Both are fixed with focused HTTP
-coverage. Failed lint runs are retained. All three isolated PostgreSQL containers
-and volumes were archived and removed without OOM; accepted source/test hashes
-and primary data remained unchanged during the final run. Successful-fixture
-archives contain metadata only, not business backups. No image was built or
-installed, and the primary remains schema49 / `mvp-56`.
+optional HTTP fields now accept omission/null without that tag.
+Both are fixed with focused HTTP
+coverage.
+Failed lint runs are retained.
+Successful-fixture
+archives contain metadata only, not business backups.
 
 ## Native HTTP and reactive action context
 
@@ -249,32 +171,32 @@ or money. The prompt identifies it as untrusted history, not instructions,
 consent or a new request, and directs the agent to `zinusya_meals.draft` and the
 saved catalog version. Native changes start no agent task or unsolicited reply.
 
-The component gate passed all23 selected PostgreSQL integration roots without
-skips: seven new native HTTP roots plus meal and neighboring order regressions.
 New roots cover native save/replay after harness service restart, agent/native
 continuation, explicit clear and later reactive context, foreign owners, stale
 versions, malformed bodies, logout, transaction rollback after journal failure,
 session expiry behind an observed event lock, independent past-event discovery,
 expiry behind catalog locking, and explicit catalog history/version validation.
 The event-lock test observes waiters blocked by its own transaction backend PID,
-so another parallel test cannot satisfy its synchronization condition. This
+so another parallel test cannot satisfy its synchronization condition.
+This
 synchronization gap was found and fixed during independent review.
 
-All17 API and16 task unit roots pass without skips. SQLC compile succeeds and
-regeneration is idempotent. The API/database/task/integration linter reports
-0 issues; its first failed duplicate-handler log is retained. Shared event-list
-transport replaces that duplication. Fresh final code review found no actionable
-findings. The owned PostgreSQL container and volume were archived then removed
-without OOM; primary data and application/test hashes were preserved. Its 861-byte
+SQLC compile succeeds and
+regeneration is idempotent.
+The API/database/task/integration linter reports
+0 issues; its first failed duplicate-handler log is retained.
+Shared event-list
+transport replaces that duplication.
+Its 861-byte
 archive contains metadata only because successful fixtures remove their schemas.
 The earlier compile-only command ran no tests and is not acceptance evidence.
 
 Evidence uses actual isolated PostgreSQL and harness IAM/Telegram/Loom peers.
 The harness stop/start is not an operating-system SIGTERM/process-restart proof.
 At that gate the meal form was still pending; its component acceptance follows
-below. Real IAM/Loom, both form/agent handoffs through a normal bot restart and
-real Telegram WebView acceptance remain open. No new image was
-built or installed; primary remains schema49 / `mvp-56`.
+below.
+Real IAM/Loom, both form/agent handoffs through a normal bot restart and
+real Telegram WebView acceptance remain open.
 
 ## Shipped meal form and native command
 
@@ -315,86 +237,48 @@ focus survives a mode change, and labels precede their fields. Labels use text
 nodes rather than HTML, including event/menu data. Language changes update saved
 content, controls and status without changing choices.
 
-The CI browser-behavior command now includes 12 meal scenarios. All190 UI tests
-pass without skips, including existing order, massage, review and parent-app
-behavior. All36 selected PostgreSQL integration roots pass, covering the native
-command family, current meal HTTP/agent contracts and mixed harness continuation.
-The full API and task packages pass all17 and16 roots without skips; lint is clean.
-Fresh final code review found no actionable findings.
+The CI browser-behavior command now includes 12 meal scenarios.
 
 Separate headless Edge acceptance used the shipped meals section, CSS and script
-in a real 390×844 DOM against an owned synthetic HTTP fixture. It exercised
+in a real 390×844 DOM against an owned synthetic HTTP fixture.
+It exercised
 incomplete-to-complete combo/dinner, placeholder clearing, keyboard focus,
 escaped hostile labels, ru/en presentation and committed-response loss followed
-by page reload. Three writes produced three receipts; reload issued no additional
-POST and no page errors occurred. Inspected screenshots show both 02:30 service
-instants with GMT+2 and GMT+1 across the Berlin autumn clock change. This is
+by page reload.
+Three writes produced three receipts; reload issued no additional
+POST and no page errors occurred.
+This is
 actual DOM proof, not Telegram WebView or real IAM/Loom/PostgreSQL browser QA.
 
 Preserved observations include the first full-UI failure on an old massage-copy
-assertion. It reproduced with the pre-slice parent app; only that expectation was
-updated, retaining cancellation/history checks. The first PostgreSQL run stopped
-on a neighboring massage test that still required `/menu`'s former reply keyboard;
-the route-specific expectation now checks its meals form button. Review found and
-fixed busy release, empty-event context and focus issues with targeted tests. The
-first browser fixture omitted UTF-8 declarations and misdecoded Russian; the
-production page already declares UTF-8. A fresh fixture retained that failure and
-passed, then screenshots prompted a final labels/status adjustment and successful
-rerun. Earlier logs and screenshots remain unchanged.
+assertion.
+It reproduced with the pre-slice parent app; only that expectation was
+updated, retaining cancellation/history checks.
+Earlier logs and screenshots remain unchanged.
 
-Both PostgreSQL containers and volumes were archived and removed without OOM.
-The final source/test hashes and primary data were preserved. Headless browser
-and local HTTP fixture were closed. That component gate built no image. A later
-Linux candidate is now built and remains uninstalled, as recorded below. The
-subsequent runtime gate below covers an owned stand with actual
-IAM/Loom: native-only while Loom is stopped, agent-only and both handoffs. Restart recovery is demonstrated during the
-agent-to-native handoff.  Financial submission remains separate.
-
-Ignored evidence is `.cache/shuttle-work/meal-store-v1-qa/` and
-`.cache/shuttle-work/meal-operation-v1-qa/` and
-`.cache/shuttle-work/meal-agent-api-v1-qa/` and
-`.cache/shuttle-work/meal-native-http-v1-qa/` and
-`.cache/shuttle-work/meal-form-v1-qa/`. This remains source
-acceptance at schema53. The primary remains
-schema49 / `mvp-56`, and the earlier schema52 / `mvp-59` candidate excludes meal
-code. Actual runtime acceptance now passes native-only, agent-only and both handoffs
-on a separate stand; restart recovery is demonstrated during agent-to-native
-continuation. See the runtime gate below. A future financial bridge must freeze full composition
+This remains source
+acceptance at schema53.
+A future financial bridge must freeze full composition
 and sold names into approved order terms and reuse the existing evidence/payment
-lifecycle. Financial submission, import, capacity policy, real Telegram WebView
+lifecycle.
+Financial submission, import, capacity policy, real Telegram WebView
 and production acceptance remain open.
 
 Linux candidate and platform correction (2026-10-19)
 
-The first Linux image build failed because `meal_draft_windows.go` was implicitly
-Windows-only. The file is now `meal_draft_sales.go`, with identical contents; all
-other release bytes match the accepted form source. Go file selection includes
-the renamed file on both platforms. Fresh Linux unit verification passes61 roots
-(db8, orders20, API17, task16). Another25 database tests skip without a DSN; these
-are not PostgreSQL acceptance. The earlier36-root PostgreSQL gate remains the
-component evidence. A first Linux unit attempt exhausted its1GiB container;
-its failure is retained. A serial2GiB rerun passes without OOM and is removed.
-Independent review of the byte-preserving rename has no actionable findings.
-
-The unchanged release Dockerfile now builds a Linux/amd64 candidate,
-`sha256:232e1d477ea5685990e1622e2ad41dac07f460e58a53c8f9a552bf99d44d4a0d`,
-at schema53 / `mvp-60`. The pinned temporary BuildKit builder was removed without
-OOM. The source freeze and primary preservation checks pass. This image is not
-installed on the primary. Ignored evidence is `meal-linux-portability-v1-qa/`
-and `meal-images-v2-qa/` under `.cache/shuttle-work/`; the failed first build
-remains in `meal-images-v1-qa/`. [Actual IAM/Loom runtime acceptance](shuttle-meal-runtime-qa-2026-10-19.md)
-now passes all four paths. Agent-to-native continuation additionally crosses
-a normal0.640s bot SIGTERM restart. Four drafts
+The pinned temporary BuildKit builder was removed without
+OOM.
+This image is not
+installed on the primary.
+Agent-to-native continuation additionally crosses
+a normal0.640s bot SIGTERM restart.
+Four drafts
 have six original receipts and three native journals, all tasks/runs/deliveries
-finish, and financial tables remain empty. Both QA databases and logs were
-archived and the separate nine-service project removed. The provider was
-controlled, so unattended model behavior remains outside this gate.
+finish, and financial tables remain empty.
+Both QA databases and logs were
+archived and the separate nine-service project removed.
 
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk
-
-
-## Agreed financial policy, 2026-10-21
+## Agreed financial policy
 
 Daniel chose no submitted order for an empty composition, one explicit payment
 proof deadline for all meals at an event (the legacy Food deadline), and unlimited
@@ -402,9 +286,12 @@ meal quantities. Ambassador review may finish after a timely proof submission.
 An empty selection is distinct from a selected item whose configured price is zero.
 
 The source catalog now accepts optional `payment_deadline` as an explicit absolute
-instant. Normalization validates microsecond precision, copies the value and stores
-UTC. Existing descriptive catalogs may omit it; no deadline is inferred from their
-service windows. The administrative catalog API advertises the field in source
+instant.
+Normalization validates microsecond precision, copies the value and stores
+UTC.
+Existing descriptive catalogs may omit it; no deadline is inferred from their
+service windows.
+The administrative catalog API advertises the field in source
 manifest mvp-87, and immutable meal terms retain the original configured deadline.
 This adds no SQL migration and does not enable order submission or payment evidence
-yet. Schema remains68; the installed primary still runs mvp-86.
+yet.

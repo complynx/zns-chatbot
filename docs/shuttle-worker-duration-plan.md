@@ -2,12 +2,9 @@
 
 Next bounded observability slice: one process-local OTel histogram,
 `zinusya.worker.attempt.duration`, unit seconds, exported as
-`zinusya_worker_attempt_duration_seconds`. Architecture and Go consultations
-agreed on the return-only contract below. The source implementation, focused
-PostgreSQL/River behavioral checks, strict lint and two fresh independent source
-reviews passed. All 225 integration scenarios and other explicit Go packages
-passed under race. Owned native no-op callback/exposure/restart acceptance passed;
-see [evidence and limits](shuttle-worker-duration-qa-2026-10-15.md).
+`zinusya_worker_attempt_duration_seconds`.
+Architecture and Go consultations
+agreed on the return-only contract below.
 
 Instrument the three outer River `Work` methods for `shuttle_task`,
 `zinusya_payment_notification` and `zinusya_pair_notification`. Start immediately
@@ -50,13 +47,10 @@ unknown-label folding, secret canaries, existing counters, and explicit/wrapped
 River error classification. Do not require production callbacks to invent an
 explicit cancellation result solely to exercise that label.
 
-Finish with fresh source reviews, scoped behavioral checks, full regression,
-bounded native observation for the three callback kinds, private/public exposure
-checks and restart reset semantics. Native fixtures must have reviewed safe
+Native fixtures must have reviewed safe
 effects and exact cleanup/preservation accounting; never execute arbitrary jobs
-against business workers just to obtain a metric. Document any native proof
-limits. Queue wait, utilization, dashboards, SLOs and tracing redesign remain
+against business workers just to obtain a metric.
+Document any native proof
+limits.
+Queue wait, utilization, dashboards, SLOs and tracing redesign remain
 outside this slice.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

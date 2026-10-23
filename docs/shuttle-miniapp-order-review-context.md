@@ -1,16 +1,10 @@
 # Reactive native order review history
 
-Current source integration: native owner/reviewer forms, reactive action history
-and [durable order notices](shuttle-order-notice-delivery.md) now have separate
-component verification. References to these as next work below record this page's
-earlier stage. Owned activation and real native/agent/mixed/fault acceptance remain
-pending. D23 money-policy questions remain open.
-
 Successful native review requests are now available as bounded historical metadata
-in the next explicit user-triggered agent turn. This extends the
+in the next explicit user-triggered agent turn.
+This extends the
 [native reviewer form](shuttle-miniapp-order-review-form.md), without starting
-Loom from a form action. Source schema42 / manifest mvp-43 is unchanged. The owned
-main stand remains schema40/mvp-40; this source is not yet activated there.
+Loom from a form action.
 
 ## Receipt projection and permissions
 
@@ -56,41 +50,3 @@ Existing persisted Loom requests remain frozen. Permission loss changes subseque
 context collection; it does not rewrite an already frozen historical request.
 Business tools continue to check current permissions when used. No proactive agent
 run or financial side effect is added by history reads.
-
-## Verification and limits
-
-The final focused Linux/PostgreSQL race gate passed59 roots /123 pass events:
-13 integration roots /20 events,33 database roots /61 events and13 task roots /
-42 events. It included native order-review reads/writes, the three new context
-roots, existing pass-context regression paths and DB/task tests. No failures,
-skips or OOM occurred. All 925 frozen inputs matched; the ten main-service
-fingerprints were unchanged. Go was limited to2GiB and disposable PostgreSQL to
-512MiB; their exact containers and volume were removed. Proof is retained in
-ignored .cache/shuttle-work/order-review-context-v2-qa/.
-
-Three added behavioral roots cover bound5/cutoff, redaction, agent-only exclusion,
-foreign task/deployment isolation, role loss/global-admin/module filtering,
-original prepare/cancel/confirmed outcomes after exact retry and store reopen,
-one occupied allocation, and explicit user-turn prompt delivery after service
-restart. The latter observes zero agent runs before a Telegram user message and
-no review history after role removal. These use real Go/store/PostgreSQL with
-mock IAM/Loom/Telegram peers. They do not prove real-service manual acceptance or
-hard-kill/transport-disconnect recovery.
-
-The initial gate also passed59/123, but its lint found four dupl issues. Those
-artifacts remain in v1. Shared actor-lock setup and pass/order context assembly
-were consolidated; order scanning uses pgx.CollectRows and keeps its UUID typing.
-Domain SQL/authorization rules and original pass result paths remain separate.
-Final scoped lint reports0 issues. Initial correctness/quality reviews and the
-fresh post-refactor source review found no actionable defects. Their assumptions
-about workspace revisions and tool names were independently checked against the
-SQL and manifest by the root agent. No changes were staged or published.
-
-[Owner proof acceptance history](shuttle-miniapp-order-proof-context.md) now has
-separate schema43/source verification through an additive native journal. Old
-agent submissions are not bulk-relabeled. Authorized durable order notice delivery,
-owned image/migration activation and real native/agent/mixed/restart/fault QA are
-also pending. No production readiness is claimed.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

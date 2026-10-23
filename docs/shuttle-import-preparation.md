@@ -10,11 +10,14 @@ the inspection-only mode described here remains the default.
 ## Source contract
 
 Keep a private, immutable snapshot directory containing a version 1 manifest and
-UTF-8 MongoDB Extended JSON files, one JSON object per line. Supply at most one
+UTF-8 MongoDB Extended JSON files, one JSON object per line.
+Supply at most one
 file for each role: `users`, `messages`, `passes`, `files`. `users` is required;
-omitted optional roles appear as absent in the report. Each collection has its
+omitted optional roles appear as absent in the report.
+Each collection has its
 actual source collection name, a local relative file path and the expected
-lowercase SHA-256 of the exact file bytes. Keep the manifest with the snapshot.
+lowercase SHA-256 of the exact file bytes.
+Keep the manifest with the snapshot.
 
 Example structure, with synthetic identifiers and a placeholder checksum:
 
@@ -90,11 +93,11 @@ and Telegram file references. `source_instance` is nonsecret provenance metadata
 Keep the actual input files private: excluding content from the report does not
 redact the source archive.
 
-Exit 0 means this supplied snapshot passed validation, 1 means source validation
-failed, and 2 means invocation/manifest/output failure. `import_performed` and
-`complete_telegram_history` remain false, including on success. A failed scan can
-report only a processed prefix and omit its full-file checksum. Issue locations
-are role plus 1-based line; line 0 means a collection-level issue. Rerunning the
+A failed scan can
+report only a processed prefix and omit its full-file checksum.
+Issue locations
+are role plus 1-based line; line 0 means a collection-level issue.
+Rerunning the
 same snapshot gives the same report and does not modify the snapshot.
 
 Fixed bounds: manifest 64 KiB, four files, each NDJSON line below 8 MiB, aggregate
@@ -110,17 +113,16 @@ The architect and Go senior agreed this bounded step before implementation.
 Behavioral tests cover precise Extended JSON IDs/dates, repeatability, unchanged
 source bytes, omitted-role coverage, privacy, bad checksums, foreign/orphan owners,
 source/identity conflicts, malformed/deep/oversized JSON, manifest field aliases
-and hard-linked source aliases. Independent review found and corrected missing
-byte accounting on failed scans, manifest case aliases and same-file aliases.
-Fresh correctness and quality reviews then found no actionable issues.
+and hard-linked source aliases.
 
-Linux race tests passed for the CLI/package; lint reported zero issues. This tool
-adds no dependencies and changes no runtime schema or API. Its separate native
+This tool
+adds no dependencies and changes no runtime schema or API.
+Its separate native
 Linux acceptance uses synthetic four-role exports, no network, a nonroot user,
-read-only mounts/filesystem and a 128 MiB limit. It checks identical reports,
+read-only mounts/filesystem and a 128 MiB limit.
+It checks identical reports,
 exit 1 for an orphan, exit 2 for unbound messages, private-content exclusion and
-unchanged input digests. Detailed proof is kept in ignored
-`.cache/shuttle-work/import-inspector-native/proof.json`.
+unchanged input digests.
 
 Verified archive creation is now accepted separately; see
 [archive behavior and native QA](shuttle-import-bundle.md). Receiving verification
@@ -132,6 +134,3 @@ history must stay separate from live Telegram metadata and operational queues.
 Old payment assertions must remain historical claims, never new ledger credit.
 Avatar-byte export and preservation need their own proof. No production snapshot
 was read and no applied migration is claimed by this step.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

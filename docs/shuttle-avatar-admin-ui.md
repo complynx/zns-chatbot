@@ -48,17 +48,3 @@ Session or role loss clears privileged DOM, retaining owner-bound recovery IDs.
 After reauthorization, the same owner can read the earlier result. Account changes
 fence late successes and failures, including late401 responses. Language changes,
 list pagination and status reads never issue business mutations.
-
-## Acceptance boundary
-
-The UI gate uses behavioral JavaScript tests, Linux embedded-asset/API tests and
-owned headless Edge with the shipped operator HTML, module and CSS against a mock
-HTTP backend. It is not acceptance of an installed candidate, actual Loom handoff,
-real Zitadel or Telegram WebView. Subsequent
-[owned runtime acceptance](shuttle-avatar-admin-runtime-qa-2026-10-19.md) passed
-both real-IAM/Loom handoffs on the mvp68 candidate, including a normal restart.
-That gate still uses simulated Telegram and Codex-fed model responses. The
-installed primary remains schema49/mvp56; the mvp68 image is retained separately.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk

@@ -3,23 +3,19 @@
 ## Outcome and current boundary
 
 Bot, Mini App and zitadeltg must resolve one local user and one active IAM account
-for `(configured bot ID, verified numeric Telegram ID)`. Telegram OIDC's opaque
+for `(configured bot ID, verified numeric Telegram ID)`.
+Telegram OIDC's opaque
 subject is a separate value; never reconstruct it from the numeric ID.
 The explicit IAM link adapter is implemented in `internal/identity/links.go`.
 The [receipt migration and local transactions](shuttle-telegram-prelink-storage.md)
-are also implemented and tested on isolated PostgreSQL. The [provider assertion verifier](shuttle-telegram-prelink-verifier.md) is also
-implemented and independently reviewed. The [private endpoint and startup wiring](shuttle-telegram-prelink-api.md) now
-pass scoped real-PostgreSQL integration checks. The [isolated provider hook](shuttle-zitadeltg-prelink-provider.md) has reviewed
-source and Linux/race component checks. The [private TLS route](shuttle-prelink-route-qa-2026-10-16.md)
-has isolated and owned-gateway acceptance. [Candidate images](shuttle-prelink-images-qa-2026-10-16.md)
-and [native combined paths](shuttle-prelink-combined-qa-2026-10-16.md) now have
-scoped acceptance using synthetic Telegram proof/final relay and real IAM.
-[Synchronized concurrent first logins and an actual IAM stop/recovery](shuttle-prelink-resilience-qa-2026-10-16.md)
-also pass. The [main bot image/schema33 cutover](shuttle-prelink-main-qa-2026-10-16.md)
-is accepted with prelink disabled. The current schema59
-[backend accepted-write recovery gate](shuttle-prelink-remote-write-qa-2026-10-19.md)
-now covers lost accepted replies and original pending-receipt recovery after real
-bot restarts. Main provider/backend activation and real interactive login remain open. The adapter passed [real owned-IAM QA](shuttle-telegram-link-qa-2026-10-16.md).
+are also implemented and tested on isolated PostgreSQL.
+The [provider assertion verifier](shuttle-telegram-prelink-verifier.md) is also
+implemented and independently reviewed.
+The [private endpoint and startup wiring](shuttle-telegram-prelink-api.md) now
+pass scoped real-PostgreSQL integration checks.
+The [isolated provider hook](shuttle-zitadeltg-prelink-provider.md) has reviewed
+source and Linux/race component checks.
+Main provider/backend activation and real interactive login remain open.
 Real browser/Telegram OIDC acceptance remains separate.
 
 This design follows read-only architect/security and Go senior consultations.
@@ -30,12 +26,15 @@ Loom is not involved in logging in or linking accounts.
 ## Trust contract
 
 A dedicated backend-only `POST /internal/identity/telegram-prelink` accepts one
-compact signed assertion. Authenticate the caller first with a dedicated random
-32-byte service bearer, compared in constant time. Use server-authenticated TLS,
-no redirect following and a bounded request/response size. Do not reuse Bot API,
-IAM actor, browser, Mini App or human administrator credentials. Do not expose a
-generic browser/agent proxy to this operation. The [reviewed private TLS entrypoint](shuttle-prelink-route-qa-2026-10-16.md)
-is active inside the owned Docker network; browser entrypoints do not expose it.
+compact signed assertion.
+Authenticate the caller first with a dedicated random
+32-byte service bearer, compared in constant time.
+Use server-authenticated TLS,
+no redirect following and a bounded request/response size.
+Do not reuse Bot API,
+IAM actor, browser, Mini App or human administrator credentials.
+Do not expose a
+generic browser/agent proxy to this operation.
 
 The assertion uses the provider's existing RSA signer, but a separate configured
 prelink audience and explicit `urn:zinusya:purpose` claim equal to `telegram-prelink`. The
@@ -78,13 +77,14 @@ validating Telegram signature, issuer, audience, time and login nonce.
    receipt still requires current authorization/link checks before success.
 
 Migration33 adds a partial unique index on local
-`(bot_id, zitadel_org, zitadel_subject)` where subject is nonempty. Existing
+`(bot_id, zitadel_org, zitadel_subject)` where subject is nonempty.
+Existing
 duplicate bindings stop migration for explicit review, never automatic merging.
-Migration33 was installed by the [owned cutover](shuttle-prelink-main-qa-2026-10-16.md);
-the later [current local installation](shuttle-primary-upgrade-qa-2026-10-19.md)
-runs schema59 with prelink still disabled. Concurrency can issue the same immutable IAM operation
-more than once; remote uniqueness plus exact read-back reconciles it. There is no
-DB lock across network calls. Expired proofs cannot initiate or resume mutation;
+Concurrency can issue the same immutable IAM operation
+more than once; remote uniqueness plus exact read-back reconciles it.
+There is no
+DB lock across network calls.
+Expired proofs cannot initiate or resume mutation;
 a fresh assertion may reconcile the same canonical identity and existing link.
 
 ## Provider hook and limits
@@ -122,8 +122,4 @@ continues after the shared trusted identity/session foundation.
 
 Wire paths follow the official [AddIDPLink](https://zitadel.com/docs/reference/api/user/zitadel.user.v2.UserService.AddIDPLink)
 and [ListIDPLinks](https://zitadel.com/docs/reference/api/user/zitadel.user.v2.UserService.ListIDPLinks)
-contracts. Native stand compatibility must be checked against its pinned Zitadel
-version; current web docs alone are not runtime acceptance.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk
+contracts.

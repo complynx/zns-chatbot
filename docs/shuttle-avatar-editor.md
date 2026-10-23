@@ -1,10 +1,10 @@
 # Native avatar editor
 
-The embedded Mini App edits shared drafts. For source schema 68 / mvp-86,
-Telegram originals are downloaded on demand. See the [current source lifecycle
-and acceptance boundary](shuttle-avatar-telegram-sources.md). The owned primary
-now runs schema 68 / mvp-86; see the [installation evidence and remaining
-acceptance limits](shuttle-avatar-primary-qa-2026-10-21.md).
+The embedded Mini App edits shared drafts.
+For source schema 68 / mvp-86,
+Telegram originals are downloaded on demand.
+See the [current source lifecycle
+and acceptance boundary](shuttle-avatar-telegram-sources.md).
 
 ## Use
 
@@ -62,21 +62,3 @@ Late responses and late errors are fenced by owner/session epoch. Logout clears
 images and preview URLs. Authentication failures use the existing account-session
 flow. The page CSP allows image sources only from self and local blob URLs;
 image bytes and bearer credentials are not put into conversation JSON.
-
-## Acceptance boundary
-
-RU/EN labels, behavior tests, API asset serving and isolated real-browser canvas
-checks are recorded in [editor QA](shuttle-avatar-editor-qa-2026-10-19.md).
-The browser backend is a fixture; it is not full runtime or Telegram acceptance.
-
-The [finalization storage foundation](shuttle-avatar-finalization.md), shared [finalization APIs](shuttle-avatar-finalization-api.md) and task-free
-delivery and the [Generate/send UI](shuttle-avatar-send-ui.md) are implemented.
-[Owned runtime acceptance](shuttle-avatar-runtime-qa-2026-10-19.md) records all four
-paths at schema 57 / mvp-65 with real IAM/Loom and mock Telegram. It does not accept
-the later schema 68 Telegram-reference/discovery changes. Actual Telegram WebView and unattended model
-acceptance remain open. Legacy
-agent generation/send still has its existing task requirements. That recorded editor
-parity includes native-only finalization with Loom stopped, agent-only completion,
-and both owned-runtime handoffs, including a normal bot restart. This uses a
-Codex-fed deterministic provider, not an unattended model. Production
-retention/discard policy remains pending.

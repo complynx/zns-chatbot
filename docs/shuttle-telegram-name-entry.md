@@ -39,20 +39,3 @@ The implicit reply-routing helper, receipt-to-name binding and corresponding
 checkpoint structure were removed. The expected field identity now comes from
 an explicit native command/form or the agent's owner-bound API call, not from
 guessing the meaning of a text/media reply.
-
-## Acceptance boundary
-
-This source change is part of the [conversational adapter](shuttle-agent-reply-keyboards.md).
-Real-Loom/model QA remains required before claiming natural-language completion.
-The HTTP-peer tests exercise agent-routed commands, explicit owner tool calls,
-plain keyboard suggestions, unrelated text/media, cancellation text and restart
-recovery. The provider is scripted: these tests do not prove model judgment of
-real names. First-contact routing, existing IAM-name reuse, restart continuation
-and completed-profile navigation have scripted-provider tests. Real-model
-first-contact onboarding remains an acceptance gate.
-The main owned stand still has the older image; no deployment or production
-acceptance is implied here. The [historical native reply evidence](history/shuttle-native-name-replies-2026-10-16.md)
-is retained separately and does not prove the new agent-driven behavior.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

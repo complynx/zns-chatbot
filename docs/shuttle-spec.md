@@ -1,7 +1,5 @@
 # zns-chatbot / Зинуся — переписывание Shuttle техническое задание
 
-Дата: 12 октября 2026 года.
-
 Shuttle — самостоятельная новая версия Telegram-бота на Go 1.27 с PostgreSQL.
 Бот управляет пользователями, бизнес-процессами, очередью и пользовательскими
 токенами Zitadel. Loom запускает агентов и ведёт агентский цикл. Пользователь
@@ -31,8 +29,7 @@ Shuttle — самостоятельная новая версия Telegram-бо
 
 ## Архитектура и ответственность сервисов
 
-Целевая production-платформа — сервер Daniel, Linux/Docker, linux/amd64,
-как у Loom. Windows используется для разработки. Приложение собирается с CGO=0;
+Целевая runtime-платформа — Linux/Docker, linux/amd64. Windows используется для разработки. Приложение собирается с CGO=0;
 образы фиксируются digest. Runtime gates, process supervision и восстановление
 принимаются на Linux/Docker. Cross-build на Windows не заменяет эту проверку.
 
@@ -156,8 +153,7 @@ Mini App проверяет подпись initData, bot binding и свежес
 владельца, прав и event-контекста.
 Реализованы bootstrap, профиль и logout, а также бизнес-формы регистрации,
 пассов и платежей, заказов и массажа. Наличие формы не означает полную приёмку
-всех сценариев или реального Telegram WebView: границы подтверждены отдельными
-QA-отчётами в [roadmap](shuttle-roadmap.md). Протокол и конфигурация описаны
+всех сценариев или реального Telegram WebView: критерии определены в [QA-процедуре](shuttle-qa.md). Протокол и конфигурация описаны
 в [контракте Mini App](shuttle-miniapp.md).
 
 ## Выдача пользовательских токенов
@@ -677,19 +673,7 @@ attributes, redaction и правила propagation согласуются с Sh
 - Точный перечень переносимых действий регистрации, пар и административных операций.
 - Условия включения formatting repair через Loom, его timeout/cost limits и API-контракт.
 
-## Источники контрактов
-
-- [Zitadel Client Credentials](https://zitadel.com/docs/guides/integrate/service-accounts/client-credentials)
-- [Zitadel Token Exchange](https://zitadel.com/docs/guides/integrate/token-exchange)
-- [Zitadel административные роли](https://zitadel.com/docs/guides/manage/console/administrators)
-- [Telegram Mini Apps](https://core.telegram.org/bots/webapps)
-- [Telegram MessageEntity](https://core.telegram.org/bots/api#messageentity)
-- Соседние репозитории: ../clx-scripter (Loom), ../zitadeltg, ../server_configs.
-
-Written by Codex (gpt-6/Codex desktop)
-on behalf of Daniel Drizhuk
-
-## Уточнение миграции истории — 2026-10-13
+## Уточнение миграции истории
 
 Текущих ongoing-событий для переноса нет. Старые платежи и регистрации не
 импортируются в новый платёжный учёт. Сохраняется текстовая/структурированная

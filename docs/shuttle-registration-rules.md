@@ -43,37 +43,3 @@ This configuration is the prerequisite for implemented solo registration, pass
 assignment, assigned-pass module eligibility and agent write adapters. Configuration
 by itself grants no user access. See [solo registration](shuttle-solo-registration.md),
 [agent assignment](shuttle-agent-assignments.md) and [event context](shuttle-event-context.md).
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk
-
-## Verification — 2026-10-13
-
-Two fresh independent review passes were completed. The first found missing/null
-zero-valid fields could decode as free/zero capacity; strict JSON decoding now
-requires every declared field and rejects unknown fields. Behavioral HTTP checks
-cover missing/null price, capacities and scale, persisted corrupt objects, repair,
-restart, immutable replay, and legacy receipts with no rules. Affected production
-packages and the full integration suite passed on Linux with the race detector;
-Golden golangci-lint reports zero issues.
-
-Actual native Zitadel administrator requests created rules, preserved integer
-price and normalized a Minsk deadline, and replayed one original receipt. The
-actual previous release binary then read and updated the same parent event under
-the expanded schema. Restoring the candidate retained the rules and the original
-receipt. Messaging counts stayed 2 users / 8 tasks / 8 outbox rows throughout.
-Candidate image:
-sha256:5e3839c064b8cf49e5b936c1949e1805754059ea989199f16f8b47d108155b8b.
-The ignored registration-rules-proof.json retains exact fixture IDs/results.
-
-Older binaries ignore these rules and cannot enforce their new semantics. Edits
-to legacy event dates can make a retained closing instant invalid; the new binary
-fails closed until the configuration is repaired. Rollback does not establish
-registration/pass feature compatibility. At this historical checkpoint, those
-operations were not implemented yet.
-
-Current owner and administrator adapters, exact confirmation and context resolution
-are implemented. Native broker acceptance uses the [isolated operation-seal fixture](shuttle-loom-seal-fixture.md);
-this does not certify the upstream issue 3 image fixed. See the accepted
-[pair flow](shuttle-pair-qa-2026-10-14.md) and [tier assignment](shuttle-tier-qa-2026-10-14.md)
-for current verification boundaries.

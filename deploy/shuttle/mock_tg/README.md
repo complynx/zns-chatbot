@@ -75,8 +75,7 @@ including UTF-16 offsets and nested `text_mention.user` values. `editMessageText
 replaces them; omitted or empty entities clear the prior text formatting. The
 original attempts and pre-edit journal remain intact. The fixture forwards
 explicit entities; Markdown/HTML `parse_mode` parsing remains outside its scope.
-See the [entity HTTP acceptance report](../../../docs/shuttle-mock-telegram-entities-qa-2026-10-19.md).
-
+See the [general QA procedure](../../../docs/shuttle-qa.md).
 
 Structured operations take a JSON file (`--json /path/to/input.json`):
 
@@ -125,9 +124,7 @@ Preserve their evidence and create a fresh named stand. `status`, `stop` and
 `destroy` remain available for legacy projects; no automatic topology conversion
 or credential replacement occurs.
 
-The [lifecycle acceptance](../../../docs/shuttle-mock-provider-lifecycle-qa-2026-10-18.md)
-records verified TLS, two real IAM/Loom task deliveries across a Loom restart,
-clean provider termination, failure history and complete temporary cleanup.
+Use the [general QA procedure](../../../docs/shuttle-qa.md) for verified TLS, task delivery across restart, provider termination and preservation/cleanup checks.
 
 ## Agent and mixed paths
 
@@ -164,7 +161,7 @@ of Telegram WebView authentication or rendering.
 Production Mini App configuration needs only `mini_app_origin`; the launch link
 defaults to `<origin>/app/`. For **real Telegram testing through a local redirect**,
 set `mini_app_launch_url` only in that test configuration; see
-[the existing local-launch recipe](../../../docs/shuttle-miniapp-local-launch-qa-2026-10-16.md).
+[the existing local-launch recipe](../../../docs/shuttle-miniapp.md).
 No override is needed on production.
 
 ## Native browser QA
@@ -191,12 +188,7 @@ are not substituted. Service workers are blocked. Fixture TLS acceptance applies
 only to that disposable context; no CA is installed in the user's browser.
 Use only fresh automation browser profiles, never attach an existing user profile.
 
-Playwright and a supported browser are QA-host dependencies supplied by the
-caller. This helper adds no bot/server image, Go dependency or production setting.
-The [cross-person acceptance](../../../docs/shuttle-cross-person-browser-qa-2026-10-18.md)
-uses real IAM/Loom/backend, separate payer/reviewer contexts, original proof bytes
-and a lost successful confirmation response followed by reload recovery. It does
-not replace Telegram WebView, user-browser CA or model-interpretation acceptance.
+Playwright and a supported browser are caller-supplied QA-host dependencies. The helper adds no application image, Go dependency or runtime setting. Use the [QA procedure](../../../docs/shuttle-qa.md) to check separate payer/reviewer contexts, original proof bytes and confirmation-response loss. This fixture does not establish Telegram WebView or autonomous model behavior.
 
 ## Evidence and cleanup
 
@@ -219,8 +211,7 @@ The Telegram fixture installs an explicit SIGTERM handler, so Linux container
 PID1 exits through cleanup of its HTTP and TLS listeners. A stalled request must
 not retain the process. Acknowledged SQLite messages and message counters survive
 restart. The focused process test runs on POSIX; the mock-stand CI suite discovers
-it with the other `test_*.py` cases. The [joined-agent QA report](../../../docs/shuttle-joined-agent-runtime-qa-2026-10-20.md#fixture-shutdown-follow-up)
-records the original forced-stop observation and the separate direct-PID1 probe.
+it with the other `test_*.py` cases. Use the [general QA procedure](../../../docs/shuttle-qa.md) to retain failed stop observations separately from later direct-PID1 checks.
 
 A final release still needs a small real-Telegram gate for transport, Mini App
 launch/verified Telegram data and actual client rendering. This fixture does not

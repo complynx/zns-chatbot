@@ -7,9 +7,8 @@ business modules or complete the production rollout gates in the server guide.
 
 `.github/workflows/shuttle-ci.yml` checks Go 1.27.2 on Linux with PostgreSQL 17:
 reviewed dependency pins, behavioral tests with the race detector, sqlc output,
-golangci-lint, the release binary and the Docker image. It does not publish images.
-The initial PR CI passed on commit `04039a6`:
-https://github.com/complynx/zns-chatbot/actions/runs/38309043263.
+golangci-lint, the release binary and the Docker image.
+It does not publish images.
 Later commits require their own green checks.
 
 ## Operator access
@@ -80,16 +79,3 @@ and reason, using the same operator identity. This returns the original audit
 result without applying closure again. Reusing the key for a different decision
 returns 409. Closed tasks remain closed across duplicate Telegram updates and
 worker restarts; they do not resend their outbox.
-
-## Verification
-
-Behavioral tests in `integration/admin_tasks_test.go` use real PostgreSQL and
-mock HTTP IAM, Loom and Telegram peers. They cover access denial, bot scoping,
-metadata redaction, confirmation, version/lease conflicts, audited idempotency,
-known-outcome rejection and restart preservation of delivery/auth uncertainty.
-The full messaging suite continues to cover accepted task recovery and outages.
-The earlier 67-case manual acceptance report remains evidence for its recorded
-build; these new API tests do not relabel that report as a fresh manual run.
-
-Written by Codex (gpt-6/Codex desktop)
-on behalf of Daniel Drizhuk

@@ -40,6 +40,3 @@ timeout, independent reviews, lint/race gates, and owned native migration/privat
 scrape/restart/rollback proof. Preserve failures separately from later passes.
 No outbox, River schema, agent API, dashboards, token cache, new configuration,
 dependency or worker/instance-lock changes are included in this stage.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

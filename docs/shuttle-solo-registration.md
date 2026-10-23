@@ -3,8 +3,7 @@
 This slice implements owner registration to a waitlist, administrator pass assignment,
 owner reads, operation receipts and the assigned-pass module eligibility predicate.
 It does not implement pair invitations, automatic allocation, role changes,
-cancellation, payment confirmation or Telegram menus. Owner Loom read/write/status
-adapters now exist; see [agent tools and the native acceptance limitation](shuttle-agent-registrations.md).
+cancellation, payment confirmation or Telegram menus.
 Administrator agent confirmation and context resolution remain next.
 
 ## Configuration and lifecycle
@@ -87,36 +86,3 @@ leaves these data intact, but the previous binary has no registration API. Do no
 run the destructive down migration merely to roll back a binary. Intentional data
 rollback requires exporting all three tables and restoring their foreign-key
 relationships and receipts.
-
-## Verification
-
-Focused HTTP/PostgreSQL behavioral tests cover registration retries, preserved
-request time, owner isolation, restart replay, frozen price and deadline,
-immutable original receipts, concurrent capacity, stale versions, administrator
-rights, revocation, sales closure and disabled registration.
-All production packages and the complete PostgreSQL integration suite passed
-Linux race checks on 2026-10-13; the project linter reported zero issues.
-Native owned-stand acceptance also passed with real Zitadel delegation and the
-current test account: owner registration and read, basic-user assignment refusal,
-operator assignment, duplicate results, actual bot restart, receipt lookup and
-frozen price after an event edit. The app image is
-`sha256:f0d0f60a7a8e66e0ed8759b0cc9e15912b0f416053c5c5c1505eaf5a7ca25677`.
-Ignored evidence: `.cache/shuttle-live-test/solo-registration-proof.json`.
-Existing users/tasks/outbox counts remained 2/8/8. No Telegram message was sent
-for this API-only acceptance. This solo acceptance exercised the operator API. The later owner agent adapter
-has direct real-IAM acceptance, while native broker write acceptance remains failed
-under Loom issue 3; see the linked agent contract.
-
-Two independent textual review passes found no actionable findings. Between
-passes, linter findings were fixed by separating transaction ownership from
-business checks, formatting embedded fields and using a switch in the test.
-Staged diff remained empty.
-
-The first native helper attempts stopped on helper assumptions: the Telegram
-account's Zitadel subject was a UUID, and Huma adds `$schema` only to top-level
-responses. The helper was corrected; neither required an application fix.
-Aborted attempts left isolated fixture events in the owned stand. The completed
-probe saved its own unique event and operation IDs and then proved restart replay.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

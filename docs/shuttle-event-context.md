@@ -1,6 +1,6 @@
 # Participant event context
 
-Introduced in `mvp-6`, current manifest revision `mvp-8` exposes `zinusya_context.resolve`, `.list`, `.choose`
+The context API exposes `zinusya_context.resolve`, `.list`, `.choose`
 and the operation status endpoint. These methods use the authenticated account;
 arguments cannot select another user. Context suggests an event. Every business
 operation must still use an explicit event ID and recheck access.
@@ -46,16 +46,5 @@ Migration 00008 adds child tables for user choices, run choices and receipts.
 Apply migrations before starting the candidate. Existing event and user rows are
 not rewritten. Export these records before a deliberate rollback that drops them.
 
-Acceptance on 2026-10-13: four independent review passes; the first found and later passes accepted a fix for unavailable run-choice fallback. Full Linux race suite
-and HTTP/PostgreSQL tests passed. Real Zitadel tokens on the owned local stand
-proved explicit priority, pagination, owner isolation, two independent run choices,
-actual application restart, original receipts and fallback after disabling a module.
-Ignored evidence: `.cache/shuttle-live-test/event-context-proof.json`.
-Candidate image: `sha256:eb3606ebf0e12d014be766181b2cf17b7922530ce0d706c83de5802941061a0a`.
-Native Loom join and choose broker writes and context script reads passed on the
-isolated upstream working seal fixture described in
-[fixture evidence](shuttle-loom-seal-fixture.md). This is not native Telegram UI
+This is not native Telegram UI
 acceptance or proof that the upstream committed release contains the fix.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

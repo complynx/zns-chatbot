@@ -48,28 +48,15 @@ before a scrape.
 
 With the existing Alloy Docker log pipeline, inspect for example:
 
-```logql
-{job="integrations/docker",instance="complynx.net"} | json | msg="application drain finished"
-```
-
 Correlate the container and lifecycle timestamps; `duration_ms` itself uses a
 monotonic clock. No production log rule, alert route or Grafana configuration is
 installed by this change. The existing [Prometheus alert pack](shuttle-alerts.md)
 still does not detect hard-kill deadline violations.
 
-Source and owned healthy stop/start acceptance are recorded in the
-[QA report](shuttle-shutdown-qa-2026-10-15.md). A separate Linux
-[subprocess acceptance](shuttle-watchdog-qa-2026-10-15.md) checks watchdog exit
-and disarm during blocked cleanup. Neither establishes worst-case whole-bot
+Neither establishes worst-case whole-bot
 termination latency or external hard-kill detection.
 
-A later isolated actual-bot [blocked-read scenario](shuttle-shutdown-fault-qa-2026-10-15.md)
-observed process exit within conservative 233.8304 ms and 229.6554 ms bounds,
-with separate successful drain records. The same unfinished task/run/session
-survived restart and resumed reading without another run creation. Real IAM was
-used with synthetic Loom and a dummy-token Telegram sink; the original stand
-remained unchanged. This context-cancellable case does not force the watchdog or
+The same unfinished task/run/session
+survived restart and resumed reading without another run creation.
+This context-cancellable case does not force the watchdog or
 establish a universal worst-case SLA.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

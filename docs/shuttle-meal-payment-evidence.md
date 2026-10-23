@@ -1,13 +1,12 @@
 # Shared meal payment evidence
 
 Accepted source snapshot: migration69 / mvp-88, verified in bounded Linux
-batches. At this source checkpoint the primary was schema68 / mvp-86. This is not an installation or
+batches.
+This is not an installation or
 complete meal checkout acceptance: financial meal creation tools/forms were still
 pending, together with full end-to-end runtime QA.
 
-The later [mvp-89/schema69 installation](shuttle-meal-primary-qa-2026-10-21.md)
-and [controlled-agent evidence/review](shuttle-meal-agent-payment-qa-2026-10-21.md)
-are accepted separately. Earlier component counts below remain historical evidence.
+Earlier component counts below remain historical evidence.
 
 ## One payment engine, persisted business kind
 
@@ -82,48 +81,3 @@ Notification authorization and native payment/review history also use the
 persisted kind. Meal notices describe pending, confirmed or rejected payment
 without claiming resource holds. Notifications are durable delivery work;
 Telegram delivery does not decide payment state.
-
-## Verification boundary and retained failures
-
-Focused unit checks for meal arrival cutoffs, notice language and manifests pass.
-The preceding PostgreSQL/race baseline passed145 selected roots /220 cases.
-The focused consent-storage follow-up passed9 roots /14 cases, including replay,
-full-text recovery, actual review commit and bounded agent responses for long
-Unicode and escaping-heavy names. A broader147-root repetition stopped in batch9: historical consent hydration
-incorrectly compared receipt expiry with the canonical preparation expiry. The
-existing completed-recovery test deliberately expires canonical timestamps and
-requires the original result to remain readable. Hydration now restores only
-text by exact preparation/workspace identity and arguments, retaining receipt
-expiry and state. Pending execution still checks current expiry separately.
-The corrected frozen source passes147 roots /225 cases in13 fresh processes,
-with no failures, skips or OOM. A separate4-root /9-case recovery probe also passes.
-All test runners and the owned PostgreSQL volume/network are removed. Read-only
-checks confirm the primary runtime and domain remain schema68 / mvp-86.
-Configured lint across DB, API, tasks and integration reports0 issues. A fresh
-independent code review reports no actionable findings.
-
-Independent reviews found a misplaced kind predicate: it broke the unrelated
-pass-payment list and left order evidence lists unfiltered. The query was restored
-and the predicate moved to ListOrderEvidence. A real failing test retained an
-otherwise disabled meal proof in an owner list. Another failing API case returned
-18306 description bytes for a valid100-item meal order, exceeding Loom's4000-byte
-limit. The transport-only summary fix retains the complete stored consent. A subsequent
-valid80-item localized order exposed repeated-name storage overflow; priced names
-now occur only once. A100-item order with escaping-heavy names and maximal valid
-event/reason lengths reproduced JSON expansion overflow. Separate immutable text
-storage fixes that boundary without increasing JSON/tool envelope limits.
-
-The original monolithic race process reached its2GiB limit after62 passing roots
-and was killed. It had no failed individual test before process termination;
-this is not a passing gate. PostgreSQL had zero OOM counters. The failed log and
-container status are retained; subsequent work uses fresh bounded processes
-rather than increasing that monolithic limit. Initial lint findings are also
-retained and corrected before final acceptance.
-
-Private source freezes, exact test lists, logs, ownership/resource records and
-review receipts are under .cache/shuttle-work/meal-financial-flow-v1/evidence-v1/.
-Full CI, installed-runtime QA, native food checkout UI and production readiness
-are not proved by this source stage.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk

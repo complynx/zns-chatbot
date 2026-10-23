@@ -104,15 +104,3 @@ missing status is unknown and does not authorize a replacement operation.
 HTTP bodies are capped at 64 KiB for configuration writes and candidate requests;
 simple reads/status use the common smaller internal limit. There are no new
 libraries, external processes or outbound specialist messages in this foundation.
-
-## Acceptance boundary
-
-Model, database and HTTP behavioral checks and fresh independent reviews passed.
-All 173 enumerated integration race tests, other explicit Go packages, full lint
-and owned real IAM/Loom approval/read/restart checks passed. See
-[native QA and its limits](shuttle-massage-qa-2026-10-15.md). Booking, rescheduling, cancellation, staff self-service,
-payment collection, notifications and timetable UI remain later work. Open booking
-lifecycle choices are recorded in the ignored operator decisions file.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

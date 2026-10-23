@@ -46,9 +46,10 @@ both bytes and digest. Real export scope and provenance still require selection.
 ## Atomicity, replay and limits
 
 Migration 21 adds separate archive metadata, compressed byte chunks, preparations
-and operation receipts. A single transaction writes chunks of at most 256 KiB,
+and operation receipts.
+A single transaction writes chunks of at most 256 KiB,
 revalidates the complete archive and inserts verified metadata and its receipt.
-An incomplete upload has no committed archive or partial chunks. A process crash
+A process crash
 rolls the transaction back through PostgreSQL; it does not resume from a byte offset.
 
 After IO, the API rechecks IAM without requesting another pool connection. The
@@ -94,46 +95,44 @@ Stored bytes can now be revalidated through the read-only `validate_stored_archi
 tool; see [decoder and reader contract](shuttle-history-decoding.md). This reads
 chunks again rather than trusting the saved report and does not apply history.
 
-## Acceptance — 2026-10-15
+## Acceptance
 
 Architecture and Go consultations selected transactional PostgreSQL chunks before
-implementation. Independent correctness, quality/usability and protocol reviews
-ran in multiple rounds. They found and fixed permanent errors being returned as
+implementation.
+Independent correctness, quality/usability and protocol reviews
+ran in multiple rounds.
+They found and fixed permanent errors being returned as
 unknown HTTP failures to Loom, and cancellation/read errors being misclassified
-as permanently invalid archives. Fresh final reviews found no actionable issues.
+as permanently invalid archives.
 
 Behavioral tests cover exact multi-chunk bytes, unchanged live user/task counts,
 corrupt gzip tail rollback, approval expiry, changed-operation conflict, source
 ownership, revocation during Telegram download, original receipt replay after
-Telegram loses the file, and rollback/retry with a one-connection pool. They check
+Telegram loses the file, and rollback/retry with a one-connection pool.
+They check
 the stable receipt separately from Huma's host-dependent schema-link decoration.
-The full explicit Linux application race suite passed; integration tests took
-171.068 seconds. Targeted lint reported zero issues.
+Targeted lint reported zero issues.
 
-Our owned test stand runs migration 21 and manifest `mvp-18`. Native acceptance
-used real Zitadel administrator/user tokens and synthetic archives. It verified
+It verified
 ordinary-user denial, source-bot mismatch rollback, SHA/operation conflict,
 archive-byte deduplication, exact chunk restoration and original receipts.
 A raw HTTP upload was disconnected after observing a chunk insert in an open
-transaction. No partial archive became visible; the transaction released its
-connection, and retrying the same approved operation then succeeded. Original
-receipts and exact bytes survived a bot restart. Running the exact down SQL inside
+transaction.
+No partial archive became visible; the transaction released its
+connection, and retrying the same approved operation then succeeded.
+Original
+receipts and exact bytes survived a bot restart.
+Running the exact down SQL inside
 a rollback-protected test transaction confirmed the populated-data guard.
 
-All preexisting live business table counts and hashes stayed unchanged. A backup
-of schema 20 was retained before applying migration 21. The first native probe
-returned 503 because image replacement had left the schema at 20; applying the
-separate `-migrate` command corrected stand preparation. No product change was
-needed for that failure. Earlier failed tests and a deliberately superseded full
-QA run remain recorded; the final full run is separate and passed.
+All preexisting live business table counts and hashes stayed unchanged.
+A backup
+of schema 20 was retained before applying migration 21.
+No product change was
+needed for that failure.
 
-Detailed evidence remains in ignored
-`.cache/shuttle-live-test/native-archive-storage-checkpoint.json` and
-`.cache/shuttle-work/container-results/zinusya-archive-storage-release-qa-20261015.log`.
 The agent file-ID path used HTTP/PostgreSQL tests with mock Telegram; this slice
-did not invoke the native Loom agent tool or send Telegram messages. No real
+did not invoke the native Loom agent tool or send Telegram messages.
+No real
 legacy export, historical apply, production deployment or Git publication is
 claimed by this acceptance.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

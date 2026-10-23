@@ -1,17 +1,5 @@
 # Order evidence reads and receipt recovery
 
-Current source integration: native owner/reviewer forms, reactive action history
-and [durable order notices](shuttle-order-notice-delivery.md) now have separate
-component verification. References to these as next work below record this page's
-earlier stage. Owned activation and real native/agent/mixed/fault acceptance remain
-pending. D23 money-policy questions remain open.
-
-This store increment builds on [order evidence admission and review](shuttle-order-evidence-store.md).
-It does not add HTTP tools, Mini App controls, notice delivery or a new live deployment.
-At this store gate, source was schema 41 / manifest mvp-41. The subsequent
-[read-only agent API](shuttle-order-evidence-api.md) advances source to manifest
-mvp-42. The owned bot remains schema 40 / manifest mvp-40.
-
 ## Current evidence and original receipts
 
 `OwnOrderEvidence` reads the owner's current evidence state. `OrderEvidenceForReview`
@@ -46,29 +34,3 @@ It does not download bytes or grant a reusable public URL. Server consumers
 must authorize again after Telegram IO and before returning a descriptor or content.
 The subsequent API increment implements the HTTP rechecks and source identity comparison.
 Generic owner file access is unchanged.
-
-## Verification and limits
-
-The isolated PostgreSQL/Linux/race run in the ignored local directory
-`.cache/shuttle-work/order-evidence-reads-v1-qa/` passed 15 top-level scenarios,
-with 22 pass events, no failures, no skips and no OOM. The frozen source inputs
-matched before and after execution. Tests cover original receipts across a reopened
-store, current evidence after review, actor and phase isolation, role/owner revocation,
-proof locator isolation, deployment scoping and orders-only versus disabled modules.
-The 12 existing admission/review scenarios ran alongside the 3 new read scenarios.
-A reopened store is not an application kill/restart or Telegram UI acceptance.
-
-Two independent source reviews returned no actionable findings. The final current
-diff was reviewed after a lint-only switch rewrite. Scoped db/integration lint passed.
-The initial formatter invocation with empty stdin failed before changing any file;
-the subsequent per-file formatter completed normally. No functional test failed.
-Only this run's two containers and its labeled PostgreSQL volume were removed.
-Fingerprints of all ten main stand services remained unchanged.
-
-The subsequent API increment adds bounded owner history, reviewer queue, discovery,
-files and receipt lookup. Next: shared revision-bound review workspaces, native owner proof targeting,
-notice delivery and native/agent/mixed real Telegram acceptance. Do not expose an
-independent review mutation that bypasses the shared pending revision.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

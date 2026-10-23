@@ -1,26 +1,20 @@
 # Order evidence and event capacity: implementation plan
 
-Current source integration: native owner/reviewer forms, reactive action history
-and [durable order notices](shuttle-order-notice-delivery.md) now have separate
-component verification. References to these as next work below record this page's
-earlier stage. Owned activation and real native/agent/mixed/fault acceptance remain
-pending. D23 money-policy questions remain open.
-
-Status: agreed architecture; frozen sold context and resource requirements have
-passed component gates.
-It is not yet activated on the live stand. See the service-context follow-up in
+It is not yet activated on the live stand.
+See the service-context follow-up in
 `shuttle-order-approval-presentation.md` and
-`shuttle-orders-capacity-foundation.md`. The schema41
-[order evidence store](shuttle-order-evidence-store.md) now has a component gate;
-[Read-only agent evidence APIs](shuttle-order-evidence-api.md) also passed their
-component gate. The schema 42 [shared review workspace store](shuttle-order-review-workspaces.md)
+`shuttle-orders-capacity-foundation.md`.
+The schema 42 [shared review workspace store](shuttle-order-review-workspaces.md)
 now passes its own gate, including exact agent/native aliases and atomic completion.
 At that store checkpoint, submission/review mutation APIs, native controls, notice
 delivery and live acceptance remained pending.
-This is an incremental plan for the full lifecycle. Schema41 implements proof
+This is an incremental plan for the full lifecycle.
+Schema41 implements proof
 admission and holds at store-component level; agent/native activation and
-production acceptance remain pending. Earlier schema40 submitted-unpaid acceptance
-is recorded separately. Root remains the sole writer; read-only architect and Go
+production acceptance remain pending.
+Earlier schema40 submitted-unpaid acceptance
+is recorded separately.
+Root remains the sole writer; read-only architect and Go
 senior consultations agreed the ownership and transaction boundaries below.
 
 ## Approved behavior and unresolved choices
@@ -31,13 +25,12 @@ that attempt's places. Only event authority confirms money. If places are gone,
 notify customer and ambassador that refund attention is needed; never automatically
 refund, reduce the approved order or report fulfillment without capacity.
 
-D23 in the ignored decisions file records unresolved mixed-resource exhaustion,
-partial/cash and trusted proof sent before cutoff but explicitly bound after it.
 No speculative policy menu or production default will decide those questions.
 Implement and prove the policy-neutral path: exact full frozen quote, both trusted
 sent_at and binding before the frozen cutoff, and every demanded resource available.
 Single-resource exhaustion preserves proof and the original amount/composition
-with durable customer/ambassador notices. Divergent inputs remain explicit
+with durable customer/ambassador notices.
+Divergent inputs remain explicit
 needs_decision with file/target retained; they are not silently accepted or held.
 The full goal remains incomplete until these remaining policies and paths are
 resolved and implemented.
@@ -106,10 +99,10 @@ No proactive Loom run is added. Only file IDs belong in agent/notice payloads.
 Schema41 uses order-specific frozen money validation through scale6; pass payment
 validation/SQL remains scale4. paymentSourceAvailable now checks active/confirmed
 claims across both pass and order evidence under the existing shared source lock,
-protecting both intake directions. The lockPaymentEvent wrapper still requires
+protecting both intake directions.
+The lockPaymentEvent wrapper still requires
 registrations; order evidence uses the orders-specific module choice through the
-shared actor/authority helper. These store constraints have passed the schema41
-component gate; native/session checks and public evidence routes remain later work.
+shared actor/authority helper.
 
 Use focused behavior/critical-path tests with real disposable PostgreSQL: retained
 service labels/times after catalog edits, old receipts and pending preparations,
@@ -124,6 +117,3 @@ manual-provider/model and fixture/real-browser distinctions.
 No new dependency is planned. Additive database changes must retain old data and
 immutable receipts; down migration refuses retained business history. Production,
 publication and developer Loom resources remain outside authorized local work.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

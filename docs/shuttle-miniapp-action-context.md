@@ -1,13 +1,10 @@
 # Mini App profile action context
 
 The working tree records successful Mini App name/language requests alongside
-their immutable profile operation receipts. Migration34 adds
+their immutable profile operation receipts.
+Migration34 adds
 shuttle_miniapp_profile_actions; existing receipt/profile data is not rewritten.
-The owned main stand now runs the complete action-context image and schema34.
-Real IAM, form APIs, native Telegram ingress and real Loom passed a scoped
-[owned runtime QA](shuttle-miniapp-action-qa-2026-10-16.md). The Telegram proof was
-locally signed and the model provider manually driven; trusted WebView form
-acceptance and unattended model behavior remain open.
+
 
 ## Transaction and replay
 
@@ -49,27 +46,3 @@ can coexist with the expanded schema, but their Mini App saves do not create
 journal facts. Keep migration34 when rolling back a binary; do not drop retained
 action history. Down migration refuses while the journal contains rows; export
 and an explicit retention decision are required before removing them.
-
-Fresh independent source reviews reported no actionable findings. Linux/race
-verification passed85 root tests /168 root-and-subtest pass events: all32 database,
-11 API and10 task roots, plus32 selected Mini App/profile/structured/name integration
-roots. No tests failed or were skipped. This is not the full integration suite.
-Strict lint required only extracting the existing set_language literal into a
-constant. After that exact change, a separate final Linux/race run passed32 database
-roots and all three new critical integration roots (63 pass events total), with
-no failures or skips. The broad85-root receipt precedes that constant extraction;
-it is not claimed as a broad rerun at the final hashes. Final strict lint reports
-zero issues and sqlc compile passed.
-
-The behavioral cases prove: a form save does not start an agent run; a restart and
-exact replay yield one historical entry; rejected stale writes are absent; journal
-failure rolls back both profile and receipt and exact retry then succeeds; context
-contains only five latest owner actions and does not leak another owner's history.
-Source freezes and all ten main-service fingerprints were preserved during each
-run. Both disposable Go and PostgreSQL instances exited0/noOOM and were removed
-by verified identity. Receipts are under ignored .cache/shuttle-work/miniapp-action-qa/
-and miniapp-action-postlint-qa/. No native WebView or real-IAM/Loom form-context
-claim is made by these fixtures.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

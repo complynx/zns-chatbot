@@ -1,239 +1,31 @@
 # Original order submission operations
 
-Status, 2026-10-22: native preparation to real Loom adoption passed on the
-isolated `orders-adopt-r2` fixture, including graceful recovery and original
-receipt replay. The [current-image reverse browser gate](shuttle-orders-reverse-browser-qa-2026-10-22.md)
-also verifies one original form submission, unexpired stale-draft protection and
-completed-link recovery. A subsequent distinct case also verifies receipt
-reconciliation and settlement of the still-live original question in the same
-Loom run. Other mixed windows and real Telegram WebView remain under acceptance.
-The owned primary now runs source `74604b7e`, image `0d4457b6`, schema72 /
-`mvp-92`, through the separately accepted
-[candidate installation](shuttle-profile-name-sync-qa-2026-10-22.md#owned-primary-upgrade-with-ingress-fenced).
-Its Telegram ingress remains fenced. This is not a production-readiness claim.
+## Inspection and adoption
 
-## Contract
+The delegated-user endpoint POST /internal/agent/operations/inspect supports submit operations for zinusya_orders and zinusya_meals. Given the original operation UUID, it returns recorded arguments, description, proposal, absolute expiry, identity binding and contract revision. A completed original submission also returns its immutable receipt. Inspection creates no order and grants no consent.
 
-The delegated-user endpoint `POST /internal/agent/operations/inspect` now accepts
-module `zinusya_orders`, method `submit`, and an original operation UUID. It uses
-the existing Loom inspection protocol and returns the original arguments,
-description, proposal ID, absolute expiry, identity binding and contract revision.
-A completed original submission also returns its immutable receipt. Reading the
-operation creates no order and grants no consent.
+Continue a supported submission through module_call with resume_operation_id set to the original backend UUID and empty arguments. Loom adopts the recorded terms and requests fresh approval. The application checks current owner and event/module access before inspection and execution. Meal submission uses its independent entitlement and frozen composition/payment deadline. Cancellation adoption is unsupported; ordinary cancellation tools and forms retain their own contracts.
 
-The agent continues a supported submission with `module_call`, setting
-`resume_operation_id` to that UUID and `arguments` to `{}`. Loom obtains the
-recorded terms and requests fresh approval. The application still checks current
-owner and event/module access before inspection and execution. Meal submission
-now uses this same inspection/adoption contract in source, with
-its independent meals entitlement and original meal composition/payment deadline.
-The focused native preparation → agent submission → reopen/replay regression and
-existing service-order inspection guards pass against isolated PostgreSQL.
-The affected meal HTTP/submission/MiniApp tests also pass. The exact-image
-actual-Loom acceptance below covers this meal extension.
-Cancellation remains an unsupported adoption method; ordinary tools/forms remain
-available. Existing meal receipts without an authenticated contract remain
-unsupported and are not retrofitted on replay.
+## Immutable terms and recovery
 
-## Storage and recovery
+Native and agent preparations save a private operation_contract alongside the public immutable prepare receipt. It is scoped to the owner, operation and phase because several operation IDs may share one proposal. The API supplies issuer, actor and revision; the transaction supplies verified bot, subject and organization. The original localized description is stored in the same transaction.
 
-New agent and native preparations record a private `operation_contract` alongside
-the public preparation in the existing immutable prepare receipt. The record is
-per owner/operation/phase, because several operation IDs can share a proposal.
-The API supplies issuer, actor and revision; the transaction supplies the verified
-bot, subject and organization. Original localized descriptions are stored in the
-same transaction. Replaying preparation cannot change language, provenance or
-expiry. Existing public operation reads omit the private contract field.
+Replaying preparation cannot change language, provenance or expiry. Public ordinary operation reads omit the private contract. Old receipts without the authenticated contract retain ordinary recovery paths but cannot be adopted; replay does not retrofit metadata. Inspection does not renew an expired preparation. Obtain fresh terms and consent for an expired pending operation.
 
-No schema migration is needed. Old records without this marker retain their
-ordinary recovery paths but cannot be adopted. A replay does not retrofit missing
-metadata. Inspection does not renew expired preparations; Loom must reject an
-expired pending operation and obtain fresh terms and consent. Completed receipts
-remain readable with current access even after later cancellation or draft edits.
-A matching order from another operation alone does not establish completion of
-this operation: its own submit receipt is required.
+A completed receipt remains readable with current access after later draft edits or cancellation. A matching order alone does not prove that this operation completed: its own submit receipt is required. Business-condition comparison may ignore calculation observation time only; prices, selections, services, capacity terms and cutoff must match.
 
-Canonical results can have a different calculation observation time. Inspection
-uses the existing business-condition comparison, which ignores only that time;
-prices, selections, services, capacity terms and sales cutoff must still match.
+## Native continuation
 
-## Acceptance boundary
+The approval message includes an inline WebApp link carrying the original event and backend operation UUID. No authentication token is placed in the link. The ordinary reply keyboard remains on the final dialogue message. Opening the form is neither approval nor an answer to the pending question.
 
-The first scoped PostgreSQL/HTTP gate passed the new original-operation paths.
-An independent review then found a legitimate canonical receipt rejected solely
-because its observation time differed. A focused test reproduced the conflict;
-the correction uses `sameOrderConditions`. The broader follow-up passed 68 root
-tests with no failures or skips, including order, Mini App, meal and knowledge
-inspection paths. After the formatter/lint corrections, 18 focused roots passed
-with no failures
-or skips. The single-connection test was then strengthened to replace the URL
-setting and assert `MaxConns=1`; its independent rerun passed. Scoped API, DB,
-task and integration lint reported zero issues. Four independent textual review
-passes ended without outstanding substantive findings. Local tests did not use
-the race detector; full CI and real Loom acceptance remain separate.
+An inline launch is required for Telegram initialization data; a reply-keyboard WebApp launch has different initialization behavior. See [WebAppInitData](https://core.telegram.org/bots/webapps#webappinitdata).
 
-These tests use fixture IAM/HTTP peers. They prove original-ID API handoffs,
-replay, immutable terms/language, legacy and binding rejection, current access,
-expiry, formatter rollback and single-connection operation. They do not prove a
-real Loom approval dialogue, autonomous interpretation or an actual browser opening an
-agent's existing preparation. Those are required next acceptance steps. The
-native browser now retains its prepare operation UUID at explicit confirmation;
-the separate committed UI fix has 28 passing behavior cases.
+After ordinary authentication, the orders or meals fragment reads the original submit receipt first, then the prepare receipt if completion is absent. Opening never prepares or submits. A completed link shows the original order and disables confirmation. A pending link shows the frozen snapshot and requires an explicit click using the original operation UUID, proposal and versions. New draft/menu/event versions or expiry prevent confirmation; a newer saved draft is not consumed accidentally. Local uncertain requests retain priority over linked recovery, and a missing receipt does not authorize a replacement.
 
-## Native continuation from an agent preparation
+## Loom and backend identities
 
-The order approval now includes a separate inline WebApp button before the full
-quote and conversational answer keyboard. Its URL is built from the existing
-configured Mini App launch base, the checked original event and operation UUID.
-There is no new production URL setting and no authentication token in the link.
-The URL is transport metadata, not part of the frozen price or consent record.
-Service-order and meal submission in the private user chat receive this button.
+Loom operation L and backend operation N are distinct identities. Approval carries both. Application receipt lookup and form links use backend_operation_id when present; they must not treat L as N. Adoption preserves N's terms, proposal, identity and expiry while L owns the agent approval lifecycle.
 
-The button uses an inline WebApp launch. A reply-keyboard launch cannot supply
-the required identity data: Telegram documents that its initialization data is
-empty in that mode. See [WebAppInitData](https://core.telegram.org/bots/webapps#webappinitdata).
-The ordinary dialogue answer keyboard remains on the final approval message.
-Both messages use the existing durable outbox, approval context and presentation
-keys. Opening the form is not approval and does not answer the pending dialogue.
+If the form completes N while its original agent question remains live, an explicit followup can read N's receipt and resolve that same input, approval and argument hash. L then retains N's original result. Reconciliation must preserve the order, receipts, consumed-draft version, evidence and allocation rows. A routed followup may create a separate input task targeting the same original run; one run does not imply one task row.
 
-After authenticated bootstrap, `#orders?event=UUID&operation=UUID` or
-`#meals?event=UUID&operation=UUID` reads the
-original submit receipt first, then the prepare receipt if completion is absent.
-It never submits or prepares on open. A completed operation displays its original
-receipt while separately loading the current draft/orders. A pending preparation
-displays its frozen snapshot and requires an explicit confirmation with the
-original operation UUID and proposal. Stale versions or expiry disable that
-confirmation; a newer saved draft remains unchanged.
-
-Local pending browser saves or order requests take priority over the link. The
-form explains the deferral and offers a read-only recheck. Missing or failed
-linked receipts remain unknown: writes are blocked until recovery. A link
-recheck also clears the previous event's displayed editor before any awaited
-request, so a network error cannot retain quantities under another event's ID.
-
-The initial six UI cases failed against the previous implementation and passed
-after the import was wired. A fresh review found the cross-event failure path;
-its focused case now passes. The final review found no actionable issue.
-All 377 Mini App source behavior cases pass; this includes seven new import
-cases. The PostgreSQL/outbox gate passes 12 selected roots, including agent and
-protocol reply modes, original link persistence and unchanged consent state.
-Scoped task/integration lint reports zero issues. These are fixture HTTP/outbox
-and JavaScript VM checks. The subsequent real Loom approval/replay gate is
-described below. The separate reverse report adds actual browser evidence;
-real Telegram WebView remains open.
-
-The preceding backend commit `6441a2e3` passed
-[CI53](https://github.com/complynx/zns-chatbot/actions/runs/39703986240): 883
-integration roots across four isolated race-enabled workers, checks and final
-coverage verification all succeeded in 11 minutes 45 seconds. This run predates
-the native import and button changes described in this section.
-
-## Distinct Loom and backend operation IDs
-
-Source inspection before the runtime gate found a consumer bug in the preceding
-candidate. Loom retains its own `operation_id` and separately sends the original
-bot `backend_operation_id` when adopting a native operation. Zinusya's approval
-DTO omitted the latter field and the complete-order prompt looked up the Loom ID
-as though it were the bot receipt ID. The initial fixture covered fresh approvals
-where those IDs were equal, so it missed this path.
-
-The fixture now uses distinct IDs and reproduces the missing approval in both
-agent and protocol reply modes. The correction retains both fields and selects
-the nonempty backend ID only for receipt lookup/native continuation. When the
-field is absent, the previous operation-ID path remains valid. Loom's operation
-and approval IDs are unchanged for dialogue resolution. The initial failed test
-is retained. This is a Zinusya consumer correction, not a Loom defect.
-
-The bafe7833 image was built but never installed or used for live runtime QA.
-The runtime gate must use a newly built image containing this correction.
-
-The corrected source passes the focused broader gate: 60 PostgreSQL integration
-roots, two task-unit roots and one Loom transport root, with no failures or skips. Scoped lint reports
-zero issues and independent textual review found no actionable findings. The
-initial expanded run failed after its own PostgreSQL fixture exceeded 192 MiB and
-entered recovery; it was retained, archived and removed. A fresh 512 MiB fixture
-with 32 MiB shared buffers passed the same selection. That infrastructure failure
-is not counted as a successful run. The subsequent native-to-Loom runtime gate
-is accepted below; the separate reverse report records browser continuation and
-its remaining limits.
-
-## Native preparation to actual Loom: accepted isolated gate
-
-Source `d21d657c`, image `daf18c4f`, passed this direction on the owned
-`orders-adopt-r2` stand with real IAM and Loom and a controlled model provider.
-That source is an ancestor of the current source. This is acceptance of that
-recorded candidate, not a new browser or current-image runtime claim.
-
-The native API saved a selection and prepared submission. Loom adopted the
-original backend operation with a distinct Loom operation ID, retained its exact
-arguments, description, proposal and expiry, and presented the full localized
-terms with the inline original-operation WebApp link. A graceful bot stop took
-0.766 seconds. The same approval and run resumed; plain-text consent created one
-canonical order and cleared its consumed draft. Native replay of the original
-operation returned the identical historical receipt. No payment evidence was
-created. The Telegram peer and provider replies were synthetic; no browser was
-opened in this gate.
-
-The first harness attempt expected an origin without the configured `/app/`
-path and failed its URL assertion after preparation. A separately reviewed
-continuation checked the actual original link, retained the same approval and
-did not resend the original message or model response. The failed observation
-remains in `resume-attempt.json`; the completed proof is
-`.cache/shuttle-work/orders-adoption-runtime-20261022-r2/forward/checkpoint.json`
-with phase `forward_graceful_gate_passed`. Do not replay either driver: its
-completed order remains in the stopped fixture.
-
-## Meal original-operation acceptance
-
-Source `dd06c40dff6315f1779ba0aba1a512db25a18d6d`, local Linux candidate
-`sha256:a2fae485515db9f5cecccaf6f29708093f3256cb95fcd8998890af45551638fd`,
-passes one fresh controlled-provider gate with actual IAM4.20 and Loom
-`ba1f4a11` / API `cbba225f` / file worker `856d5968`. The event enables meals
-while service orders remain disabled. MiniApp prepares operation N; an actual
-Loom `module_call` adopts N with a distinct Loom operation L. Original arguments,
-identity binding, proposal, description and expiry remain unchanged. Inspection
-creates no order. Mock Telegram receives the full frozen meal composition,
-prices, total and event-local deadlines before fresh plain-text consent. The
-actual `interaction_resolve` then submits N once; native replay returns the same
-receipt with one order, no payment evidence and no capacity allocation.
-
-This proves controlled-provider orchestration, not autonomous model behavior,
-real Telegram/WebView interaction or production installation. No paid generation
-was made; the prior campaign remains HELD21/21 with unchanged control/ledger
-hashes. The first preflight refused a missing pinned worker image before creating
-resources; it is retained separately. The exact published worker was then
-downloaded and its revision verified. After acceptance, all three synthetic
-databases passed full archive decode, the original checkpoint stayed unchanged,
-and only the new owned fixture was removed. Aggregate receipt:
-`.cache/shuttle-work/parallel-acceptance-20261022/meal-adoption-runtime/acceptance.json`.
-
-## Meal browser continuation source boundary
-
-The meal form now retains the preparation operation UUID for explicit submit,
-including after preparation-response recovery. The Telegram approval links to
-that original backend UUID even when Loom retains a distinct operation ID.
-The parent routes the meal fragment to the meal form. It reads receipts only
-after ordinary authentication. Opening the link reads submit then prepare receipts; it cannot
-prepare or submit automatically. Local uncertain requests retain priority, and
-missing linked receipts cannot authorize a replacement. The original snapshot
-is shown separately from the current draft; changed draft/menu/event versions,
-historical menus and expiry prevent confirmation.
-
-The focused UI regression first reproduced distinct prepare/submit UUIDs. The
-follow-up passes 98 Node behavior cases, including original meal-link submit,
-completed-link reopen, changed terms/expiry, unknown receipts, pending-request
-precedence, authorization denial and parent fragment routing. The affected
-meal RU/EN full-quote/keyboard test and existing service-order link guard pass
-against isolated PostgreSQL. These are source/fixture checks, not a real Telegram
-WebView or autonomous-model claim. The separately reviewed actual served-browser
-and same-live-question result belongs in the ignored
-`.cache/shuttle-work/parallel-acceptance-20261022/meal-reverse-runtime/` receipts;
-it must not be inferred from these tests or the earlier native-to-agent gate.
-
-The [isolated actual Edge/IAM/Loom handoff report](shuttle-meal-operation-handoff-qa-2026-10-23.md)
-now records this bounded transition at ff8/image871, including original live-question
-settlement and completed-link recovery. Its two original harness failures remain
-failures; separate reviewed read-only observation establishes the final verdict.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk
+Use the [QA procedure](shuttle-qa.md) to check both directions, original receipts, explicit consent and zero duplicate business effects.

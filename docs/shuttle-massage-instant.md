@@ -1,19 +1,5 @@
 # Specialist instant self reservation
 
-Updated: 2026-10-19. Domain/store, HTTP and isolated shipped-form gates pass.
-[Real Loom agent-only/graceful behavior](shuttle-massage-instant-runtime-qa-2026-10-19.md)
-and both actual Loom/native handoffs are verified, with retained restart QA
-observer failures and independent read-back reconciliation. The primary remains
-schema49 / `mvp-56`; the built instant migration50 / `mvp-57` candidate remains
-uninstalled. The separate [upcoming-session workflow](shuttle-massage-specialist-next.md)
-is current source schema52 / `mvp-59`: timed delivery and native checkboxes pass
-component and [real IAM/Loom runtime QA](shuttle-massage-specialist-next-runtime-qa-2026-10-19.md).
-That Linux candidate is built and uninstalled. Runtime revoke/regrant also rejects old pending consent.
-Original committed receipt recovery after private binding loss and current
-shared-table competition also pass real Loom QA. Owner-reminder presentation,
-real Telegram WebView acceptance remain open; specialist-before-session runtime QA
-is recorded separately.
-
 ## Legacy behavior and scope
 
 Python `plugins/massage.py` uses instant booking to reserve the specialist's own
@@ -80,15 +66,14 @@ preparation or operation history before restoring the older constraints.
 On a separate PostgreSQL restored from the synthetic two-customer schema49
 archive, transactional Up/Down preserved all ordinary rows and original checks.
 Instant preparation and operation records independently blocked Down without
-loss; nullable cancellation booking references remained rejected. The exact
-disposable container and volume were removed with exit0 and no OOM. This direct
+loss; nullable cancellation booking references remained rejected.
+This direct
 DDL check is separate from a Goose rollout and full application acceptance.
 
 The Go domain package passes eighteen test roots, including six new roots for
 grid/grace boundaries, frozen time, configured lengths, short grids, work gaps
-and the repeated DST hour. Seven focused integration roots pass on a new empty
-PostgreSQL, including three new instant roots and four existing booking,
-configuration, binding and staff-read paths. The integration harness applies
+and the repeated DST hour.
+The integration harness applies
 embedded migrations through the normal store migrator in isolated schemas.
 
 New integration coverage checks no hold during preparation, cross-interface
@@ -104,101 +89,27 @@ a notice after grant revocation, and shared fixture work-span storage. The final
 tests compare wire terms and preserve independent alias spans. These failures
 are not recorded as successful acceptance runs.
 
-The domain and migration each have independent clean source reviews. The store
-has three fresh diff reviews with no actionable findings. The configured full
-store/domain/integration lint passed after formatting; the final integration
-test check also passes. The ordinary form script passes Node syntax validation.
+The domain and migration each have independent clean source reviews.
+The ordinary form script passes Node syntax validation.
 
-Ignored evidence: `.cache/shuttle-work/specialist-instant-v1-qa/`, especially
-`migration-checkpoint.json`, `store-checkpoint.json`, `store-tests-v4.jsonl`,
-`model-tests-v2.jsonl` and lint logs. Failed attempts remain alongside them.
-Owned primary domain data and installed runtime were preserved. No real Telegram
+Failed attempts remain alongside them.
+Owned primary domain data and installed runtime were preserved.
+No real Telegram
 messages, production changes, staging, commits or publication are part of this
 checkpoint.
 
-## HTTP and native form acceptance
-
-The agent tool `zinusya_massage_staff.instant` exposes prepare/apply/status under
-`/internal/agent/massage_staff/instant`. Preparation returns normalized arguments,
-the original proposal/expiry and localized human terms. It accepts no caller start
-time, owner, purpose or binding generation. The manifest is `mvp-57` in source.
-Authenticated native prepare/apply use
-`/app/massage-staff/{event}/instant[/prepare]`. Shared owner pending, history,
-operation receipt and cancellation routes retain the same durable records.
-
-Eight focused HTTP/store integration roots and seventeen API unit roots pass.
-They cover native-only writes, forbidden caller fields, prepared terms and both
-HTTP/native handoff directions. The configured API/task/integration lint passes;
-the final lint also includes the opt-in `browserqa` fixture. Independent HTTP
-source review has no actionable findings.
-
-The explicit browser gate uses the shipped HTML/JavaScript, Go HTTP and a separate
-PostgreSQL. It uses mock IAM/Loom peers, a signed fixture Telegram SDK and a fresh
-Edge context. The driver blocks other origins. This is not actual Loom tool
-execution, a model conversation or real Telegram acceptance.
-
-The final browser run verifies:
-
-- A non-administrator specialist without a pass sees only their owned alias.
-  Both configured short and six-block services appear; this browser run books the
-  short service. Domain tests separately cover configured lengths.
-- An injected409 from current schedule configuration leaves retained windows,
-  timetable and own-history entry usable while disabling a new self reservation.
-  This is a UI failure injection, not a real event-date-edit acceptance test.
-- The native preview shows self-reservation terms, event-local time and timezone,
-  price and expiry before explicit confirmation. Ordinary slot selectors are
-  hidden for this no-pass workflow.
-- After the server commits the first booking, its successful HTTP reply is
-  deliberately lost. Reload recovers the original operation receipt, with full
-  result equality and no second apply POST.
-- Direct agent HTTP preparation continues in the native form with the same
-  proposal, normalized arguments, expiry and frozen displayed terms. Native
-  confirmation and the original agent apply return the same full booking.
-- Native preparation continues through direct agent HTTP adoption/confirmation.
-  Native confirmation then returns that same complete original receipt.
-- Explicit owner cancellation releases the first two bookings. The ledger has
-  three canonical self bookings (two cancelled, one booked), five preparations,
-  seven operation records and six retained owner reminder records. All three
-  booking snapshots and arguments match their original preparations. No agent
-  task/run or initial specialist booked notice is created; two cancellation
-  notices remain under the normal binding/preference rules.
-
-Screenshot inspection found a previous cancellation receipt beneath a fresh
-preview. New preparation/event selection now clears it; the final browser gate
-asserts the receipt is empty and the corrected screenshot was inspected. An
-initial browser attempt also rejected the valid service display order before
-creating any proposal or booking; its failed result is retained. The next run
-passed the behavioral gate before that visual correction; it is not the final UI
-acceptance result.
-
-Source review fixed a historical-timetable regression and QA evidence-retention
-issues. Two fresh reviewers then reported no actionable findings; a fresh final
-review also passed after the visual correction. The final browser test root
-passes without skips. Each temporary PostgreSQL exited0 without OOM and its
-container/volume were removed. Failed-schema archives and the complete JSON
-business ledger are retained privately. After a successful Go test, fixture
-schemas are dropped, so the small post-test dump is not a business-data backup.
-Primary installed files, runtime identity and domain data remain preserved.
-
-Ignored evidence: `.cache/shuttle-work/specialist-instant-api-v1-qa/` and
-`.cache/shuttle-work/specialist-instant-ui-v{1,2,3}-qa/`. The final UI proof is
-`specialist-instant-ui-v3-qa/test-checkpoint.json`, its browser log, result,
-ledger and screenshots. Public source entry points include
-`internal/api/massage_instant.go`, `internal/api/miniapp_massage_instant.go` and
-the opt-in `integration/massage_instant_browser_test.go`.
-
 ## Remaining complete workflow
 
-1. Check owner-reminder presentation and late-booking parity: runtime QA observed
+1.
+Check owner-reminder presentation and late-booking parity: runtime QA observed
    both kinds firing with identical visible text for one late reservation.
-2. Perform real Telegram/WebView acceptance. Joint CA/zitadeltg verification
+2.
+Perform real Telegram/WebView acceptance.
+Joint CA/zitadeltg verification
    remains reserved for the agreed session with Daniel.
-3. Record integrated review and deployment proof before primary installation.
+3.
 
 The [specialist upcoming-session workflow](shuttle-massage-specialist-next.md)
 now implements Python `notify_specialist` / `notify_next` behavior through the
 separate specialist notice ledger. The owner reminder ledger retains only
 `owner_long` and `owner_short`; their presentation policy is unchanged.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk

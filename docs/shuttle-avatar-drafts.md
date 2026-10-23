@@ -1,11 +1,6 @@
 # Shared avatar edit drafts
 
-Schema 55 introduced shared drafts. Source schema 68 / manifest `mvp-86` changes
-Telegram-backed drafts to references; see the [current source lifecycle and QA
-boundary](shuttle-avatar-telegram-sources.md). The owned primary now runs
-schema 68 / mvp-86; see the [installation evidence and remaining acceptance
-limits](shuttle-avatar-primary-qa-2026-10-21.md). Earlier stage records retain their
-original scope.
+Schema 55 introduced shared drafts.
 
 ## State and authorization
 
@@ -96,8 +91,12 @@ history; active writers make rollback fail safely. Nonempty drafts or operation
 history also reject rollback. Export originals and receipts before any deliberate
 removal. This guard does not establish safety of every historical migration.
 
-See [draft source acceptance](shuttle-avatar-drafts-qa-2026-10-19.md). The [authoritative preview API](shuttle-avatar-preview.md) is implemented. The [native visual editor](shuttle-avatar-editor.md) is implemented;
+The [authoritative preview API](shuttle-avatar-preview.md) is implemented.
+The [native visual editor](shuttle-avatar-editor.md) is implemented;
 the later [finalization API](shuttle-avatar-finalization-api.md) stores immutable
-results and independent delivery intents. Acceptance records describe their own
-revisions. The [Telegram reference change](shuttle-avatar-telegram-sources.md) has
-separate current verification requirements. Production retention/discard policy remains open.
+results and independent delivery intents.
+Acceptance records describe their own
+revisions.
+The [Telegram reference change](shuttle-avatar-telegram-sources.md) has
+separate current verification requirements.
+Production retention/discard policy remains open.

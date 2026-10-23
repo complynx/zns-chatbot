@@ -31,14 +31,15 @@ timestamp/freshness. Never substitute an empty healthy backlog or old counts.
 No IDs, receipts, payload, error text or arbitrary state labels enter metrics.
 
 Keep the query, cache and callback independent of task metrics so one table lock
-does not invalidate both families. The first concrete implementation passed
-behavioral checks but lint rejected its duplicated task mechanics. Share a small
+does not invalidate both families.
+Share a small
 private scalar snapshot/gauge mechanism with separate cache instances; retain
 typed database adapters, fixed family states and the existing task instruments.
 No generic registry or configurable collector framework is required.
 The pinned OTel SDK serializes callbacks: when both snapshots need refresh,
 collection can incur two 250 ms database budgets plus cancellation/SDK overhead.
-Concurrent HTTP scrapes can queue behind collection. This is not a 250 ms endpoint
+Concurrent HTTP scrapes can queue behind collection.
+This is not a 250 ms endpoint
 latency guarantee.
 
 Migration 27 should add only a partial `(state,created_at)` index with exactly the
@@ -54,6 +55,3 @@ health; and index Down/Up preserving rows and deduplication. Review loops, lint,
 race gates, documentation and native SQL-only fixture/restart/rollback checks
 follow. Fixtures must enqueue no River work or Telegram sends. This plan is now
 implemented and accepted within the [documented source/native boundary](shuttle-outbox-metrics.md).
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

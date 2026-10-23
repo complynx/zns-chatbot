@@ -65,16 +65,7 @@ checking for facts, so concurrent intake cannot commit timing data between the
 check and column removal. A real PostgreSQL concurrency test verifies this.
 The agent manifest remains `mvp-31`.
 
-Focused PostgreSQL/race checks passed for multi-chunk completion, intermediate
-prompts, retries, a reopened store, exclusions, stale attempts and uncertain
-receipts. Service tests cover OTel after confirmed delivery, restart without
+Service tests cover OTel after confirmed delivery, restart without
 metric replay, and Telegram acceptance followed by receipt-persistence failure.
-The complete race gate passed all 256 listed integration scenarios and the other
-Go packages, with zero lint issues. Real-service acceptance is recorded separately
-in the [QA report](shuttle-response-latency-qa-2026-10-15.md). The owned native
-receipt, metric, restart and old-binary checks passed after explicit recovery of
-the manual provider; the original automated attempt failed. This document does
+This document does
 not claim production readiness or automatic recovery from that provider pause.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

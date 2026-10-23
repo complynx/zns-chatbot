@@ -1,2 +1,0 @@
-W1012 17:07:21.397372  140800 library.go:141] "github.com/cespare/xxhash/v2" contains non-Go code that can't be inspected for further dependencies:
-C:\Users\ddriz\go\pkg\mod\github.com\cespare\xxhash\v2@v2.3.0\xxhash_amd64.s

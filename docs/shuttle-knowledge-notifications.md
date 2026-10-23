@@ -1,10 +1,5 @@
 # Durable knowledge notifications
 
-Status: implemented in source mvp82 with additive migration66. The owned main
-stand remains schema65/mvp81. A separate full real-IAM/Loom/mock-Telegram
-[acceptance gate](shuttle-knowledge-notices-runtime-qa-2026-10-20.md) passes for
-this candidate; it has not been installed on the main stand.
-
 ## Recipient policy
 
 Pending suggestions notify explicitly assigned general/history moderators or the
@@ -65,29 +60,7 @@ refuses to discard any notice history; export and explicitly resolve rollback
 before removing a nonempty table. Preceding-binary compatibility on schema66
 still requires runtime proof.
 
-The focused Mini App gate passes60 cases, including28 knowledge cases. Affected
-DB/task/API package tests and observability tests pass; strict lint reports zero
-issues. The initial unit run exposed two stale metrics-cardinality assertions;
-the new known worker adds four duration series and three queue series. Those
-expectations were corrected. Initial lint formatting/comment failures are also
-retained under ignored `knowledge-notices-source-v1/`.
-
-The frozen all-knowledge Linux/PostgreSQL race gate passes25 roots/42 terminal
-cases with no failures, skips or OOM. It uses mock IAM/Loom/Telegram HTTP peers
-and real PostgreSQL; it is not the separate full real-IAM/Loom/mock-Telegram
-stand. Source correctness and quality reviews found no actionable findings. The separate full mock-Telegram runtime gate now passes delivery, current-rights
-checks, event-to-history routing and three graceful restarts. A controlled real
-Loom readback distinguishes the immutable submission receipt, current review
-state and recipient-owned delivery metadata without changing business data.
-The [exact administrative resolution follow-up](shuttle-knowledge-notice-resolutions.md)
-is implemented in uninstalled mvp83/migration67 and passes a separate focused
-PostgreSQL/race gate. The [full resolution runtime gate](shuttle-knowledge-resolution-runtime-qa-2026-10-20.md)
-now passes controlled real-Loom consent and current-IAM diagnostics. Content
-moderation writes and separate-device handoffs remain separate acceptance work.
-Do not install this candidate on a real Telegram stand to exercise synthetic
-reviewer identities. Multi-user delivery belongs on isolated mock Telegram.
+Those
+expectations were corrected.
 
 No production-readiness or production-deployment claim is made.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk

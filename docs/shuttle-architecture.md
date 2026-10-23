@@ -8,12 +8,13 @@ River job state is not the business source of truth. Loom owns the agent loop.
 
 The first slice accepts private Telegram text messages, provisions or resolves a
 Zitadel account, obtains delegated credentials, starts a Loom run and delivers
-its result through Telegram entities. The private agent API exposes account.me and
+its result through Telegram entities.
+The private agent API exposes account.me and
 [role-gated administrative reads](shuttle-agent-administration.md).
 Question, answer, approval and cancellation follow the same durable intake path.
-At this initial checkpoint, registration, passes, payment ledgers, pairs, avatars
-and migration were later stages. Subsequent bounded implementations and acceptance
-are recorded in the [current roadmap](shuttle-roadmap.md). This section describes
+Subsequent bounded implementations and acceptance
+are recorded in the [current roadmap](shuttle-roadmap.md).
+This section describes
 the original first slice, not the current completion status of those modules.
 
 - `internal/config`: startup YAML and secret/environment overrides.
@@ -65,21 +66,24 @@ is checked independently of credential caches and invalidates those caches.
 Pending Telegram results and prompts recheck local revocation before each send
 attempt, and verify IAM authorization within the configured positive-cache TTL.
 Without a valid cache, temporary IAM failure postpones delivery; explicit denial
-blocks it. Revoked deliveries are durably blocked; a completed run with blocked
-output records delivery failure. Access-denied notices remain deliverable.
+blocks it.
+Access-denied notices remain deliverable.
 Blocked positions do not hold later denial notices, while unknown or failed
 send receipts still hold the delivery barrier.
 
-Mock IAM verification does not establish the real Zitadel grant contract. The
-[disposable real IAM acceptance](shuttle-real-iam-qa-2026-10-12.md) checks grants,
-claims and project role isolation. Production permissions and bidirectional
-zitadeltg linking still need acceptance. Loom currently performs online
+Mock IAM verification does not establish the real Zitadel grant contract.
+Production permissions and bidirectional
+zitadeltg linking still need acceptance.
+Loom currently performs online
 introspection; continuity during an IAM outage also requires the matching Loom
-cache behavior. A Shuttle token cache alone cannot satisfy that acceptance case.
+cache behavior.
+A Shuttle token cache alone cannot satisfy that acceptance case.
 Unknown bootstrap/reauthorization outcomes require bounded reconciliation.
 The private operator API exposes safe task/queue metadata and audited local
-closure of uncertain tasks. Closure uses a version check, rejects live leases,
-and preserves unknown effects. The terminal `closed` state prevents worker replay.
+closure of uncertain tasks.
+Closure uses a version check, rejects live leases,
+and preserves unknown effects.
+The terminal `closed` state prevents worker replay.
 See [step 0](shuttle-step-0.md) for scope and rollback constraints.
 
 Administrative roles come only from the introspection claim for the exact
@@ -91,31 +95,6 @@ After an abrupt process exit, River rescues running attempts after the greater
 of the task lease and job timeout, plus one second. Its native rescue scan runs
 on a 30-second cadence, followed by retry scheduling. This is separate from the
 one-second shutdown target; recovery is not promised to finish in one second.
-
-## Verification boundaries
-
-File ingestion is a later stage. Shuttle will persist attachment IDs and source
-metadata and expose authorized metadata/read APIs. Loom receives IDs and fetches
-bytes on demand. Telegram source loss remains a visible unavailable-file outcome;
-restart preserves references, not a promise of permanent file availability.
-
-Persistent Loom conversation binding and history context across separate runs
-also remain a later-stage requirement. This slice stores Telegram history in
-PostgreSQL but does not yet reuse a Loom chat across completed runs.
-
-Prefer HTTP-visible happy and critical paths with real isolated PostgreSQL
-schemas and mock Telegram, IAM and Loom servers. Assert durable outcomes rather
-than private function structure. Include duplicate intake, lost external
-receipts, restart recovery, simultaneous dependency outages, owner/role denial,
-question routing, cancellation and unknown Telegram delivery. Use focused fuzzing
-for Markdown bounds and Linux race/shutdown checks for the target platform.
-
-Each stage passes an independent textual-diff review loop before its commit.
-Successful unit tests are not production readiness. Business-module acceptance,
-data migration, real service contracts and production cutover remain explicit.
-
-Written by Codex (gpt-6/Codex desktop)
-on behalf of Daniel Drizhuk
 
 ## Event configuration and Loom shutdown recovery
 

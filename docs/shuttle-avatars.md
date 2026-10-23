@@ -16,29 +16,6 @@ error and ask the person to resend it. Message deletion alone does not establish
 file availability; use the actual Telegram API result. File identifiers stay
 server-side and belong to the bot identity that received them.
 
-Source schema 68 uses references for Telegram-backed drafts and retains bytes only
-for browser uploads. Generated output receipts remain stored. The reference-only
-backend and candidate discovery passed 90 PostgreSQL scenarios with mock
-Telegram/IAM; the UI passed behavioral and rendered-fixture checks. The changes
-were first accepted on a separate mock-Telegram QA stand and are now installed
-on the owned primary; see the [installation evidence and limits](shuttle-avatar-primary-qa-2026-10-21.md).
-On the separate `avatar-references-r1` stand, native browser-upload
-generation/delivery with real IAM and Loom stopped passes. Agent-only and both
-native/agent continuation directions also pass there, including a graceful bot
-restart. On that same stand, real Loom import and recovery after artifact expiry
-pass for current originals, previews and finalized documents. Historical-reference
-handoffs and source-loss behavior also pass on that stand;
-see [historical runtime QA](shuttle-avatar-history-runtime-qa-2026-10-21.md).
-The current single-step generated JPEG also refreshes after artifact metadata
-expiry through real Loom. This does not establish recovery of old generated
-frames or custom browser crops. See the [source lifecycle](shuttle-avatar-telegram-sources.md).
-The native historical selector now previews a photo without creating a draft;
-explicit Use creates one. The updated bot passes a real-IAM/headless-Edge check
-on that separate stand while Loom is paused, with no task or document created.
-The earlier frozen-source race run passed 833 integration roots. Full remote CI
-for the installed source commit `0599dfef` subsequently passed 835 integration
-roots and 357 UI tests. Neither proves real Telegram WebView acceptance.
-
 Historical input images are read through `zinusya_history.avatar_info` and
 `avatar_fetch`, with `record_id` and `archive_id` from
 `zinusya_history.avatar_candidates`. The general `history.page` contains projected
@@ -125,8 +102,7 @@ its newline. Input image bytes are not base64 encoded.
 
 The image library is linked only into the leaf renderer, not the bot's process
 adapter. There is no face detection, Python, Torch, native image runtime or
-general plugin framework in this slice. See the
-[dated dependency audit](dependency-audit/2026-10-14-avatars/README.md).
+general plugin framework in this slice. See the [dependency policy](shuttle-dependencies.md).
 `GOMEMLIMIT=128MiB` is a soft child heap target. The Docker memory limit remains
 the hard bound shared by the bot and child; do not describe this as a separate
 kernel memory sandbox.
@@ -167,21 +143,14 @@ The companion must exist at startup. Credentials and business policies do not
 belong in its command line.
 
 Before returning to an older binary, stop new generation and drain or explicitly
-resolve document deliveries. Older binaries do not understand typed document
-outbox payloads. Keep the additive media table, backups and receipts. Migration
+resolve document deliveries.
+Older binaries do not understand typed document
+outbox payloads.
+Keep the additive media table, backups and receipts.
+Migration
 rollback first takes an exclusive NOWAIT table lock, rejects active use, and
 refuses to drop a populated avatar table; export and retain its bytes
-and history before any deliberate destructive removal. See the
-[rollback hardening proof](shuttle-avatar-rollback-qa-2026-10-19.md).
+and history before any deliberate destructive removal.
 
-The transform foundation is verified separately in
-[the transform acceptance record](shuttle-avatar-transform-qa-2026-10-19.md).
 The [shared draft API](shuttle-avatar-drafts.md), [saved-draft preview](shuttle-avatar-preview.md)
 and [native editor](shuttle-avatar-editor.md) use the same versioned editing state.
-Source schema 68 changes Telegram inputs to references; see the
-[source lifecycle and acceptance boundary](shuttle-avatar-telegram-sources.md).
-Legacy `generate` still requires an active agent task. Historical stage QA records
-remain evidence for their recorded revisions, not acceptance of these later changes.
-
-The current single-step generation and all five image reference families have
-owned-stand Loom acceptance; see the source lifecycle record for exact scope.

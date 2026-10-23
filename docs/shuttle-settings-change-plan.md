@@ -49,23 +49,11 @@ operator/agent CAS race; one audit/result/version advance; rollback on result-sa
 failure; lost response and ambiguous commit reconciliation; actor/deployment
 isolation and local revocation; optional defaults; original receipt after a newer
 operator change without restoring old TTL; and repeated status without cache
-churn. Preserve operator and startup behavior. Finish with fresh review loops,
-documentation and bounded real IAM/Loom approval on the owned stand.
+churn.
+Preserve operator and startup behavior.
 
 The first preserving extraction is implemented: validation is separate, and the
-existing CAS/audit body can share a caller-owned transaction. Fresh independent
-review found no actionable findings. Existing PostgreSQL CAS and administrative
-read/authorization paths passed under race; scoped strict lint reported zero
-issues. The proposal store, migration 29, agent routes/discovery and process-local
-runtime reconciliation are now implemented. Focused race checks passed, including
-actual PostgreSQL COMMIT-reply loss and current-settings read failure after a
-committed operation. Fresh store and full-slice correctness/quality reviews found
-no actionable findings; strict lint reported zero issues. The complete 206-test
-race gate and native owned-stand approval/cache-outage acceptance passed, including
-audited restoration and binary rollback with schema 29 retained.
-See the [contract](shuttle-settings-changes.md) and
-[acceptance boundaries](shuttle-settings-change-qa-2026-10-15.md).
+existing CAS/audit body can share a caller-owned transaction.
+The proposal store, migration 29, agent routes/discovery and process-local
+runtime reconciliation are now implemented.
 No production rollout is implied.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

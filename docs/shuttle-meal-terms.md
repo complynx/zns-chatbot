@@ -2,10 +2,10 @@
 
 `internal/db/meal_terms.go` now provides `FreezeMealDraft`: a pure builder of
 complete descriptive terms from a retained `MealCatalogView` and saved
-`MealDraft`. This is the next preparation for financial integration. It adds no
+`MealDraft`.
+This is the next preparation for financial integration.
+It adds no
 migration, HTTP route, approval, order, draft consumption or runtime dependency.
-At this component gate the schema and manifest stayed53 / `mvp-60`; the later
-[order identity expansion](shuttle-order-kind.md) raises source schema to54.
 
 The caller supplies the actual retained catalog and event context. Event ID,
 event version, catalog version and timezone must match the saved draft; draft
@@ -38,40 +38,7 @@ creating any proposal or order. Complete zero/empty composition is retained as
 a fact; its sale treatment is not decided here. No common payment deadline,
 capacity requirements or partial/cash/refund policy is inferred.
 
-## Verification
-
-Four new behavioral roots cover combo accounting, original names and detached
-copying, deterministic encoding, both Berlin02:30 instants across DST, declined/
-empty/dinner-only choices, lineage/evaluation rejection and oversized snapshots.
-All32 unit roots in `internal/db` and `internal/orders` pass on Windows and
-Linux/amd64 Go1.27.2 (db12, orders20). Another25 database tests skip without a DSN;
-they are not PostgreSQL acceptance. No new PostgreSQL/runtime gate is claimed
-for this pure builder. The db package linter reports0 issues. Independent
-correctness and quality reviews and a fresh final source review have no
-actionable findings.
-
-The first lint pass found a comment prefix and a modernize fixture suggestion.
-An incorrect interpretation of that suggestion caused a test-only compiler
-failure on both platforms; the failed logs are preserved. The final fixture uses
-Go1.27 promoted-field literals verified by the actual compiler. Final lint and
-both platform runs pass. All owned Linux containers were removed without OOM;
-the final source freeze is recorded. Ignored evidence is
-`.cache/shuttle-work/meal-terms-v1-qa/`.
-
-The earlier [meal runtime gate](shuttle-meal-runtime-qa-2026-10-19.md) remains its
-original evidence: its image predates this builder and has not been rebuilt or
-installed at that checkpoint. The primary was schema49 / `mvp-56`. The subsequent shared `service|meal` storage
-expansion is now implemented with service-only access/recovery and evidence gates.
-Meal-specific preparation/submission and financial routing were still open then.
-The October21 policy decisions below and subsequent
-[financial installation](shuttle-meal-primary-qa-2026-10-21.md) close that earlier
-source-stage hold; their bounded acceptance does not claim production readiness.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk
-
-
-## Explicit shared deadline follow-up, 2026-10-21
+## Explicit shared deadline follow-up
 
 After Daniel selected the legacy single-deadline policy, optional catalog
 `payment_deadline` is retained in `MealTerms`. It is copied and normalized to UTC;

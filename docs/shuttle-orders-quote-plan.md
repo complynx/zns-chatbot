@@ -1,8 +1,7 @@
 # Server-calculated owner quote plan
 
-This preserves the design selected before implementation. The
-[quote candidate and acceptance boundary](shuttle-orders-quote.md) are now
-implemented and accepted on the owned stand. Architecture and Go
+This preserves the design selected before implementation.
+Architecture and Go
 consultations selected a read-only calculation after the catalog foundation.
 It does not choose D12 reservation, cash, refund or recipient policies.
 
@@ -63,6 +62,3 @@ Prove no business-table writes. Native owned IAM/Loom/Telegram acceptance will
 configure exact-approved synthetic complete pricing, read a quote, then change
 the catalog and reject the old version. Review loops and documentation accompany
 the implementation; production menu, FX and order lifecycle remain later gates.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

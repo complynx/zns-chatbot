@@ -1,9 +1,10 @@
 # Saved avatar previews
 
 Introduced at schema55 / manifest `mvp-63`, this API adds an authoritative preview of a saved
-avatar draft. It creates no artifact, operation receipt, outbox entry or agent
-task. No active Loom run is needed. The installed primary stand remains on
-schema49 / mvp56; this source has not been installed or deployed.
+avatar draft.
+It creates no artifact, operation receipt, outbox entry or agent
+task.
+No active Loom run is needed.
 
 ## Native and agent entry points
 
@@ -37,12 +38,11 @@ JPEG exactly. Existing generation receipts and delivery are unchanged.
 
 ## Remaining work
 
-The [native visual editor](shuttle-avatar-editor.md) now uses this API. Draft
+The [native visual editor](shuttle-avatar-editor.md) now uses this API.
+Draft
 finalization is [in progress at the storage layer](shuttle-avatar-finalization.md);
-its public API and durable Telegram delivery without Loom remain open. A preview download does not establish
-native finalization/send parity. Production retention/discard policy remains
-open. See [draft storage](shuttle-avatar-drafts.md) and
-[preview QA](shuttle-avatar-preview-qa-2026-10-19.md).
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk
+its public API and durable Telegram delivery without Loom remain open.
+A preview download does not establish
+native finalization/send parity.
+Production retention/discard policy remains
+open.

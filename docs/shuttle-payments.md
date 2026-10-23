@@ -38,11 +38,13 @@ receipt stays pending after later human confirmation; read `evidence` and
 replace the operation or resubmit its file solely because a receipt is missing.
 
 Reads reuse the existing actor/bot/organization-scoped operation lookup and
-recheck current event/evidence access. Event authority does not expose another
-actor's original receipt. Reading a historical receipt creates no evidence,
-credit, consent or renewed preparation. Shared review-workspace transport
+recheck current event/evidence access.
+Event authority does not expose another
+actor's original receipt.
+Reading a historical receipt creates no evidence,
+credit, consent or renewed preparation.
+Shared review-workspace transport
 receipts still use `review_operation`, with their separate canonical operation.
-This operation read is installed on the owned schema64/mvp78 primary.
 
 ## Human decisions
 
@@ -51,11 +53,12 @@ zinusya.admin. Rights are checked at each operation in the same event lock used 
 role changes. An assigned pass alone does not grant review rights.
 
 A confirmed decision credits a positive exact amount, at most the remaining frozen
-price. A rejected decision credits zero and requires a reason. The human may correct
-the owner's reported amount: preparation shows both values. A late proof or a top_up
-without an established deposit requires an explicit case-decision reason. An earlier
-initial proof may remain pending while the top_up awaits its review; calling the
-first late transfer a top_up cannot silently bypass the initial deadline.
+price.
+A rejected decision credits zero and requires a reason.
+The human may correct
+the owner's reported amount: preparation shows both values.
+A late proof or a top_up
+without an established deposit requires an explicit case-decision reason.
 
 Timely proof may be reviewed after sales closing or event ending. Review proposals
 expire after five minutes independently of sales closing. Prepare reserves nothing
@@ -64,17 +67,13 @@ arguments and proposal. It rechecks authority, evidence, balance version, remain
 amount and expiry after locks. Decision, ledger revision and original receipt commit
 atomically. Concurrent confirmations from the same balance version allow one effect.
 
-The [payment-consent source fix](shuttle-payment-consent-presentation-2026-10-20.md)
-uses the original actor-owned workspace preparation for agent questions, even if
-Loom supplies an abbreviated prompt. It displays human terms without raw argument
+It displays human terms without raw argument
 JSON and rechecks exact parameters, current rights, availability and expiry before
-delivery. If that decision already completed through either interface, the question
+delivery.
+If that decision already completed through either interface, the question
 says so and retains the original terms for reconciliation; replay credits no new
-money. This fix has passed component tests, source review and the
-[packaged owned IAM/Loom runtime gate](shuttle-payment-consent-runtime-qa-2026-10-20.md).
-The fix is now [installed on the owned primary](shuttle-payment-consent-primary-qa-2026-10-20.md),
-with fixed/original/fixed binary rollback, unchanged data/queues and ingress
-recovery verified. This is a local stand installation, not production deployment.
+money.
+This is a local stand installation, not production deployment.
 
 Confirmed review rows form the append-only money ledger. Rejected decisions remain
 as audit rows. Balance exposes confirmed_minor, remaining_minor, deposit_required_minor,
@@ -137,36 +136,13 @@ Behavioral HTTP/PostgreSQL tests cover pending/no credit, deposit/top-up, exact
 approval/replay/restart, current rights, source dedup, corrected rejected proof,
 explicit late decisions, concurrency/cap, proposal changes/expiry, actual review
 amount auditing, closed event discovery and revocation during source IO.
-Full Linux race QA passed with event discovery included (integration: 70.064 s).
-A fresh independent textual review found no actionable findings. Final lint passed
-with zero issues; focused payment race tests passed after the lint-only extraction.
-On the newly provisioned owned stand, real IAM delegation and native Loom exact
-approval confirmed a 3087-minor-unit deposit against a 12345-minor-unit frozen pass.
 Pending evidence credited zero, owner self-confirmation was denied, and bot restart
 preserved the original operation status, deposit balance and exactly one ledger row.
 This native scenario used synthetic closed attachment metadata and a manual Codex
 mailbox provider with the isolated Loom seal fixture; no real bank document was read.
 Durable ambassador/owner notifications and scoped diagnostic reads are now in
-progress; see [notification delivery](shuttle-payment-notifications.md). Audited
-operator retry/dismiss is implemented and has passed focused race QA and source
-review. Representative real Telegram notification/restart and native Loom dismiss
-approval QA now pass; see [native QA limits](shuttle-notification-qa-2026-10-14.md).
+progress; see [notification delivery](shuttle-payment-notifications.md).
 Real synthetic Telegram file upload/read is accepted separately in shuttle-files.md;
 this does not establish bank receipt understanding or production readiness.
 
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk
-
 ### Native correction and final payment follow-up
-
-Real Telegram PDF upload, owner-scoped pending top-up, exact rejection, explicit
-same-file resubmission, exact full-payment confirmation and restart receipt checks
-passed on the owned stand with synthetic money. See
-[payment correction/top-up QA](shuttle-topup-qa-2026-10-14.md) for provider, explicit
-context, byte-integrity and remaining classification limits.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk

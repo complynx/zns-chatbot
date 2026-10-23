@@ -184,17 +184,7 @@ the real IAM user API, a Loom auth session and duplicate run creation. It waits
 for a provider request, atomically supplies a fixture response and verifies the
 final result. It prints no tokens. Smoke data is retained in test databases.
 
-The real Telegram lane must be checked separately in Telegram Web. Current
-acceptance/evidence is recorded in `docs/shuttle-live-test-2026-10-13.md`.
-The original restart failure is retained in that report. Its authorization recovery
-fix passed repeat real-service acceptance: a temporary discovery-related Loom 401
-now waits with a durable deadline and resumes the same run after recovery.
-This specific pass does not establish full production recovery acceptance.
-Role-gated administrative agent reads were checked with a separate fixture
-administrator through the real Loom broker; see `docs/shuttle-agent-administration.md`.
-Assign `zinusya.admin` in both IAM projects for such a fixture. The operator's
-Telegram account is not elevated automatically. The stand does not add missing
-business flows, file ingestion or zitadeltg linking.
+Check the real Telegram lane separately using the [behavioral acceptance procedure](../../../docs/shuttle-qa.md). Source tests and controlled fixtures do not establish human Telegram behavior. See [authorization recovery](../../../docs/shuttle-authorization-recovery.md) and [agent administration](../../../docs/shuttle-agent-administration.md) for the relevant contracts.
 
 ```powershell
 ./deploy/shuttle/test/run.ps1 Stop
@@ -232,18 +222,13 @@ edit is needed. Inspect exact container ownership before stopping/removing it;
 retain the journal and never repeat an uncertain Telegram send or provider reply.
 The fixture requires a bounded stop; no graceful-stop guarantee is claimed.
 
-The actual two-chunk display and Telegram rejection check is recorded in
-[the dated QA report](../../../docs/shuttle-approval-display-qa-2026-10-15.md).
-It uses real local IAM/Loom/Zinusya/Telegram with this mock RPC leaf, not a real
-administrative business write. The fixture is not part of the production image
-or an automatically enabled module.
+Use the [approval presentation contract](../../../docs/shuttle-order-approval-presentation.md) to check complete terms before consent. The fixture is a mock RPC leaf, not an administrative business write or an automatically enabled production module.
 
 ## Synthetic counted mailbox fixture (not enabled by default)
 
 `counted_provider.py` is an optional test-only Responses HTTP adapter for the
 existing manual request/response mailbox. The original mailbox provider has no
-input-token counter; [the mixed-flow checkpoint](../../../docs/shuttle-order-mixed-context-qa-2026-10-17.md)
-records context pauses without labeling them a proven upstream defect.
+input-token counter.
 
 The adapter exposes `/v1/responses` and `/v1/responses/input_tokens`. Counts are
 synthetic, defined as four canonical UTF-8 JSON bytes per unit, rounded up. They
@@ -254,8 +239,7 @@ vision, or native-compaction acceptance. It makes no upstream provider requests.
 
 Startup requires `ZINUSYA_SYNTHETIC_COUNTED_QA=1`, a private
 `ZINUSYA_COUNTED_QA_KEY`, and `--mailbox` pointing to an existing private directory.
-There is no automatic Compose wiring. The owned stand has a reviewed manual HTTPS
-activation documented in the mixed-flow checkpoint above. Before another
+There is no automatic Compose wiring. Before another
 activation, preserve the actual Loom config and database/run state, review the
 config-only change, and retain a rollback path. Use a dedicated nonroot container
 on `shuttle-live-test_default`, no host ports, read-only root/script, only its

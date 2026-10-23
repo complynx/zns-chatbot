@@ -1,25 +1,7 @@
 # Native payment review: implementation plan
 
-Current acceptance: [four real Telegram happy paths](shuttle-payment-review-real-qa-2026-10-16.md)
-pass with real IAM/Loom and a manual provider. Embedded critical paths, UI
+Embedded critical paths, UI
 follow-ups and unattended model behavior remain open.
-
-Status: store, agent API and native session/HTTP transactions pass component checks;
-the [form](shuttle-miniapp-payment-review-form.md) now passes source component
-checks. The [native entry and reactive context](shuttle-payment-review-entry.md)
-pass component checks; full workflow acceptance remains open. The
-[local launch rollout](shuttle-miniapp-local-launch-qa-2026-10-16.md) installed the
-store/API/HTTP components on owned schema39. The later display-name projection is
-component-verified and installed with the reviewer form in the current owned candidate. Existing agent payment review and money rules remain authoritative.
-The [transaction-core extraction](shuttle-payment-review-tx-qa-2026-10-16.md) passed
-focused before/after checks. The native workflow itself remains open.
-The [typed workspace store](shuttle-payment-review-workspaces.md) is implemented;
-its [agent adapter](shuttle-payment-review-workspace-api.md) now passes component checks.
-The [native session store](shuttle-miniapp-payment-review-store.md) and
-[HTTP/proof adapter](shuttle-miniapp-payment-review-http.md) are now component-verified.
-This plan follows architecture and senior Go consultations. Orders/meals and massage
-remain separate workflows; their latest agreed rules are recorded in the
-[infrastructure priorities](shuttle-infrastructure-priorities.md).
 
 ## User workflow
 
@@ -131,10 +113,4 @@ evidence; clicking it never confirms money.
 - Unavailable or oversized proof, forwarded notice, foreign evidence and session logout.
 - Exact money formatting and ru/en event-local times with IANA timezone information.
 
-Use focused behavioral/critical-path tests and fresh independent review loops. Then run
-real Telegram transport against the owned stand with real IAM/Loom, clearly separating
-manual-provider and direct-form proof from trusted Telegram WebView and model acceptance.
 Do not change production, the Loom developer stand, or publish while D04 is held.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

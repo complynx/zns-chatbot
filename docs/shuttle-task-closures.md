@@ -5,11 +5,6 @@ processing after an administrator inspects the diagnostics and external outcome.
 It does not establish whether Telegram delivered a message or Loom completed an
 external action. It does not resend messages, cancel a remote run or change money.
 
-Implementation and bounded native acceptance passed on the owned stand. See the
-[implementation plan](shuttle-task-closure-plan.md) and
-[verification record](shuttle-task-closure-qa-2026-10-15.md) for source and runtime
-boundaries.
-
 ## Protocol
 
 Arguments are `task_id`, `expected_version` and a nonblank `reason` of at most 512
@@ -75,6 +70,3 @@ before intentional removal. A database dump belongs in the rollout procedure.
 Settings changes have a separate [agent write contract](shuttle-settings-changes.md).
 Account revocation remains a later agent write slice.
 This feature is not a production readiness declaration.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

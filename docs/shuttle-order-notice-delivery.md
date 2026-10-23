@@ -2,21 +2,12 @@
 
 ## Implementation status
 
-Source schema 45 / manifest mvp-44 implements delivery for order payment evidence
-and explicit administrator recovery. Real PostgreSQL and HTTP Telegram/IAM/Loom
-peers verified the component. On 2026-10-17, the owned main stand was updated
-from schema 40 to schema 45 / manifest mvp-44. The same Telegram poller was
-restored after real IAM owner reads. The native proof/review path passed later that day; see the
-[native QA checkpoint](shuttle-order-proof-native-qa-2026-10-17.md). Agent/mixed,
-reservation crash, upstream faults and browser download acceptance remain pending.
-Production readiness is not established. Publication remains on hold.
-
 Native proof forms, reviewer forms and reactive action history already have their
 own source verification; see the [owner context](shuttle-miniapp-order-proof-context.md)
 and [reviewer context](shuttle-miniapp-order-review-context.md). The stored delivery
 lifecycle is described in [the store checkpoint](shuttle-order-notice-delivery-store.md).
 
-## Owned activation checkpoint
+## Compatibility
 
 The bot stopped with exit 0 in 0.70 seconds. A consistent private PostgreSQL dump
 was retained before migration. Existing row contents were unchanged after schemas
@@ -31,12 +22,11 @@ Mini App showed Signed in and the new order-payment controls. This proves launch
 and owner reads, not the remaining proof/review flows or unattended agent behavior.
 
 The first activation verifier incorrectly expected static methods on a dynamic
-manifest descriptor and stopped after candidate startup. Its failure was retained.
-The corrected descriptor and authenticated discovery checks passed on the same
-container, without repeating migration or recreation. The local cutover and its
-owner probe passed independent review. The backup and original Compose chain
+manifest descriptor and stopped after candidate startup.
+Its failure was retained.
+The backup and original Compose chain
 remain the rollback path; restoring a dump after ingress resumes requires preserving
-any later accepted updates. No production deployment or publication occurred.
+any later accepted updates.
 
 ## Worker and business boundaries
 
@@ -108,37 +98,33 @@ Queue metrics and worker duration include the bounded kind
 `order_notifications`; pair delivery also has its explicit component label.
 No IDs, message text or credentials are metric labels.
 
-The accepted Linux Go 1.27.2/PostgreSQL 17 race gate passed 140 roots /287 pass
-events across integration, DB, task, API and observability, with 937 unchanged
-frozen inputs, no failures/skips/OOM. It covers all five states and both audiences,
+It covers all five states and both audiences,
 EN/RU/DST, pending work across service restart, repeated business receipt,
 owner/reviewer deduplication, lost Telegram response, no automatic unknown resend,
 exact authorized retry/dismiss and receipt replay, rollback history refusal,
 role/module loss during IAM wait, IAM outage, known Telegram 429 retry and no
-financial/proactive Loom effects. Existing payment/pair notification/recovery tests
-passed with the shared send path. The original failing JSON-byte assertion and
+financial/proactive Loom effects.
+The original failing JSON-byte assertion and
 lint output are retained separately; the fix compares JSON meaning.
 
 The owner/ambassador producer fixture was then tightened so authority exists before
-admission. Its focused race test and final integration lint passed. Product Go/SQL
-bytes remained identical to the full gate; only that test file changed. The first
+admission.
+Product Go/SQL
+bytes remained identical to the full gate; only that test file changed.
+The first
 focused attempt's language setup was overwritten by normal file Intake metadata;
 that fixture failure is retained and the final language assertion remains strict.
 
-A later [worker subprocess crash/replay gate](shuttle-order-notice-process-qa-2026-10-17.md)
-adds a real force-kill during an observed mock send. Startup quarantines the same
+Startup quarantines the same
 attempt; the exact crashed River job then replays and completes without resend or
-financial effects. Its final three-root race run and integration lint pass. This
+financial effects.
+This
 is separate from full executable graceful shutdown and real Telegram fault QA.
 
-Scoped lint, sqlc compile and reproducible generation passed. Independent
-correctness, quality and final source reviews reported no new actionable findings.
 A baseline syntax objection was rejected using the Go 1.27 compiler and prior race
-proof. Test containers and their exact labeled volume were removed; main container
-fingerprints stayed unchanged. Cleanup's 30-second PostgreSQL observation expired
+proof.
+Cleanup's 30-second PostgreSQL observation expired
 while a checkpoint was finishing; reinspection found natural exit 0 without any
-restart or further signal. That is a retained cleanup observation, not an
+restart or further signal.
+That is a retained cleanup observation, not an
 application graceful-restart test failure.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

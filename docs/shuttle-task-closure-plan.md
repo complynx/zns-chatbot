@@ -64,19 +64,11 @@ blocked pending chunks and rollback if result persistence fails. Manifest/discov
 and native real IAM/Loom exact approval must complete the same method.
 
 The preserving extraction, migration 28, durable proposal store, agent routes and
-manifest discovery are implemented. Focused PostgreSQL race checks cover the
-critical paths above. An HTTP test drops the response after the real handler
+manifest discovery are implemented.
+Focused PostgreSQL race checks cover the
+critical paths above.
+An HTTP test drops the response after the real handler
 commits, then checks status/reconcile after restart without repeating closure.
-The 195-test integration gate and other Go packages passed under the race detector.
-Independent review found a UTF-8 reason-length mismatch. The correction passed
-fresh correctness/quality reviews, strict lint and focused critical-path race
-checks, including a 512-character Cyrillic reason. Native IAM/Loom exact approval,
-restart receipt and previous-binary/schema-28 compatibility passed on the owned
-stand. See the [contract](shuttle-task-closures.md) and
-[dated acceptance boundaries](shuttle-task-closure-qa-2026-10-15.md).
 Settings changes have their own [agent write contract](shuttle-settings-changes.md).
 Account revocation remains a separate agent write slice.
 This plan is not production readiness.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

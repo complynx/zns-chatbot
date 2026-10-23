@@ -51,8 +51,7 @@ Local behavioral race tests cover owner reads, false versus absent payment
 assertions, unsupported/missing entries, privacy exclusions, old projection
 preservation, whole-archive corruption, source/membership mismatch, foreign
 administrators, revocation, Telegram rebinding, cancellation, denied final
-authorization and a one-connection pool. Owned real IAM/API/Loom acceptance also passed; see the
-[QA report and limits](shuttle-history-registration-qa-2026-10-15.md).
+authorization and a one-connection pool.
 This does not establish a full migration or production acceptance.
 
 ## Candidate discovery
@@ -87,14 +86,6 @@ the response, not the amount of archive validation; large sources may time out.
 The method advertises a 256 KiB result ceiling to cover worst-case JSON escaping
 of the bounded keys and fields. Other history methods keep their prior budgets.
 
-Candidate discovery is implemented and accepted on the owned stand. Independent
-source and harness reviews, strict lint, focused race checks and real-IAM/Loom
-discovery/pagination passed. All 259 enumerated integration tests and other Go
-packages have successful race receipts; an initial unrelated notification timeout
-and its diagnostic repetitions remain recorded. See the
-[discovery QA report and limits](shuttle-history-discovery-qa-2026-10-15.md).
 Existing singular-read acceptance above remains historical evidence for that
-earlier scope. Neither acceptance completes production migration.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk
+earlier scope.
+Neither acceptance completes production migration.

@@ -2,11 +2,7 @@
 
 ## Upstream contract
 
-The client follows Loom's [conversational-input contract](https://github.com/complynx/loom/blob/fc6c5747a4359ff94a58071054e124ba1449cc89/docs/conversational-input.md),
-merged in main at fc6c5747a4359ff94a58071054e124ba1449cc89 (PR15). The feature
-commit is72bb68c. The remote main revision and ancestry were verified using an
-isolated bare repository; the Loom developer's checkouts and stands were unchanged.
-The earlier [proposal](loom-conversational-input-proposal.md) is historical.
+The client follows Loom's [conversational-input contract](https://github.com/complynx/loom/blob/fc6c5747a4359ff94a58071054e124ba1449cc89/docs/conversational-input.md).
 
 Run creation requests `interaction.reply_mode=agent`, questions
 `choices_and_text`, and `approvals=true`. The client requires the accepted run to
@@ -72,44 +68,6 @@ parent completion. An HTTP receipt means accepted input, not approved action or
 successful business effect. Questions and approvals can coexist in a run snapshot.
 
 The old implicit native name-reply router and its checkpoint were also removed.
-Review found it could turn a cancellation reply or media caption into a name write.
 Plain name replies now use the same agent path; explicit native writes remain.
-Fresh complete source review found no actionable findings. A separate review of
-the corrected stored-state assertions also passed; observation timestamps are not
-stored user data. The failed name-routing run, caused solely by comparing fresh
+The failed name-routing run, caused solely by comparing fresh
 ObservedAt timestamps, remains in conversation-adapter-name-routing-qa/.
-
-## Acceptance boundary
-
-The source adapter passed25 root scenarios /44 pass events under Linux/race,
-with real PostgreSQL and mock IAM/Loom/Telegram. No failures or skips occurred;
-all805 frozen inputs and ten main-service fingerprints were unchanged. Evidence
-is in ignored .cache/shuttle-work/conversation-adapter-complete-qa/.
-The exact labelled containers and their volume were removed, terminal0/noOOM.
-Database cleanup was immediate SIGQUIT, not graceful-restart acceptance.
-
-Independent source review found two keyboard lifecycle defects: restoring an
-unchanged approval after clarification, and retiring that restored keyboard again.
-Both now use durable presentation revisions. A real-PG failing restoration
-regression is retained in conversation-transition-repro-qa/. The earlier
-conversation-transition-before-fix-qa/ failure was a test helper observing stored
-markup before actual wire delivery; it is not classified as that product defect.
-Earlier passing20/21/22-root snapshots are retained separately and do not replace
-the final25-root evidence. No failed receipt was rewritten as a pass.
-
-The native command boundary is covered by a reserved-command suggestion, native
-profile read without a new Loom input, then steering into the same run with that
-manual action in context. This is transport acceptance, not language interpretation. The later
-[merged runtime gate](shuttle-conversational-runtime-qa-2026-10-16.md) installed the
-port on the owned stand at bot schema36/Loom schema4, after the full Linux/race
-suite. Actual Telegram plain-caption and menu-to-free-text continuation passed
-with a manual provider. The direct probe required same-session auth recovery and
-its report later needed evidence reverification; both limitations are documented.
-RU/EN real-model interpretation and full mixed business/forms paths remain open.
-
-The [archived tagged-keyboard record](history/shuttle-tagged-keyboards-2026-10-16.md)
-preserves previous stand state, failed receipts and recovery evidence. Its parser
-and compatibility expectations were removed from current code/tests deliberately.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

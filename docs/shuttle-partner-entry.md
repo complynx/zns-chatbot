@@ -32,9 +32,4 @@ automatic pairing. Unknown account references are treated as untrusted input;
 intake does not look up or disclose their profiles.
 
 Implementation and acceptance were planned in
-[the bounded implementation plan](shuttle-partner-entry-plan.md). Source tests,
-native service checks and actual Telegram client evidence are separate gates;
-see [QA record](shuttle-partner-entry-qa-2026-10-15.md).
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk
+[the bounded implementation plan](shuttle-partner-entry-plan.md).

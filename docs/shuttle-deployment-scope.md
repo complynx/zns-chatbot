@@ -30,6 +30,3 @@ Restoring the original deployment completes that delivery.
 Private APIs independently scope subject lookup by bot/organization and reject
 foreign-bot revocation. This defence does not promise concurrent multi-bot workers
 in one schema; use separate schemas/databases for separate deployments.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

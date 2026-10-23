@@ -1,16 +1,5 @@
 # Shared and event knowledge
 
-Status: architecture agreed; store and agent API are implemented in source.
-Native interfaces and a selected desktop browser path are accepted separately;
-whole-feature acceptance remains open. Exact prepared-operation native-to-agent
-adoption has a [reproduced contract gap](shuttle-loom-native-operation-adoption.md); see the
-[foundation evidence](shuttle-knowledge-foundation-2026-10-20.md).
-This document defines target behavior; the foundation evidence tracks implemented
-and accepted scope.
-Shuttle is the rewrite codename; the service and agent identity remain zinusya.
-This is communal published knowledge, separate from private imported user
-conversation history in `zinusya_history`.
-
 ## Two collections, one storage service
 
 Use PostgreSQL and the existing authenticated API/tool protocol. Do not add a
@@ -63,9 +52,6 @@ unknown filters are errors, never silently ignored. Refine or broaden explicitly
 Multiple queries share one scope, deduplicate article/section matches and retain
 which query matched. Reads use stable article/revision references across restarts.
 No embedding/model call is required for indexing, search or read availability.
-
-The [retrieval/tool research](shuttle-knowledge-tool-research-2026-10-20.md)
-separates source observations, agent preferences and the chosen initial contract.
 
 For an event-specific question, the agent searches that event first. It may
 separately search general reference or history, but must identify historical
@@ -172,6 +158,3 @@ Required behavior gates:
 8. Independent correctness/security and quality reviews pass, then owned
    real-IAM/Loom/mock-Telegram QA exercises ordinary user plus distinct moderator
    and event administrators. Record failures and cleanup temporary containers.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk

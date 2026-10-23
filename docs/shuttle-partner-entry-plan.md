@@ -50,10 +50,8 @@ durable prompt context across duplicate intake, IAM/Loom outage, uncertain creat
 restart and active-run steering/question input. Reuse the current test harness.
 
 Complete the explicit invitation/target acceptance path and prove unrelated users
-cannot accept. Use independent review loops, focused/full race checks and lint.
+cannot accept.
 Owned real IAM/Loom acceptance and an actual Telegram Web link opening must be
 reported separately; a synthetic webhook or standalone Loom run cannot prove
-client behavior. Existing CA/WebView and financial-policy questions remain deferred.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk
+client behavior.
+Existing CA/WebView and financial-policy questions remain deferred.

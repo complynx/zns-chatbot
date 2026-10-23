@@ -1,13 +1,6 @@
 # Avatar delivery administration in Mini App
 
-Schema59 / manifest mvp68 adds native administrator HTTP operations and bounded
-reactive history. The [operator form](shuttle-avatar-admin-ui.md) passed its
-source/browser gate. [Owned real-IAM/Loom repair handoffs](shuttle-avatar-admin-runtime-qa-2026-10-19.md)
-now also pass in both directions, including a normal restart with measured
-SIGTERM shutdown of0.672s. Telegram
-and model responses were controlled fixtures, as described in that QA record.
-The installed primary remains schema49/mvp56. The mvp68 candidate is built and
-retained; it has not replaced that primary.
+The native administrator API resolves saved avatar delivery intents and exposes bounded reactive history.
 
 ## Authorization and transactions
 
@@ -102,6 +95,3 @@ silently wait on an active avatar writer before later guards. Any nonempty nativ
 action history blocks rollback. Export and separately authorize deliberate
 removal before reverting; no automatic discard/cascade is provided. Historical
 avatar rollback tests include the new migration in dependency order.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk

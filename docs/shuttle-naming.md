@@ -37,6 +37,3 @@ SQL table names, River job kind, advisory-lock names and operation/delivery keys
 retain their existing shuttle identifiers. They are storage contracts: changing
 them could strand queued jobs, break mutual exclusion or repeat effects. No SQL
 rename or destructive migration is needed. Completed task/history data remains.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

@@ -1,14 +1,5 @@
 # Next orders slice: durable selection draft
 
-Status: selected engineering boundary after independent architecture and senior Go
-consultations. Store, owner agent API, Mini App session API, ru/en form and manual context are implemented; see the
-[current contract and evidence](shuttle-orders-selection.md). They are installed
-on the owned runtime at schema38. [Four-path runtime QA](shuttle-orders-selection-qa-2026-10-16.md)
-passes with actual Telegram/real IAM/Loom, direct form APIs and a manual provider.
-Trusted WebView and unattended model acceptance remain open. Full order submission, the separate
-meal workflow and massage bookings remain roadmap work. Pending D12/D13 questions
-are retained in the ignored decisions file; this document does not answer them.
-
 ## Completed outcome to build
 
 An entitled user can choose an event, select quantities, obtain an exact server
@@ -91,18 +82,16 @@ claim that direct form API probes close it.
 ## Acceptance before advancing to submission
 
 Complete the saved-selection workflow with form-only (Loom stopped), agent-only,
-form-to-agent and agent-to-form paths. Check switching while the agent waits,
+form-to-agent and agent-to-form paths.
+Check switching while the agent waits,
 repeated saves/clear, reload and restart, lost replies before/after commit, original
 historical receipt after newer edits, two-tab and agent/form CAS conflicts, changed
 catalog/event versions, offer closing and DST, absent complete pricing, wrong owner,
 foreign event, waitlist-only access, disabled module and revoked/expired sessions.
 Prove zero submitted orders, reservations, passes or money effects and unchanged
-old rows/receipts. Run focused behavioral checks, independent review loops, current
-docs and real owned-stand QA. Manual provider proof is not unattended model proof.
+old rows/receipts.
+Manual provider proof is not unattended model proof.
 
 The full /orders submit/proof/capacity lifecycle, separate /menu save/proof locks,
 admin financial operations and massage bookings remain explicitly unfinished after
 this draft slice. D12/D13 answers and their implementation gates still apply.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

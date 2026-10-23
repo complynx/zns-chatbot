@@ -2,33 +2,23 @@
 
 ## Implemented boundary
 
-The bot now wires [provider proof verification](shuttle-telegram-prelink-verifier.md),
-[durable receipts](shuttle-telegram-prelink-storage.md) and the
-[IAM link adapter](shuttle-telegram-link-qa-2026-10-16.md) through one private
-`POST /internal/identity/telegram-prelink`. It is registered only on the internal
-handler when startup configuration is complete. It is absent from the public
-handler and agent tool manifest. This is service authentication infrastructure,
+It is registered only on the internal
+handler when startup configuration is complete.
+It is absent from the public
+handler and agent tool manifest.
+This is service authentication infrastructure,
 not an operation a user or agent can invoke using an IAM/app bearer.
 
 The [isolated zitadeltg hook](shuttle-zitadeltg-prelink-provider.md) has reviewed
-source and Linux/race component checks. The [private TLS route](shuttle-prelink-route-qa-2026-10-16.md)
-has isolated and owned-gateway acceptance. [Candidate image gates](shuttle-prelink-images-qa-2026-10-16.md)
-and [native provider/API/real-IAM fixture paths](shuttle-prelink-combined-qa-2026-10-16.md)
-now pass with synthetic Telegram proof and a final-relay stub. [A synchronized
-concurrency/outage fixture](shuttle-prelink-resilience-qa-2026-10-16.md) adds the stated
-native gates. The [main owned bot image/schema33 cutover](shuttle-prelink-main-qa-2026-10-16.md)
-now passes with the prelink endpoint still disabled. Main provider/backend
-activation and real interactive login remain open. The original
+source and Linux/race component checks.
+Main provider/backend
+activation and real interactive login remain open.
+The original
 checks below use real PostgreSQL and HTTP IAM/Loom peers; the separate native
 fixture linked above adds real IAM for the stated endpoint/provider paths, not
 real Telegram or final IAM login-session acceptance.
 
 ## Startup and caller contract
-
-The later [synthetic-proof/real-IAM acceptance](shuttle-prelink-real-iam-qa-2026-10-22.md)
-also completes actual IAM OIDC authorization and Mini App identity reconciliation
-in both orders, without an IAM registration/link form. It uses synthetic Telegram
-proofs; activation and final real-Telegram browser acceptance remain separate.
 
 `telegram_prelink` in config.yaml has five fields: `issuer`, `jwks_url`,
 `audience`, `provider_id`, `service_bearer`. All empty disables the endpoint;
@@ -52,12 +42,13 @@ is returned or logged by the handler.
 
 The provider caller must use server-authenticated TLS and refuse redirects.
 The internal handler permits TLS termination at a reviewed private gateway; it
-does not infer TLS trust from forwarded headers. Configuring HTTPS proof/JWKS URLs
-does not secure the caller-to-bot connection. Do not enable this endpoint through
-the public IAM/app entrypoints or a public plain-HTTP port. The reviewed gateway
-now has a separate unpublished identity listener. The scoped
-[combined provider-client/API fixture](shuttle-prelink-combined-qa-2026-10-16.md)
-passes; reviewed main provider/backend activation remains separate.
+does not infer TLS trust from forwarded headers.
+Configuring HTTPS proof/JWKS URLs
+does not secure the caller-to-bot connection.
+Do not enable this endpoint through
+the public IAM/app entrypoints or a public plain-HTTP port.
+The reviewed gateway
+now has a separate unpublished identity listener.
 
 ## Request and response
 
@@ -115,51 +106,37 @@ No automatic unlink, merge or remote-role revocation is introduced.
 
 ## Behavioral verification and evidence
 
-Windows API/config/command package checks pass. Strict lint across API, config,
-command and integration packages reports zero issues. Existing event-context
+Existing event-context
 schema-test lint findings were fixed by extracting schema setup, formatting and
 making independent subtests parallel; assertions and fixed event time remain.
 
-Two first-pass independent reviews found the test IAM fixture decoded a bare link
-instead of the real `idpLink` envelope. The first real-PG run confirmed failed
-happy paths. A separate one-slot test fixture also restarted the full task engine,
+A separate one-slot test fixture also restarted the full task engine,
 whose persistent instance-lock connection exhausted that pool before the intended
-HTTP scenario. The separate [task startup guard](shuttle-task-pool-startup.md) now rejects
-a one-connection task-engine configuration before taking an instance lease. This
+HTTP scenario.
+The separate [task startup guard](shuttle-task-pool-startup.md) now rejects
+a one-connection task-engine configuration before taking an instance lease.
+This
 endpoint-only pool test does not claim the whole engine can run on one connection.
 Source and pg_stat_activity identified the fixture deadlock; the
-exact owned runner was explicitly stopped, ending 137 with OOM false. These logs
+exact owned runner was explicitly stopped, ending 137 with OOM false.
+These logs
 remain failed evidence, not accepted results.
 
-The corrected fixture decodes/validates the actual IAM envelope. The one-slot
+The one-slot
 check runs the endpoint with a stopped intake service, leaving its sole connection
-available for the business transaction under test. A fresh source review found no
-actionable issue. A clean disposable DB retry passed all eight new root tests.
+available for the business transaction under test.
 
-Final Linux race checks passed the complete API/config/command packages and all
-14 prelink/Mini App integration roots: 37 root tests and 101 root/subtest pass
-events overall, no failures. The only skip is the command package's
+The only skip is the command package's
 `TestWatchdogHelper`, an intended child-process entrypoint; integration has no
-skips. Covered paths include all three initial entry orders, simultaneous first
+skips.
+Covered paths include all three initial entry orders, simultaneous first
 login, lost IAM write and committed HTTP replies, recreated API recovery, IAM
 outage with pending intent, pending/completed local revoke, changed digest,
 foreign opaque ownership and real one-connection DB availability during IAM HTTP.
 This is scoped regression evidence, not a rerun of the complete integration suite.
 
-Ignored evidence: `.cache/shuttle-work/prelink-endpoint-qa/`, including both initial
-failure/stop and accepted retry logs, final race stream, terminal/cgroup state,
-source hashes and preservation checks. Accepted runners exited 0 with OOM false
-and zero memory max/oom/oom_kill counters. Exact owned Go and PostgreSQL containers
-were removed after capture. No test volume was persisted; no host port/network
-was created. Existing Go caches were reused. During that endpoint-only QA, main stand business/count hashes, schema32 and
-app/IAM/Loom/PostgreSQL/gateway IDs/start times remained unchanged.
-
-The provider/TLS connection now has the scoped native fixture acceptance linked
-above. The synchronized concurrency/outage fixture also passes. Next is a
-[main provider/backend activation](shuttle-prelink-main-qa-2026-10-16.md);
-the main bot image/schema33 cutover now passes with prelink disabled. Final IAM session-cookie relay,
+The synchronized concurrency/outage fixture also passes.
+Final IAM session-cookie relay,
 real Telegram Web Login credentials and CA trust/browser navigation remain
-separate interactive gates. No production deploy, commit or push occurred.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk
+separate interactive gates.
+No production deploy, commit or push occurred.

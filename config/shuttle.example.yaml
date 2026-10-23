@@ -10,7 +10,7 @@ shutdown_timeout: 1s
 mini_app_origin: ""
 # The launch link defaults to mini_app_origin + /app/. Production needs one URL.
 # Local real-Telegram redirect overrides belong only in test configuration;
-# see docs/shuttle-miniapp-local-launch-qa-2026-10-16.md.
+# see docs/shuttle-miniapp.md.
 # Empty fields disable the private provider prelink endpoint. Set all together.
 # Use SHUTTLE_TELEGRAM_PRELINK_* env variables for these startup values.
 # Audience must differ from IAM API/Loom audiences. The provider must use the same

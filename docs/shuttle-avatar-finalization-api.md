@@ -1,14 +1,7 @@
 # Saved-draft avatar finalization API
 
-Source schema57 / manifest mvp65 implements common owner-only native and agent
-finalization, operation recovery, delivery status and JPEG access. It uses the
-existing immutable artifact and task-free River delivery intent. No migration,
-new dependency, event or active Loom run is required. The installed primary is
-still schema49/mvp56; this source has not been installed there or in production.
-
 The [native Generate/send UI](shuttle-avatar-send-ui.md) is implemented and has
-isolated browser proof. [Owned real IAM/Loom runtime QA](shuttle-avatar-runtime-qa-2026-10-19.md)
-now passes all four paths; actual Telegram and unattended model acceptance remain open.
+isolated browser proof.
 
 ## Finalize and reconcile
 
@@ -90,9 +83,11 @@ retention/discard policy remains a separate pre-production decision.
 
 The existing native action stream combines completed draft edits and native
 finalizations, then applies the task-created cutoff, deterministic ordering and
-limit5. Finalization entries include original draft version and artifact/delivery
-locators. Agent-origin admission remains agent-origin after a native replay.
-Neither a native finalization nor its history creates a Loom run. The next user
+limit5.
+Finalization entries include original draft version and artifact/delivery
+locators.
+Agent-origin admission remains agent-origin after a native replay.
+The next user
 request can inspect current draft/delivery state and continue from either path.
 History is untrusted metadata, not instructions or consent to generate/resend.
 
@@ -100,17 +95,12 @@ Focused proof uses isolated real PostgreSQL/River and mock IAM/Telegram/Loom pee
 It covers both HTTP directions, immutable receipt replay after edits and renderer
 outage, current owner/session guards, concurrent identical requests, edits/session
 expiry during rendering, metadata/download isolation, native action history and
-actual document delivery with Loom unavailable. Review identified a concurrent
+actual document delivery with Loom unavailable.
+Review identified a concurrent
 commit/edit/render-failure race; a controlled test first reproduced the incorrect
-409 response before the reconciliation fix. Failed fixture attempts remain in
-separate evidence directories. Final command results and hashes are recorded in
-`.cache/shuttle-work/avatar-finalization-api-v1-qa/source-gate.json`.
+409 response before the reconciliation fix.
+Failed fixture attempts remain in
+separate evidence directories.
 
 The native Generate/send UI now includes owner-bound pending-operation recovery.
-[Owned runtime/browser QA](shuttle-avatar-runtime-qa-2026-10-19.md) now passes native-only,
-agent-only and both handoffs with real IAM/Loom and a deterministic provider.
 Actual Telegram WebView, unattended model and production readiness remain open.
-No publication or primary/production installation is claimed.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk

@@ -4,13 +4,6 @@ The prepared [Prometheus rules](../deploy/shuttle/observability/alerts.yaml) use
 existing private metrics. They add no application code, schema, service, database
 query or public endpoint. They are not installed in Grafana Cloud by this change.
 
-The supported target is one deployment-wide scrape with
-`job="integrations/zinusya", instance="complynx.net"`, as in the
-[server rollout](shuttle-server-rollout.md). Change both exact labels in the rules,
-tests and Alloy configuration together for another deployment. Do not scrape the
-same deployment through both old and new job names or sum duplicate snapshots.
-The internal River kind `shuttle_task` remains unchanged for durable compatibility.
-
 ## Conditions and response
 
 All thresholds are initial operational defaults, not business deadlines or SLOs.
@@ -48,59 +41,13 @@ business latency, or prove the five-second hard shutdown ceiling. A process
 killed before the next scrape cannot report a final histogram reliably; shutdown
 deadline acceptance and log/container-based detection remain separate work.
 
-## Local and CI validation
+## Local validation
 
-The test-only tool is official Prometheus/promtool 3.15.0, pinned to the same
-image digest used by the Loom observability validation:
+Use the Prometheus promtool version pinned by CI. From the repository root, check the rule syntax and run its synthetic behavior cases:
 
 ```sh
-docker run --rm --network none --read-only --memory 128m --memory-swap 128m \
-  --cpus 1 --pids-limit 64 --cap-drop ALL --security-opt no-new-privileges \
-  --tmpfs /tmp:rw,noexec,nosuid,size=16m -e GOMEMLIMIT=80MiB \
-  --mount "type=bind,source=$PWD/deploy/shuttle/observability,target=/rules,readonly" \
-  --workdir /rules --entrypoint /bin/sh \
-  prom/prometheus@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e \
-  -ec '/bin/promtool check rules alerts.yaml; /bin/promtool test rules alerts.test.yaml'
+promtool check rules deploy/shuttle/observability/alerts.yaml
+promtool test rules deploy/shuttle/observability/alerts.test.yaml
 ```
 
-Run from the repository root on Linux; PowerShell uses a resolved absolute mount
-path instead of `$PWD/...` and its own line continuation. The image is downloaded
-before the network-disabled test container starts. It is not part of the bot
-image or Go dependency graph. Prometheus is Apache-2.0 licensed; see its
-[versioned license](https://github.com/prometheus/prometheus/blob/v3.15.0/LICENSE).
-
-The [behavior cases](../deploy/shuttle/observability/alerts.test.yaml) exercise
-holds and recovery, empty snapshots, intentional user wait, missing target,
-missing/failed/never-successful/stale collection, independent target labels,
-uncertainty, all three due states and threshold/count boundaries. Promtool uses
-synthetic time; it does not wait minutes in real time. The CI workflow runs the
-same commands. No new full Go-suite pass or cloud notification delivery is implied.
-
-## Server activation gate
-
-Keep the existing Alloy Docker logs pipeline and `metrics_service` remote write.
-After authorized pilot deployment, verify the single private scrape and exact
-job/instance labels in Grafana Cloud. The old rollout job spelling was only an
-example; if an operator has deployed it, coordinate the rename and avoid running
-both targets concurrently. Confirm the metric names and freshness before enabling
-rules.
-
-Upload the rules to the selected Grafana Cloud Prometheus/Mimir ruler namespace
-using the stack's existing operator tooling; the rule file alone is not a running
-alert service. Grafana documents [mimirtool rule provisioning](https://grafana.com/docs/grafana-cloud/observe-and-act/alert-and-measure-reliability/alerting/set-up/provision-alerting-resources/use-mimirtool/).
-Review existing rules and namespace ownership first. This change supplies no
-Cloud credentials and does not install another Prometheus on the server.
-
-Configure a deliberate notification route/contact point and verify a synthetic
-firing and resolved notification with the operator before claiming alert delivery.
-No external message or Cloud rule is created during local acceptance. Record
-the namespace, installed rule revision, chosen thresholds and contact policy in
-deployment evidence. Rollback removes only this named `zinusya` rule group from
-its chosen namespace; it does not alter unrelated Loom rules or the log pipeline.
-
-Prometheus [alerting semantics](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/)
-and [rule-test format](https://prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/)
-are the source contracts for hold intervals and tests.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk
+The [behavior cases](../deploy/shuttle/observability/alerts.test.yaml) cover holds/recovery, empty or missing snapshots, intentional user wait, stale collection, independent labels, uncertainty and due-state thresholds. Synthetic time does not require real-time waiting. Rule validation does not prove notification delivery; that requires a separate configured environment check.

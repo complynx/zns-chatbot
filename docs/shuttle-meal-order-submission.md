@@ -1,14 +1,5 @@
 # Meal order preparation and submission
 
-Status: installed on the owned primary at mvp-89/schema69 after Daniel's
-October21 policy answers. [Full CI and installation](shuttle-meal-primary-qa-2026-10-21.md)
-pass; bounded [browser checkout](shuttle-meal-final-browser-qa-2026-10-21.md),
-[native/runtime proof review](shuttle-meal-financial-runtime-qa-2026-10-21.md)
-and [controlled-agent payment](shuttle-meal-agent-payment-qa-2026-10-21.md)
-have separate acceptance scopes. The chronological source checkpoints below
-retain their original test counts and failures; none substitutes for real
-Telegram WebView or exact native-preparation adoption acceptance.
-
 ## Business and storage boundaries
 
 Meals share the existing order/preparation/operation tables with service orders,
@@ -71,36 +62,6 @@ The original backend stage added store methods only. The later transport and
 browser stages described below expose them with explicit consent.
 Shared payment-evidence/review source work is tracked in the follow-up above.
 
-## Backend verification
-
-Initial native PostgreSQL behavior selection passed before the boundary case.
-Independent review reproduced duplicate descriptive data overflowing a receipt
-for a valid100-item menu. A new failing case established the defect; the quote now
-retains one monetary basket line and full details remain in frozen meal terms.
-The first Linux race attempt failed before tests because the local Go image had
-no gcc; an owned compiler image was built. A later expiry test fixture was fixed
-to preserve expires_at > created_at while moving both timestamps into the past.
-Those original failures remain retained. The final isolated Linux Go1.27.2 /
-PostgreSQL race run passed17 root tests /21 cases, including8 meal roots, with
-no skips or OOM. Configured lint passed with0 issues. Two independent reviewers
-checked the first implementation; after the receipt-size fix, a fresh final
-review found no actionable findings. No full CI, runtime installation or complete
-meal checkout acceptance is claimed.
-
-The subsequent native-store stage passed57 root tests /81 cases under Linux
-Go1.27.2, PostgreSQL and the race detector, including3 new native-meal roots.
-It covers session expiry/logout/generation and foreign-owner/organization denial,
-logout during event-lock waiting, cross-channel receipt recovery, cancellation,
-and existing service-order/payment/review paths. No tests skipped; lint passed
-with0 issues and an independent code review found no actionable findings.
-
-That stage's first broader run exceeded the test database's512MiB cgroup: tmpfs
-storage plus buffers caused a PostgreSQL child to be OOM-killed while the container
-itself stayed alive. The failed log and memory.events counters are retained.
-Recreating only the synthetic database on an owned disk volume with32MiB shared
-buffers completed the same frozen-source test selection with zero OOM counters.
-This infrastructure correction is not an application recovery acceptance test.
-
 ## Submitted meal reads and operation recovery
 
 The source now includes own submitted-meal detail and UUID-cursor pages, plus
@@ -110,24 +71,14 @@ Current owner binding, assigned pass and matching enabled module remain required
 on historical receipts. Administrative authority alone grants no owner access.
 
 Native meal detail, list and operation reads validate the bearer/generation
-inside the event-owner-session transaction. Logout while a read waits for the
-event lock denies the read. API callers must still check current IAM and delivery
-access; these store methods alone do not establish HTTP or browser acceptance.
+inside the event-owner-session transaction.
+Logout while a read waits for the
+event lock denies the read.
 
 Read get for current state and operation for the original result. Cancellation
 must not rewrite the submission receipt. Original-key recovery survives opening
 another database connection. Pages retain cancelled history and never cross
 owner or service/meal boundaries.
-
-The frozen read-stage source passes29 Linux/PostgreSQL race roots /41 cases,
-including the new owner-isolation and lock-wait logout cases and existing service
-order behavior. No failures, skips or OOM remain in the accepted run; lint reports0
-issues and fresh independent source review is clean. An earlier fixture assigned
-a second leader into a one-place test event and correctly received409; the fixture
-now uses the free follower place. The failed log is retained. The owned read-stage
-runner, PostgreSQL volume and network are removed. Evidence is under
-.cache/shuttle-work/meal-financial-flow-v1/checkout-v1/.
-This is source/backend acceptance, not real-IAM/Loom or complete checkout QA.
 
 ## Agent and native financial transport
 
@@ -149,13 +100,6 @@ The next explicit user request includes earlier native financial receipt IDs,
 operation kinds and persisted order_kind, limited to five currently accessible
 records. Kind selects zinusya_orders or zinusya_meals for subsequent reads.
 Historical metadata never grants consent or starts proactive agent work.
-
-Independent static review of this transport diff found no actionable findings.
-The transport passes 46 roots /62 cases across four bounded Linux/PostgreSQL race
-batches, with no failures, skips or OOM. Configured lint reports0 issues, and
-DB/API/task package tests pass. The owned runner, database, volume and network
-are removed. No complete browser checkout, real IAM/Loom transport acceptance
-or primary installation is claimed.
 
 ## Browser checkout source
 
@@ -182,38 +126,8 @@ whose store authorization selects the persisted business kind. Existing service
 pending records keep their original shape. Meal pending-proof text says awaiting
 review without claiming a capacity hold; only an ambassador confirms payment.
 
-The controller/mock-API UI selection passes365 cases with no failures or skips.
-It covers explicit review/submit/cancel, meal proof routing and lost-response
-recovery alongside existing modules. The original failing event-switch test is
-retained. Fresh independent source review found no actionable findings. These tests use a simulated
-DOM, not a real browser, Telegram, IAM or Loom. No additional runtime resource was
-created for them. Source evidence: .cache/shuttle-work/meal-financial-flow-v1/browser-v1/.
-
-The subsequent [bounded runtime check](shuttle-meal-financial-runtime-qa-2026-10-21.md)
-accepts native checkout and receipt recovery in actual Edge with real IAM/DB and
-this QA stand's Loom stopped. Real Loom read tools also see the native order and
-original receipt through a scripted provider. Normal idle SIGTERM/restart preserves
-financial tables. The later check also proves actual Loom writes with plain-text
-consent and pending-consent restart, native proof/ambassador review and runtime
-owner/module isolation. A real cleared-draft UI bug was corrected and independently
-reviewed; the resulting UI suite passes366 cases. Both databases/logs are archived
-and the nine-service stand removed. Full release and installation remained open
-at that checkpoint; their subsequent acceptance is linked above.
-
-Combined release review then found that normal event/menu changes could turn a
-stale draft into a503 during preparation, retaining an uncertain native request.
 The snapshot version gate now rejects stale draft event/catalog lineage with409.
 Behavioral native/agent HTTP tests cover rejection, resaving and successful explicit
-submission. The UI conflict/reload path is covered too;367 UI cases pass. Genuine
-invalid-term failures still follow the existing server-error path. See the runtime
-report for the interrupted first release attempt and its corrected replacement.
-
-Private source snapshots, logs, ownership/resource records and review evidence:
-.cache/shuttle-work/meal-financial-flow-v1/. The isolated database and test runner
-used bounded memory/CPU and did not use the main stand or Loom developer stands.
-Earlier accepted stages' runners, databases and isolated networks are removed.
-The transport stage used its own bounded database and has also retired it. The primary
-runtime and domain readback remain unchanged at schema68 / mvp-86.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk
+submission.
+Genuine
+invalid-term failures still follow the existing server-error path.

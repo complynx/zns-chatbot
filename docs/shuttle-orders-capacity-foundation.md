@@ -1,8 +1,9 @@
 # Order resource configuration and frozen requirements
 
-Status: component-verified source, not activated on the owned live stand.
-Manifest revision is mvp-41; schema remains40. No dependency or migration is added.
-This foundation configures requirements and stores their approved snapshot. Order
+Manifest revision is mvp-41; schema remains40.
+No dependency or migration is added.
+This foundation configures requirements and stores their approved snapshot.
+Order
 proof intake, evidence-owned allocations, authority review and exhaustion notices
 remain the next lifecycle stage; neither admission nor production readiness is
 claimed here.
@@ -61,40 +62,3 @@ RU/EN, or explicitly say requirements are unknown/none. These interfaces continu
 to state that submission reserves nothing and confirms no payment. A zero ceiling
 therefore does not prevent submission. Availability checks belong at admission of
 payment evidence, not at catalog read or order submission.
-
-## Verification and remaining acceptance
-
-A frozen Linux/race gate with real disposable PostgreSQL passed65 root tests and
-148 pass events:39 integration roots/59 events,13 task roots/42 events and13
-orders roots/47 events. No failures, skips or OOM; all880 frozen source inputs
-remained unchanged. Cases include additive/deduplicated resource use, unknown vs
-empty, copy/canonicalization and size bounds, real admin configuration, retained
-IDs, frozen requirements after catalog edits/reopening, original-operation replay
-and full catalog rollback/retry when receipt insertion fails. Existing native,
-agent, conversational and authorization cases remain included.
-
-All68 Node UI tests passed, including immutable resource history, RU labels and
-malformed requirements blocking consent. The first result-summary parser expected
-TAP, while Node emitted its spec format; the existing successful log was reparsed
-without rerunning tests. Scoped orders/db/api/task/integration lint has0 issues.
-Initial lint reported repeated schema strings; the final diff reuses constants.
-Two independent initial reviews and one fresh final textual review found no
-actionable findings; those reviewers executed no tests.
-
-Evidence: .cache/shuttle-work/order-capacity-foundation-v1-qa/ contains frozen
-inputs, exact expected roots, JSONL results, UI log/summary and cleanup receipts.
-Exact temporary containers and volume were removed, and all ten owned live
-service fingerprints stayed unchanged. The live bot remains on its earlier
-image; existing Telegram QA does not prove these new fields or unattended model
-interpretation. D04 publication hold remains in force.
-
-The later [schema41 evidence store](shuttle-order-evidence-store.md) now implements
-evidence-ID allocations, current ceilings, cross-pass/order provenance and exact
-authority review in a separately tested store component. This report records the
-earlier schema40 foundation gate, not new-field live acceptance. Agent/native
-APIs, delivery with current-recipient checks, shared interactions and owned-stand
-acceptance still remain before evidence intake can be activated. D23 unresolved
-financial/mixed-resource rules remain separate; this foundation selects none.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

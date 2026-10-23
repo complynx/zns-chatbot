@@ -1,8 +1,7 @@
 # Avatar delivery resolution — administrator API
 
 Schema59 / manifest mvp68 includes explicit, eventless administrator resolution
-for saved-draft avatar intents through agent tools and the native administrator API. The installed
-primary remains schema49/mvp56; this source has not been installed there or in production.
+for saved-draft avatar intents through agent tools and the native administrator API.
 The worker and finalization APIs are separate stages.
 
 ## Prepare, confirm and audit
@@ -75,8 +74,9 @@ missing or expired exact proposal returns a terminal rejected result; malformed
 operation/key/confirmation is HTTP400. Missing diagnostic rows are HTTP404.
 
 Status returns not_found while a resolution has no completed result, including a
-prepared-only operation. This does not mean the avatar document was not delivered.
-It means there is no committed resolution result for this actor/operation. Retry
+prepared-only operation.
+This does not mean the avatar document was not delivered.
+Retry
 or reconcile the same exact operation; never infer permission to generate another
 avatar or resend under a new operation from that response.
 
@@ -95,19 +95,14 @@ recipient rebinding during approval and rollback evidence protection. These use
 isolated real PostgreSQL and mock Telegram/IAM peers. Final command results and
 source hashes belong to the ignored source gate, not this source description.
 
-Ignored store evidence: `.cache/shuttle-work/avatar-repair-v1-qa/`.
-HTTP and manifest evidence: `.cache/shuttle-work/avatar-repair-api-v1-qa/`.
-Independent correctness and quality reviewers inspect the textual diff. No real
-Telegram, production mutation, publication or installed-image acceptance is
-claimed by those component gates. [Owned real IAM/Loom repair runtime QA](shuttle-avatar-repair-runtime-qa-2026-10-19.md)
-now passes exact presented approval, retry/dismiss, current nonadmin denials, audit,
-replay and normal bot restart. It uses mock Telegram and a deterministic provider;
-actual Telegram and unattended model acceptance remain separate. Native/operator
-repair UI remains open. The [four-way finalization gate](shuttle-avatar-runtime-qa-2026-10-19.md)
-is a distinct accepted workflow.
-The [native Generate/send UI](shuttle-avatar-send-ui.md) now has isolated browser proof. [Shared finalization APIs and native action metadata](shuttle-avatar-finalization-api.md)
+Independent correctness and quality reviewers inspect the textual diff.
+It uses mock Telegram and a deterministic provider;
+actual Telegram and unattended model acceptance remain separate.
+Native/operator
+repair UI remains open.
+The [native Generate/send UI](shuttle-avatar-send-ui.md) now has isolated browser proof.
+[Shared finalization APIs and native action metadata](shuttle-avatar-finalization-api.md)
 are now implemented separately.
-
 
 ## Recovering an administrator proposal
 
@@ -171,6 +166,3 @@ and refuses any nonempty alias history, including completed aliases. Export and
 separately authorize deliberate removal before reverting; no automatic discard
 or cascade is provided. Empty Up/Down and preservation of existing proposals are
 covered by the isolated PostgreSQL migration checks.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk

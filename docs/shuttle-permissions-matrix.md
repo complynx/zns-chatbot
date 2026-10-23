@@ -1,16 +1,6 @@
 # Матрица прав Shuttle / Зинуси
 
-Состояние контракта: 2026-10-23. Документ составлен по текущему коду, SQL,
-manifest и тестам. Он не подтверждает существующие production grants и не
-разрешает их менять. Следующий пользовательский этап — **локальный реальный
-тестовый бот**, затем согласованный deployment; отдельный server pilot не нужен.
-Старые команды и серверные значения из [server rollout](shuttle-server-rollout.md)
-не являются актуальной конфигурацией или разрешением на запуск.
-
-Обозначения: **реализовано** — проверяется приложением; **настроить** — требуется
-конфигурация окружения; **решение оператора** — нужно выбрать конкретных людей,
-организацию, проекты или владельца секрета. Таблицы описывают полномочия, а не
-обещание, что каждая комбинация ролей проходила отдельный runtime-тест.
+Матрица описывает прикладные права и повторные проверки. Конкретные назначения людей и конфигурация окружения ведутся отдельно.
 
 ## 1. Где определяется доступ
 
@@ -124,86 +114,3 @@ order/meal evidence использует свою модульную грани�
 `internal/api/authorities.go`, `internal/db/authorities.go`,
 `internal/api/knowledge_manifest.go`, `internal/db/knowledge_targets.go`,
 `internal/api/massage_binding_manifest.go`, `internal/api/miniapp_massage_bindings.go`.
-
-## 6. Точные IAM / Loom ключи и служебные identities
-
-| Identity / компонент | Нужные настройки и ключи | Запрет / статус |
-| --- | --- | --- |
-| Делегированный человеческий user | Правильные issuer, organization, `sub`, API audience; при Loom-вызовах — также Loom audience. Если JWT содержит `act`, его `sub` должен соответствовать настроенному service actor; subject/actor должны совпадать с introspection. User-specific business grants берутся из человека. | API не требует `act` у всякого обычного пользовательского JWT, но проверяет его при наличии. Подпись/expiry/active/project claims обязательны. Service subject не допускается вместо человека в business API. |
-| Человек — app main admin | API-project role key `zinusya.admin`; Loom-project role/mapping `zinusya.admin: [zinusya.admin]` для admin module visibility | Реализовано: API независимо проверяет API-project introspection claim `urn:zitadel:iam:org:project:<API-project-id>:roles`. Mapping не создаёт user grant. |
-| Shuttle service actor | Отдельный machine user/credential. В Loom — `identity.service_subjects` с точным subject и role→permissions mapping для `runs.create`, `runs.control`, `chat.read`, `chat.events.append`, `artifacts.read`, `artifacts.write`. | Это точные шесть manifest caller permissions. Имя IAM caller-role настраиваемое: например, `zinusya-caller`; fixture использует `zinusya.service`. Harness-права не дают бизнес-права главного администратора; caller-role не назначается всем людям. |
-| Shuttle actor в IAM | Для используемых provisioning/link/profile/token-exchange операций. Принятый bounded local runtime использовал **`ORG_USER_MANAGER` + `ORG_END_USER_IMPERSONATOR`**, без `ORG_OWNER`. | Настроить именно service actor, не людей приложения. Fixture с `ORG_OWNER` не является минимальным production шаблоном. Issuer, actor, project/client IDs и secrets — init config. |
-| Обслуживание IAM-администраторов через impersonation | IAM4.20 отдельно требует actor privilege `admin.impersonation`; принятый changed-path gate показал разрешение с `ORG_ADMIN_IMPERSONATOR`. | Это нужно, если выбранный human subject имеет IAM management membership. App `zinusya.admin` сам по себе такого членства не создаёт. По умолчанию не расширять actor до admin impersonation без такого конкретного назначения. |
-| Shuttle actor credentials | `ActorClientCredentials`: `grant_type=client_credentials` получает service actor token. Используется `scopes(true)`: `openid`, `urn:zitadel:iam:user:resourceowner`, `urn:zitadel:iam:org:projects:roles`, audience scopes обоих проектов и дополнительный `urn:zitadel:iam:org:project:id:zitadel:aud`. | Настроить actor credential/client для этого grant отдельно от exchange client. IAM organization privileges и Loom caller grant принадлежат service actor; OAuth scopes сами их не создают. Credentials и полученный actor token остаются server-side. |
-| Shuttle exchange client | Отдельные `ExchangeClientCredentials`: только используемый здесь `grant_type=urn:ietf:params:oauth:grant-type:token-exchange`. Передаются пользовательский subject как `subject_token` типа `user_id`, полученный service token как `actor_token`, `requested_token_type=jwt`, обе аудитории и `scopes(false)` без дополнительного IAM management audience. | Не предлагать этому client grant `client_credentials` по данному контракту. Он аутентифицирует запрос exchange, а полномочия impersonation проверяются у actor. Не отдавать credentials браузеру/модели. После expiry код снова выполняет exchange; refresh-token grant не используется. |
-| Shuttle API introspection client | Настроенный confidential introspection client; API проверяет роли **точного API project**, даже если client по ошибке другого проекта | Плоский role claim и роль другого project не повышают права. Точное значение audience/project и role assertion нужно проверить в реальном окружении. |
-| Loom introspection / broker | Свой Loom-project client; caller actor + manifest harness rights; delegated user для business permission checks; trusted service discovery binding | Loom видимость метода не заменяет current backend authorization. `zinusya.admin` permission фильтрует administrative module; остальные owner/event checks остаются на target API. |
-| ZitadelTG prelink | Отдельный private hook `/internal/identity/telegram-prelink`, dedicated bearer, issuer/JWKS/audience/provider ID; подписанный короткоживущий assertion и bot/user binding | Prelink audience отличается от API/Loom audience; hook key не совпадает с webhook/Mini App token. Это не `zinusya.admin`, не general API bearer, не grant к БД/модели. Требования собственной конфигурации ZitadelTG/IdP проверяются отдельно; `ORG_OWNER` из Shuttle-кода для него не следует. |
-| Model / ASR provider | Только Loom/его разрешённый paid-tool boundary; отдельные credentials, model/budget/dispatch policy | Не выдавать model key worker, Mini App, Telegram клиенту или всем контейнерам. Local ASR stub proof не доказывает качество/биллинг реального ASR provider. |
-
-Источники: `internal/api/manifest.go:manifest`,
-`internal/api/server.go:authorizeIdentity`, `internal/identity/client.go:scopes`,
-`internal/identity/users.go`, `internal/identity/links.go`,
-`internal/api/telegram_prelink.go`,
-[IAM4.20 boundaries](shuttle-iam420-delta-qa-2026-10-22.md),
-[локальная интеграция с scoped actor](shuttle-local-pilot-qa-2026-10-23.md).
-Последний отчёт — повторно используемое доказательство, не предложение нового
-server pilot.
-
-## 7. PostgreSQL, OS и сеть
-
-| Субъект | Минимальная выбранная граница | Что не выдавать | Реализация / deployment |
-| --- | --- | --- | --- |
-| `shuttle_migrator` | Отдельный LOGIN; владелец своей application DB/схемы; Goose/River migrations в отдельном release step | `SUPERUSER`, `CREATEDB`, `CREATEROLE` для постоянной работы; runtime membership в migrator | Рекомендуемое разделение уже принято в локальной интеграции. Это не автоматически создаваемые приложением production roles. |
-| `shuttle_runtime` | CONNECT + TEMPORARY на свою DB; USAGE схемы; SELECT/INSERT/UPDATE/DELETE application tables; USAGE/SELECT/UPDATE sequences; соответствующие default privileges для новых объектов | Владение постоянной схемой, CREATE в public, migrator role, права на другие DB, role/grant management | TEMPORARY нужен historical staging. Runtime DML — технический доступ сервиса ко всей своей DB, не PostgreSQL RLS по конечным участникам. Owner/event ACL обеспечивает приложение. |
-| Loom DB role | Отдельная Loom DB и отдельно контролируемые migration/runtime credentials | Права на Shuttle/Zitadel DB и reuse их runtime password | Применять собственный контракт Loom; не выводить его полные SQL grants из Shuttle `shuttle_runtime`. |
-| Zitadel DB role | Собственная Zitadel DB/credentials и отдельно ограниченный bootstrap/migration | Общая superuser credential в Shuttle/Loom runtime | Организационные IAM роли людей не соответствуют SQL login roles. |
-| Backup/restore оператор | Читать защищённые archives; делать full decode/восстановление только в разрешённую цель | Публичное хранилище backup, общий доступ к decrypt keys, восстановление в production «для проверки» | Backup содержит PII, историю и IAM данные. Защищать до записи, хранить отдельно от публичных receipts; recovery — отдельное разрешённое действие. |
-| Shuttle process | Linux UID/GID `10001:10001`, read-only root и ограниченные ресурсы по выбранному Compose; доступ только к нужным init secrets/CA | Docker socket, host root/SSH key, migrator password, provider API key без необходимости | UID задан Dockerfile; read-only/resource/network policy задаётся deployment. Сам бинарник не выставляет контейнерные ACL. |
-| Sandbox / file worker | Изолированные processes, file worker без network/secrets/Docker socket; Unix processing socket, bounded tmpfs/CPU/memory/PIDs | IAM/admin/Telegram/model credentials, host mounts с чужой БД/историей | `deploy/shuttle/test/files.compose.yaml` — принятый пример resource boundary; реальные параметры фиксировать в deployment inputs. |
-| Docker discovery proxy | Только необходимая read-only discovery поверхность между Loom и Docker | Прямой Docker socket у Loom/модели/worker; произвольный Docker admin API | Docker socket остаётся мощным host boundary; его изоляция — ответственность оператора, не application role. |
-| Public ingress | TLS; только выбранные webhook и `/app/` routes, health по policy | `/internal/`, prelink, private metrics, DB, Loom operator API в публичном роутере | Prelink только доверенный private backchannel. Webhook secret и Mini App verified init data/session не заменять одним публичным bearer. |
-| Internal connectivity | Только нужные связи Shuttle↔IAM/Loom/PostgreSQL/Telegram и Loom↔discovered Shuttle/worker; collector↔private telemetry | Общие широкие сети и неограниченные host ports как «права admin» | Для локального реального бота разрешённый Telegram/network egress фиксируется отдельно. No-egress QA fixture не является production network шаблоном. |
-| OS/SSH/Docker оператор | Отдельный доверенный технический администратор с явным scope действий | Автоматическое назначение ему app admin или app admin → SSH/root | Возможность читать DB/ключи или менять контейнер обходит application ACL; минимизировать этот круг, аудитировать действия отдельно. |
-
-SQL-разделение и grants описаны в [существующем rollout draft](shuttle-server-rollout.md#3-отдельная-база-и-роли).
-Там же есть исторические серверные/pilot параметры: их нельзя переносить как
-актуальные адреса или автоматически исполняемые команды. Существующие таблицы и
-новые миграции требуют проверки owner/default privileges; один `ALTER DEFAULT
-PRIVILEGES` не выдаёт права уже созданным таблицам.
-
-## 8. Проверки, которые уже закрепляют границы
-
-| Граница | Точные source/test anchors |
-| --- | --- |
-| API project role, не чужой/flat role | `internal/identity/client_test.go:TestAuthorizationRolesBelongToConfiguredAPIProject`; `internal/api/server.go:authorizeIdentity` |
-| Event grant/revoke/version/expiry/current actor | `integration/authorities_test.go:TestEventAuthorityGrantRevokeReplayAndRestart`, `TestEventAuthorityRejectsStaleChangedAndForeignRequests`, `TestExpiredAuthorityApprovalHasNoEffectAndActorCannotBorrowProposal` |
-| Платежи и конкурентный overcredit | `integration/payments_test.go:TestPaymentEvidenceNeedsHumanConfirmationAndSupportsTopUp`; `integration/payment_api_test.go:TestConcurrentPaymentConfirmationsCannotOvercredit` |
-| Current role и native/agent admin proposal | `integration/miniapp_assignment_api_test.go:TestMiniAppAssignmentHTTPProtectsActorOwnedProposalsAndCurrentRole` |
-| Moderator отделён от автора/отозванного права | `integration/knowledge_test.go:TestKnowledgeSuggestionRequiresDistinctModeratorAndReplaysOriginalResult`, `TestKnowledgeRevokedModeratorCannotCommitPreparedEdit` |
-| Staff без пасса, собственные контакты и текущий grant | `integration/massage_staff_reads_test.go:TestMassageStaffWithoutPassSharesEventTimetableAndPrivateOwnClients`, `TestMassageStaffReadSurvivesModuleDisableButNotAccessRevocation`, `TestMassageStaffRechecksGrantAndSessionAfterEventLockWait` |
-| Scoped IAM actor и ограниченный PostgreSQL runtime | [Локальный acceptance report](shuttle-local-pilot-qa-2026-10-23.md), разделы Exact runtime и Observed integration |
-
-Это ссылки на существующие доказательства. При составлении матрицы тесты,
-серверные запросы, Docker, IAM API и модель не запускались. Реальную текущую
-конфигурацию нужных grants/introspection проверяют в согласованном локальном
-реальном test-bot этапе; весь ранее принятый бизнес-набор повторять не требуется.
-
-## 9. Что нужно решить оператору
-
-| Решение | Что конкретно требуется | Технический default |
-| --- | --- | --- |
-| Первый главный администратор и резервный администратор | Имена/канонические IAM subjects конкретных людей; кто имеет право выдавать/отзывать IAM project grants | Явные grants API + Loom; не всем участникам, без `ORG_OWNER` для human app admin. |
-| Отдельный ли это IAM management user | Будут ли обслуживаемые через бота люди одновременно иметь IAM management membership | Для обычных identities actor `ORG_USER_MANAGER` + `ORG_END_USER_IMPERSONATOR`; admin impersonation добавлять лишь при подтверждённой необходимости и отдельном рассмотрении риска. |
-| Платёжная ответственность | Для каждого события: кто принимает/сверяет деньги и кто получает `ambassador` / `administrator` | Минимально нужные локальные роли на конкретное событие; не заменять их global admin ради удобства. Backend не подтверждает банковский факт автоматически. |
-| Specialist / moderator assignments | Кто именно связан с каким event specialist alias; кто редактирует общую/историческую базу знаний | Выдавать отдельно через exact-confirmation API; сохранённая роль/публичное имя не являются доказательством текущего права. |
-| Локальный реальный тестовый бот | Точный bot ID, разрешённые Telegram recipients, IAM organization/projects и ответственный за их secrets | Отдельная привязка deployment, нормальная TLS verification, private internal routes, утверждённые реальные отправки. Не запускать server pilot. |
-| Хранители secrets и backup | Кто имеет файловый/SQL/restore доступ и где защищённо хранятся key/archives | Отдельные runtime/migration credentials, защищённые private files до записи, без публикации raw history или раскрытия секретов в плане. |
-
-Неопределённость здесь — **список конкретных назначений и конфигурация выбранного
-окружения**, а не необходимость изобрести новые роли. Матрица не утверждает, что
-эти production grants уже настроены, и не разрешает SQL, IAM, SSH, deployment или
-реальные сообщения без отдельного согласованного шага.
-
-Written by Codex (gpt-6.1-sol/Codex desktop)
-on behalf of Daniel Drizhuk

@@ -57,18 +57,16 @@ ownership, module availability, versions, deadlines and human confirmation at ex
 
 ## Current acceptance boundary
 
-The owned runtime now serves manifest `mvp-21`; schema remains 22. Architecture and
-Go consultations preceded development. Independent correctness, quality and
-privacy/protocol reviews found no remaining issues. Focused behavior checks cover
+Architecture and
+Go consultations preceded development.
+Focused behavior checks cover
 pending/confirmed amounts, deposit-to-top-up transitions, overdue expectations,
 owner isolation/revocation, pagination, one-connection reads, DST and saved retry
-payloads. The final complete explicit-package race run passed (integration 224.723 s),
-and the application linter reported zero issues.
+payloads.
 
-The first complete run caught an obsolete discovery-test method count after the
-new method was added. The test now checks exact method IDs for owner and event
-authority; the failure log is retained. The subsequent focused and complete runs
-passed. It was a test expectation failure, not a native payment failure.
+The test now checks exact method IDs for owner and event
+authority; the failure log is retained.
+It was a test expectation failure, not a native payment failure.
 
 Owned real IAM/Loom/Telegram acceptance used two synthetic assigned passes and a
 pending name request. An unrelated message left them unchanged. A fresh ambiguous
@@ -87,6 +85,3 @@ image in this native scenario; focused behavior and prior avatar QA are separate
 evidence. Browser CA/zitadeltg and production acceptance remain separate gates.
 
 No dependency, migration, new waiting table or proactive scheduler was introduced.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

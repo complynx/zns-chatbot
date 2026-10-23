@@ -2,21 +2,13 @@
 
 The candidate exposes the reviewed order store through the `zinusya_orders`
 module, now at source manifest revision `mvp-41` with the additive
-[resource/demand contract](shuttle-orders-capacity-foundation.md). The original
-agent component gate below covered `mvp-40`. This is the agent HTTP component of the
+[resource/demand contract](shuttle-orders-capacity-foundation.md).
+This is the agent HTTP component of the
 [submission plan](shuttle-orders-submission-plan.md), using the
-[shared store](shuttle-orders-submission-store.md). The [native transaction/context component](shuttle-miniapp-order-submission-store.md)
-has passed its own gate. Native
-[HTTP](shuttle-miniapp-order-submission-http.md) and
-[UI](shuttle-miniapp-order-submission-ui.md) components also have separate gates;
-actual owned-stand submitted-unpaid four-path acceptance has since passed, as
-recorded in [the real QA report](shuttle-orders-submission-real-qa-2026-10-17.md).
+[shared store](shuttle-orders-submission-store.md).
 The new sold service/resource fields still have component-only acceptance.
-At this agent component gate, the owned main stand was at schema39, manifest `mvp-39` and image
-`sha256:e6c429ba15abb5cc5782ddb066581cda6456a41f70be96e8e37db714aedd2170`.
-The later owned schema40 activation, native-only, agent-only and both mixed
-actual Telegram paths are in `shuttle-orders-submission-real-qa-2026-10-17.md`.
-Agent paths used real Loom with a manual provider. Production is not activated.
+Agent paths used real Loom with a manual provider.
+Production is not activated.
 
 ## Routes and approval
 
@@ -85,49 +77,3 @@ next complete order does not fit, the page returns a cursor equal to the last
 included order. Clients must follow `next` even when the page contains fewer
 than the requested count. Snapshots are not truncated or reduced to summaries.
 One oversized stored record fails safely instead of silently skipping history.
-
-## Verification and remaining acceptance
-
-The first API run passed 29 roots/31 events with Linux/race and real PostgreSQL.
-Independent correctness review then identified that twenty full snapshots could
-exceed the manifest's 64KiB result budget. That passing evidence is retained in
-`.cache/shuttle-work/orders-submission-api-v1-qa/`; it did not cover large pages.
-The API now applies the byte budget and cursor rule above.
-
-The final gate passed 30 roots/32 events, zero failures and zero skips, on real
-PostgreSQL with the race detector. It includes the store/edge cases, new HTTP
-approval/recovery/access/manifest/language checks, saved-selection HTTP recovery
-and registration-details schema/access checks. Status responses are asserted
-against the original effect response, including after cancellation. Invalid or
-missing exact approval, mismatched idempotency, foreign ownership and changed
-operation bodies are rejected. The list test creates 21 orders with forty long
-bilingual item labels each, proves its unbounded page exceeds 64KiB, then follows
-all byte-bounded HTTP pages and verifies all 21 complete snapshots exactly once.
-
-A fresh independent textual review after the fix reported no actionable
-findings. The separate quality reviewer also found no actionable issue. Initial
-lint findings were corrected before the frozen final gate; the final scoped API,
-DB and integration lint run reported zero issues. Host compilation passed before
-the final gate. The final manifest froze 865 source inputs, unchanged across the
-run. Evidence is in `.cache/shuttle-work/orders-submission-api-v2-qa/`.
-
-The test container used a 2GiB memory limit without swap, 2CPU, Go memory limit
-384MiB and two test cases in parallel. It exited zero without OOM. Both API QA
-pairs and their dedicated PostgreSQL volumes were removed. All ten main service
-IDs, images, start times and restart counts remained unchanged. No commit, push,
-PR, publication or production deployment was performed; the Git index is empty.
-
-This gate uses the HTTP test harness and mock identity peers. It is not real
-Loom approval, real-model or actual Telegram acceptance. Native HTTP protections
-and recovery now have a separate component gate documented in
-`shuttle-miniapp-order-submission-http.md`; native form behavior has a component
-gate in `shuttle-miniapp-order-submission-ui.md`. At that original gate, the four
-real Telegram paths and restart recovery were still pending. The four paths
-subsequently passed in `shuttle-orders-submission-real-qa-2026-10-17.md`; controlled
-lost-response/clean bot restart passed in
-`shuttle-orders-response-loss-real-qa-2026-10-17.md`. Hard-kill acceptance remains
-required. Full order proof/capacity/payment/meal behavior and new-field live
-acceptance remain later work. No production-readiness claim is made.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

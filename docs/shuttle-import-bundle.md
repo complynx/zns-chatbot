@@ -86,20 +86,13 @@ temporary file from the operator-controlled output directory. A temporary file
 is never promoted as a valid archive during restart or retry. This CLI does not
 claim cleanup after SIGKILL or power-loss durability of directory metadata.
 
-## Acceptance — 2026-10-14
+## Acceptance
 
 Architect and Go consultations agreed the single-stream design before development.
 Behavioral tests cover exact raw bytes and source manifest, round-trip inspection,
 repeatability across directories, private-data exclusion from receipts, changed
 source checksums, rejected oversized input, existing destination preservation,
 temporary cleanup and exactly one concurrent publisher.
-
-Independent correctness, quality/usability and filesystem/privacy reviews ran in
-two rounds. They found and fixed validation-limit failures masking the inspection
-report and silent temporary cleanup failures. A regular-file check was also added
-before opening a manifest. All three fresh final reviewers reported no actionable
-findings. Focused Linux race tests passed for the CLI and full inspector package;
-lint reported zero issues. This adds no dependencies or runtime schema/API changes.
 
 Native Linux acceptance used nonroot UID 10001, no network, a read-only root and
 source mounts, a private `0700` tmpfs output directory and a 128 MiB memory limit.
@@ -112,11 +105,12 @@ All original input hashes stayed unchanged.
 
 The synthetic test archive was 1087 bytes with SHA-256
 `b770d575726b55c3a65b9e760570baef1784cc73027139b4538612b0ff58cc5c`
-on both tested platforms. A separate real NTFS delete-denied test proved cleanup
-warnings for both published and validation-rejected archives. It preserved the
+on both tested platforms.
+A separate real NTFS delete-denied test proved cleanup
+warnings for both published and validation-rejected archives.
+It preserved the
 published receipt, left rejected input unpublished, and then restored the QA ACL
-and removed all residual test files. Detailed proofs remain in ignored
-`.cache/shuttle-work/import-bundle-native/proof.json` and `cleanup-fault-proof.json`.
+and removed all residual test files.
 
 Receiving validation is described separately in the
 [receiver contract](shuttle-import-receiving.md). The acceptance above concerns
@@ -126,6 +120,3 @@ Only synthetic local exports were used. There was no production data read, live
 IAM/Telegram operation, bot image rollout, applied data migration or GitHub CI run
 for this slice. Controlled archive loading, identity reconciliation and owner-scoped
 historical reads are next; historical payment claims must never become ledger credit.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

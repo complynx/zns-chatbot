@@ -2364,7 +2364,5 @@
       "pin_source": "Go proxy VCS origin"
     }
   ],
-  "supplemental_audits": [
-    "docs/dependency-audit/2026-10-14-avatars/selection.json"
-  ]
+  "supplemental_audits": []
 }

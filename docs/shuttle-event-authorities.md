@@ -58,24 +58,12 @@ migration. Earlier binaries cannot expose or enforce these new roles.
 Behavioral PostgreSQL tests cover preparation without grant, owner reads, roleless
 self-escalation denial, event isolation, revoke/replay/restart, changed arguments,
 stale versions, revoked/foreign targets, expiry, foreign actors and competing
-changes. Review snapshots and runtime evidence are recorded in the ignored local
-work directory. Final bounded serial golangci-lint exited 0 with 0 issues.
-Three fresh independent source reviewers found no actionable issues. Full Linux
-race tests passed (integration 29.479s); named container
-zinusya-authorities-complete-qa-20261013 exited 0. The first full run exposed a test
-expectation that allowed only one administrative write. A subsequent run exposed
-an anonymous Huma confirmation-schema collision with context selection. A distinct
-named confirmation type fixed that conflict; the original failures are retained.
+changes.
 
-Native real-IAM/Loom acceptance passed on the owned seal fixture: exact approval
-showed event/user/role, preparation granted no authority, the broker committed one
-grant, owner reads reflected it, roleless escalation was denied, and revocation
-changed current authority. An actual bot restart preserved the current revoked
-role and original receipts even after proposal expiry. Evidence:
-.cache/shuttle-live-test/native-authorities-proof.json. The provider was the manual
-scenario mailbox; no real Telegram messages were sent. Migration 00011 was applied
+An actual bot restart preserved the current revoked
+role and original receipts even after proposal expiry.
+The provider was the manual
+scenario mailbox; no real Telegram messages were sent.
+Migration 00011 was applied
 explicitly after an initial 503 from its absence; that failure is not rewritten
 as successful pre-migration behavior.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

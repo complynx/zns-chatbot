@@ -91,27 +91,9 @@ ambiguous encodings; exact concurrent retries and a different nonce; lost IAM
 create/activation responses; simultaneous bot/web first login; restart; revoked
 or changed binding; token-generation changes; absolute expiry/logout tombstones;
 pool-size-one operation; origin/auth-scheme separation and absence of IAM secrets.
-Source review loops, strict lint and bounded Linux race tests precede native QA.
 
 Owned real Zitadel QA can use a locally signed fixture for only the authorized
 current Telegram ID, without changing Loom developer stands. Clearly label that
 as a synthetic signature, not Telegram-issued initData. A real Telegram launch,
 iframe storage and actual initData acceptance remain separate gates after Daniel's
 local CA trust step. This does not require changing production or zitadeltg first.
-
-## Proof primitive checkpoint
-
-Three fresh correctness/security/quality reviews found no actionable issue in the
-proof/credential diff. A fixed HMAC fixture generated independently with Python
-passes; behavior checks reject altered/wrong-bot/stale/future proofs, duplicate
-query/JSON fields, malformed encodings and invalid IDs. Canonical reordered input
-keeps the same proof digest. Credential tests cover deterministic retries,
-different bot/session/nonce inputs, key rotation and strict nonce encoding. Linux
-unit tests and race tests passed; final lint reported zero issues. The first unit
-run failed because its expected `time.Unix` value retained a Local zone pointer;
-the assertion now explicitly expects UTC. This was a test correction, not a change
-to proof freshness. HTTP, stored replay/expiry/revocation and real IAM/Telegram
-acceptance are not established by these primitives.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

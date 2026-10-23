@@ -1,17 +1,9 @@
 # Payment review workspace agent API
 
-Current acceptance: [four real Telegram happy paths](shuttle-payment-review-real-qa-2026-10-16.md)
-pass with real IAM/Loom and a manual provider. Embedded critical paths, UI
+Embedded critical paths, UI
 follow-ups and unattended model behavior remain open.
 
-The agent adapter for the [shared store](shuttle-payment-review-workspaces.md) is
-implemented and component-verified. This adds five dynamically discovered methods
-and nine HTTP routes. The [local launch rollout](shuttle-miniapp-local-launch-qa-2026-10-16.md)
-installed manifest mvp-39/schema39 on the owned runtime. The native HTTP/session
-adapter also passes component checks. The [reviewer UI](shuttle-miniapp-payment-review-form.md) now passes source
-component checks and is installed with native entry and reactive context on the
-current owned candidate. Real-service happy paths pass with a manual provider;
-embedded critical paths and unattended model acceptance remain open.
+The agent API exposes [shared review workspaces](shuttle-payment-review-workspaces.md) to authorized reviewers. Native and agent decisions retain the same canonical revision, consent and receipt.
 
 ## Contract
 
@@ -59,37 +51,23 @@ canonical domain gate still prevents old review entry from bypassing cancellatio
 
 ## Component evidence and limits
 
-The broader Linux/race gate passed the exact expected 51 roots/73 pass events over
-integration, payments, API, database and task packages. API package had no matching
-roots; new HTTP coverage is in four integration scenarios. They cover exact money
+API package had no matching
+roots; new HTTP coverage is in four integration scenarios.
+They cover exact money
 approval/discovery schema, pending/no credit, current reads, parameter rejection,
 commit/status replay, missing status uncertainty, store-to-HTTP canonical recovery,
-cancellation, database expiry and role revocation. The store-side alias is a test
+cancellation, database expiry and role revocation.
+The store-side alias is a test
 of the shared seam, not a real native form or Telegram/Loom run.
 
 After that pass, only the new manifest source changed: workspace_id and 128 literals
-became equal named constants. Four HTTP integration roots passed again under Linux
-race on the final831-input snapshot; other selected packages compiled with no matching
-roots. This is a scoped final proof, not another 51-root run. Final API/database/
-integration lint passed with zero issues. Initial lint failures remain in the first
-API proof directory. Four fresh independent source reviews found no actionable findings.
+became equal named constants.
 
-Both disposable PostgreSQL/Go container pairs and database volumes were removed;
-the ten main containers retained IDs/images/start times/restart counts/running state.
-Limits were 512MiB PostgreSQL and2GiB Go without extra swap, with no OOM. No commit,
-push, PR, runtime activation or production deployment was performed during this
-component gate. The later owned schema39 rollout is recorded above.
-
-Retained receipts:
-- .cache/shuttle-work/payment-review-api-qa/checkpoint.json: broader51-root gate.
-- .cache/shuttle-work/payment-review-api-final-qa/proof.json: final4-root gate,
-  manifests, lint and the exact distinction between source snapshots.
+Limits were 512MiB PostgreSQL and2GiB Go without extra swap, with no OOM.
+The later owned schema39 rollout is recorded above.
 
 The later native store and HTTP adapter provide transactional session checks,
 receipts and protected proof download. The reviewer form, native menu and bounded
 reactive context are installed. Four happy paths now pass in the real Telegram
 iframe with real IAM/Loom and a manual provider. Embedded critical paths, UI
 follow-ups and unattended model behavior remain open.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk

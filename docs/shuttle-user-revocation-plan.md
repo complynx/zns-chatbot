@@ -56,23 +56,15 @@ already-revoked fresh auditing, expiry after waits, actor/scope denial, atomic
 rollback, simultaneous reciprocal and self revocations, original result after
 target changes/restart, actual lost PostgreSQL COMMIT acknowledgment with cache
 invalidation, and lost self-response recovery by another active administrator.
-Verify the existing operator path and permission-filtered discovery. Finish with
-fresh source/documentation review loops and bounded real IAM/Loom approval on the
-owned stand. Populated proposal/result audit must survive binary rollback and
+Verify the existing operator path and permission-filtered discovery.
+Populated proposal/result audit must survive binary rollback and
 block destructive schema downgrade.
 
 The store and agent API are implemented in source, including migration 30,
-the revoke tool and the receipt diagnostic. Focused behavioral race checks and
-fresh store/API correctness and quality reviews passed. The full 221-scenario
-integration race gate, other Go packages and strict lint passed. Native
-real-service acceptance also passed, including owner denial after self-revocation,
-other-administrator receipt recovery and binary rollback with schema 30 retained.
+the revoke tool and the receipt diagnostic.
 The owner self-revocation run paused before its next model turn and was cancelled
-for cleanup; no final model completion is claimed. See the
+for cleanup; no final model completion is claimed.
+See the
 [implemented contract and verification boundary](shuttle-user-revocations.md).
-The [QA record](shuttle-user-revocation-qa-2026-10-15.md) retains the harness failures
-and exact acceptance limits. The accepted stand is schema 30 / manifest `mvp-29`.
+The accepted stand is schema 30 / manifest `mvp-29`.
 No production changes are implied.
-
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk
