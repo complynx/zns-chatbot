@@ -7,8 +7,15 @@ human login/audio acceptance and Daniel's bounded real-API walkthrough, followed
 by a separately authorized direct production cutover. The
 [deployment plan](shuttle-production-deployment-plan.md) and
 [permissions matrix](shuttle-permissions-matrix.md) describe that route; the new
-local human testbot has not yet been started. Merge, image publication and
-production changes remain unauthorized.
+local human testbot is running on app035f/imagebf138, IAM4.20 and published
+provider8864, with five services and a separate organization/restricted app DB role.
+The retained local IAM database was restored into the isolated clone. Canonical
+TLS/provider routes and the Mini App launch are ready; only the two old local
+listeners were gracefully stopped, retaining their storage/configuration/cursor.
+Daniel has a personal testbot launch menu. Before human login, read-only runtime-role
+observation finds zero users/sessions/tasks/inbox/outbox. Real Telegram-signed
+bootstrap remains pending; Loom, polling and paid model ingress are disabled.
+Merge, image publication and production changes remain unauthorized.
 
 One separately authorized real ASR request returned HTTP200. The unchanged native
 Loom adapter accepted the selected recording's transcript and duration receipt;

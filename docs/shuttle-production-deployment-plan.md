@@ -11,7 +11,7 @@ production cutover сейчас не разрешены. Статус проду
 
 | Артефакт | Проверенное значение / граница |
 | --- | --- |
-| PR22 HEAD | `d4be43daad86dff08fd01ecc9869e5fe72bd4540`; локально совпадает. Сохранённая CI39951533174 содержит6 success jobs именно для этого SHA. Перед публикацией повторно сверить HEAD/CI. |
+| Проверенный checkpoint PR22 | `7b54cb29e254fdaa2f7b4f5f1a827ea800dc71f1`; remote HEAD подтверждён перед этим дополнением. CI39968014604 содержит6 success jobs именно для этого SHA. Перед release повторно сверить новый HEAD/CI. |
 | App build source | `035f2a6b0356effff75f3dfce0c776d7551c706a`; tracked context SHA256 `6bc1bf6d9b1df21bae56ea394c1b4190fa9a8b928b5c47de3f259c34337ea2c6`. |
 | Local image ID | `sha256:bf1383e85fafd2d328437d1787420cb778c2b4f90ddd01806f62f4c8361a5fbe`; Linux/amd64, UID/GID10001. **Не registry digest**, не опубликован. Нельзя превращать его в вымышленный `complynx/shuttle@sha256:…`. |
 | Build-input delta | `git diff 035f2a6b… HEAD -- cmd internal migrations deploy/shuttle/Dockerfile go.mod go.sum` пуст. При новом build-input delta привязать новый image и проверить только затронутые gates. |
@@ -51,6 +51,25 @@ Deployment journal и effect lock имеют одного владельца; п
 не исполняют эффекты над тем же ботом/проектом.
 
 ## 3. L0–L3: локальная человеческая приёмка
+
+Текущий L0: локальный testbot поднят на app035f/imagebf138, IAM4.20 и published
+provider8864; пять сервисов, отдельная организация и ограниченная runtime role.
+Сохранённая локальная IAM DB действительно восстановлена в отдельный clone.
+Canonical app18382, IAM28443 и Telegram443 проверены; прежние app/gateway
+штатно остановлены с сохранением storage/config/cursor. Персональная кнопка
+Daniel «Открыть Зинусю» настроена, exact URL readback прошёл. Runtime-role
+read-only baseline до входа: users/sessions/tasks/inbox/outbox0. L1 ещё не принят:
+реальный signed bootstrap Daniel не наблюдался. Loom и polling не запущены,
+платная модель не подключена. Один разрешённый ASR уже использован.
+
+Первый app-controller остановился на лишнем chmod после успешного копирования
+ключа. Read-only проверка установила исходные bytes hash, UID100/GID101 и0600;
+отдельное проверенное продолжение приняло это состояние без recopy/нового IAM
+provisioning. Original FAIL сохранён. Известный internal-only host-bind риск
+Docker Desktop устранён до continuation: app остаётся во внутренней сети,
+публичный app-порт обслуживает gateway frontend. Финальный handoff прошёл
+проверку очереди до/после graceful stop и сохранил два terminal outbox receipts.
+
 
 Root inventory указал старый `shuttle-live-test` с остановленными Telegram guard/poller
 и отдельный `zinusya-zns-identity-v1` (gateway/IAM/provider/PG, local login28443,
