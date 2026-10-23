@@ -36,7 +36,7 @@ Evidence: `.cache/shuttle-work/parallel-acceptance-20261022/file-source-qa/build
 | Фаза | Владелец | Действие / разрешение Daniel |
 | --- | --- | --- |
 | L0 | Локальный агент | Read-only inventory старых стендов, owner/journal/version guards, reviewed reuse. Не replay старого setup. |
-| L1/L2 | Локальный агент + Daniel | Подготовить настоящий test-bot login; Daniel входит. Daniel выбрал `C:/Users/ddriz/Downloads/Untitled.opus`; после прямого согласия на exact audio/endpoint original ASR завершился HTTP200, использован1/1 без retry. Native Loom adapter принял text и provider usage duration10s. Human Telegram login/voice ingress ещё pending. Второй paid call через Telegram не требуется. |
+| L1/L2 | Локальный агент + Daniel | Real Mini App bootstrap и настройки приняты. Отдельный OIDC завершился после manual recovery; чистый возврат после phone confirmation открыт в ZitadelTG12. Daniel выбрал `C:/Users/ddriz/Downloads/Untitled.opus`; original ASR завершился HTTP200, использован1/1 без retry; native adapter принял text и usage duration10s. Real voice ingress и долговременный ASR reuse (Loom36) остаются открыты. Второй paid ASR не требуется. |
 | L3 | Локальный агент + Daniel | Только после L1/L2 PASS включить реальный API для walkthrough. Нужны новый bounded budget/расходы; дополнительная автономная серия не подразумевается. |
 | P0 | Release agent | Конкретный release change-set/review можно готовить; merge и publication требуют явного разрешения. |
 | P1/P2 | Серверный оператор | Production provisioning/config/backup/restore только после разрешения конкретного reviewed набора, включая private data scope и paths. |
@@ -58,9 +58,14 @@ provider8864; пять сервисов, отдельная организаци
 Canonical app18382, IAM28443 и Telegram443 проверены; прежние app/gateway
 штатно остановлены с сохранением storage/config/cursor. Персональная кнопка
 Daniel «Открыть Зинусю» настроена, exact URL readback прошёл. Runtime-role
-read-only baseline до входа: users/sessions/tasks/inbox/outbox0. L1 ещё не принят:
-реальный signed bootstrap Daniel не наблюдался. Loom и polling не запущены,
-платная модель не подключена. Один разрешённый ASR уже использован.
+read-only baseline до входа: users/sessions/tasks/inbox/outbox0. Последующая
+реальная Mini App приёмка принята: bootstrap, профиль/язык, logout текущей сессии
+и повторный вход. Отдельный OIDC принят только с manual recovery; новая попытка
+зависла после подтверждения на телефоне. [Real Telegram QA](shuttle-real-telegram-qa-2026-10-23.md)
+фиксирует границы и открытый ZitadelTG12. Loom и polling не запущены,
+платная модель не подключена. Один разрешённый ASR уже использован; новый
+release gate Loom36 требует сохранять полный текст независимо от temporary bytes
+и возвращать его без повторного распознавания/оплаты.
 
 Первый app-controller остановился на лишнем chmod после успешного копирования
 ключа. Read-only проверка установила исходные bytes hash, UID100/GID101 и0600;

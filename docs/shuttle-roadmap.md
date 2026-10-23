@@ -12,9 +12,13 @@ provider8864, with five services and a separate organization/restricted app DB r
 The retained local IAM database was restored into the isolated clone. Canonical
 TLS/provider routes and the Mini App launch are ready; only the two old local
 listeners were gracefully stopped, retaining their storage/configuration/cursor.
-Daniel has a personal testbot launch menu. Before human login, read-only runtime-role
-observation finds zero users/sessions/tasks/inbox/outbox. Real Telegram-signed
-bootstrap remains pending; Loom, polling and paid model ingress are disabled.
+Daniel has a personal testbot launch menu. Real Telegram-signed Mini App bootstrap,
+profile/language persistence, current-session logout and reopening are accepted.
+Separate provider OIDC completed after a manual GET of the existing IAM request;
+a fresh phone-confirmed attempt remained on `Waiting for Telegram...`. Clean
+return navigation remains open in [ZitadelTG issue12](https://github.com/complynx/zitadeltg/issues/12).
+See [real Telegram QA](shuttle-real-telegram-qa-2026-10-23.md) for exact scope and
+preserved failure boundaries. Loom, polling and paid model ingress are disabled.
 Merge, image publication and production changes remain unauthorized.
 
 One separately authorized real ASR request returned HTTP200. The unchanged native
@@ -22,6 +26,12 @@ Loom adapter accepted the selected recording's transcript and duration receipt;
 the one-call allowance is exhausted, without retries. This adds provider adapter
 evidence to the existing synthetic full consumer proof, not a real Telegram run.
 See [audio QA](shuttle-audio-transcription-qa-2026-10-23.md).
+
+Daniel's new ASR requirement is not met by accepted Loom: full transcripts must
+survive temporary source/WAV expiry and restart, and an already processed file
+must reuse its text without another ASR request or charge. [Loom issue36](https://github.com/complynx/loom/issues/36)
+owns this release gate. Verify the local fix with a stub/counter, not another paid
+ASR request; a longer artifact TTL alone does not meet the requirement.
 
 Six additional real `gpt-6-luna/low` language probes also pass: Portuguese with
 Russian/English prompt locale and after synthetic Russian/English history,
