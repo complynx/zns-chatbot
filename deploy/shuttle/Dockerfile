@@ -14,8 +14,8 @@ COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certifica
 COPY --from=build /out/shuttle /usr/local/bin/shuttle
 COPY --from=build /out/zinusya-avatar /usr/local/bin/zinusya-avatar
 COPY --from=build /out/shuttle-import /usr/local/bin/shuttle-import
-COPY docs/dependency-audit/2026-10-12/_runtime-notices /licenses/dependencies/
-COPY docs/dependency-audit/2026-10-14-avatars/notices /licenses/avatars/
+COPY deploy/shuttle/licenses/dependencies /licenses/dependencies/
+COPY deploy/shuttle/licenses/avatars /licenses/avatars/
 COPY LICENSE /licenses/shuttle/LICENSE
 COPY --from=build /usr/local/go/LICENSE /usr/local/go/PATENTS /licenses/go/
 USER 10001:10001

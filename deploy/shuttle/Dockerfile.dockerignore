@@ -5,5 +5,5 @@
 !internal/**
 !migrations/**
 !LICENSE
-!docs/dependency-audit/2026-10-12/_runtime-notices/**
-!docs/dependency-audit/2026-10-14-avatars/notices/**
+!deploy/shuttle/licenses/dependencies/**
+!deploy/shuttle/licenses/avatars/**
