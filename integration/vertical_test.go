@@ -58,6 +58,8 @@ type peers struct {
 	fileReadHook                            func()
 	fileGone                                bool
 	fileTooLarge                            bool
+	fileErrorCode                           int
+	fileErrorText                           string
 	fileGets                                int
 	fileIDs                                 []string
 	loseResume                              bool
@@ -502,32 +504,7 @@ func (p *peers) telegram(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.HasSuffix(r.URL.Path, "/getFile") {
-		p.fileGets++
-		if p.fileGone {
-			respond(w, map[string]any{"ok": false, "error_code": 400})
-			return
-		}
-		if p.fileTooLarge {
-			w.WriteHeader(http.StatusBadRequest)
-			respond(w, map[string]any{"ok": false, "error_code": 400, "description": "Bad Request: file is too big"})
-			return
-		}
-		var in struct {
-			ID string `json:"file_id"`
-		}
-		_ = json.NewDecoder(r.Body).Decode(&in)
-		p.fileIDs = append(p.fileIDs, in.ID)
-		respond(
-			w,
-			map[string]any{
-				"ok": true,
-				"result": map[string]any{
-					"file_id":   in.ID,
-					"file_size": len(p.fileBytes),
-					"file_path": fmt.Sprintf("documents/refreshed_%d.pdf", p.fileGets),
-				},
-			},
-		)
+		p.telegramGetFile(w, r)
 		return
 	}
 	if strings.HasPrefix(r.URL.Path, "/file/bot123:test-token/") {
@@ -1713,4 +1690,39 @@ func (p *peers) issueToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, map[string]any{"access_token": p.token(sub), "expires_in": 3600, "token_type": "Bearer"})
+}
+
+// telegramGetFile is called with p.mu held.
+func (p *peers) telegramGetFile(w http.ResponseWriter, r *http.Request) {
+	p.fileGets++
+	if p.fileGone {
+		respond(w, map[string]any{"ok": false, "error_code": 400})
+		return
+	}
+	if p.fileErrorCode != 0 {
+		w.WriteHeader(p.fileErrorCode)
+		respond(w, map[string]any{"ok": false, "error_code": p.fileErrorCode, "description": p.fileErrorText})
+		return
+	}
+	if p.fileTooLarge {
+		w.WriteHeader(http.StatusBadRequest)
+		respond(w, map[string]any{"ok": false, "error_code": 400, "description": "Bad Request: file is too big"})
+		return
+	}
+	var in struct {
+		ID string `json:"file_id"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&in)
+	p.fileIDs = append(p.fileIDs, in.ID)
+	respond(
+		w,
+		map[string]any{
+			"ok": true,
+			"result": map[string]any{
+				"file_id":   in.ID,
+				"file_size": len(p.fileBytes),
+				"file_path": fmt.Sprintf("documents/refreshed_%d.pdf", p.fileGets),
+			},
+		},
+	)
 }

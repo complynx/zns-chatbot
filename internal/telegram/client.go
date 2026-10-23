@@ -119,11 +119,11 @@ const (
 )
 
 type Error struct {
-	fileTooLarge bool
-	StatusCode   int
-	Retryable    bool
-	RetryAfter   time.Duration
-	Outcome      Outcome
+	fileTooLarge, fileInvalidID, fileAccessDenied bool
+	StatusCode                                    int
+	Retryable                                     bool
+	RetryAfter                                    time.Duration
+	Outcome                                       Outcome
 	// InvalidEntities permits a plain text fallback after an explicit parsing rejection.
 	InvalidEntities bool
 }
@@ -280,6 +280,9 @@ func rejection(status, code int, description string, retryAfter int64, mutation 
 	e := &Error{StatusCode: code, Outcome: Rejected}
 	e.fileTooLarge = (status == http.StatusOK || status == http.StatusBadRequest) &&
 		code == http.StatusBadRequest && description == "Bad Request: file is too big"
+	e.fileInvalidID = (status == http.StatusOK || status == http.StatusBadRequest) &&
+		code == http.StatusBadRequest && description == "Bad Request: invalid file_id"
+	e.fileAccessDenied = (status == http.StatusOK || status == http.StatusForbidden) && code == http.StatusForbidden
 	e.InvalidEntities = status == http.StatusBadRequest && code == http.StatusBadRequest &&
 		strings.Contains(strings.ToLower(description), "can't parse entities")
 	if code == http.StatusTooManyRequests {

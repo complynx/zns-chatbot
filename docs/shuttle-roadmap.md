@@ -1,9 +1,26 @@
 # Current roadmap checkpoint, 2026-10-23
 
+## Remaining local release checks
+
+A requirement-to-evidence audit found a concrete file-source API gap after the
+completed voice/local-pilot lanes below. The [focused correction](shuttle-file-source-errors.md)
+now distinguishes invalid source IDs404, source refusal424 and temporary503,
+without changing caller authority or marking files permanently lost. Its
+regression and PostgreSQL/HTTP owner/privacy/recovery checks pass; final
+review/lint/release binding are in progress. Earlier accepted identity, queue,
+business, model and pilot paths retain their exact evidence scope.
+
+One consumer join remains unverified: Shuttle opaque attachment ID → Loom
+`audio_transcribe` → actual worker → transcription provider. Implementation and
+upstream adapter tests exist; an isolated local ASR stub gate is being prepared
+with zero paid calls. This is a transport/tool contract check, separate from
+the completed voice campaign and paid ASR speech quality. No old one-shot or
+accepted media matrix should be replayed to fill it.
+
 ## Real-model voice and local pilot
 
 [Bounded real-model voice acceptance](shuttle-persona-model-qa-2026-10-23.md)
-now passes on current application `ff8d4234` / image `87103b82` and Loom
+now passes on accepted application baseline `ff8d4234` / image `87103b82` and Loom
 `ba1f4a11` / API `cbba225f`. Actual opening, ordinary name keyboard, same-container
 restart, compound-name correction, mixed language, unknown facts, tool-error
 recovery and full native financial proposal were observed. Earlier choice and

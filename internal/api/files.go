@@ -96,6 +96,13 @@ func (s *Server) readFile(ctx context.Context, record db.File) ([]byte, error) {
 	if errors.Is(err, telegram.ErrFileTooLarge) {
 		return nil, huma.Error413RequestEntityTooLarge("file exceeds read limit")
 	}
+	if errors.Is(err, telegram.ErrFileNotFound) {
+		return nil, huma.Error404NotFound("file_unavailable")
+	}
+	if errors.Is(err, telegram.ErrFileAccessDenied) {
+		// This is a source refusal, not a revocation of the API caller's authority.
+		return nil, huma.NewError(http.StatusFailedDependency, "file_source_access_denied")
+	}
 	if err != nil {
 		return nil, huma.Error503ServiceUnavailable("Telegram file unavailable")
 	}

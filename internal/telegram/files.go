@@ -11,6 +11,8 @@ import (
 
 var ErrFileUnavailable = errors.New("telegram file unavailable")
 var ErrFileTooLarge = errors.New("telegram file exceeds read limit")
+var ErrFileNotFound = errors.New("telegram file identifier unavailable")
+var ErrFileAccessDenied = errors.New("telegram file access denied")
 
 // ReadFile refreshes the temporary path each time and keeps the bot token inside the client.
 func (c *Client) ReadFile(ctx context.Context, id string, limit int64) ([]byte, error) {
@@ -25,9 +27,15 @@ func (c *Client) ReadFile(ctx context.Context, id string, limit int64) ([]byte, 
 	if err := c.call(ctx, "getFile", struct {
 		ID string `json:"file_id"`
 	}{id}, &file, false); err != nil {
-		var rejected *Error
-		if errors.As(err, &rejected) && rejected.fileTooLarge {
-			return nil, ErrFileTooLarge
+		if rejected, ok := errors.AsType[*Error](err); ok {
+			switch {
+			case rejected.fileTooLarge:
+				return nil, ErrFileTooLarge
+			case rejected.fileInvalidID:
+				return nil, ErrFileNotFound
+			case rejected.fileAccessDenied:
+				return nil, ErrFileAccessDenied
+			}
 		}
 		return nil, err
 	}
@@ -46,7 +54,11 @@ func (c *Client) ReadFile(ctx context.Context, id string, limit int64) ([]byte, 
 		return nil, ErrFileUnavailable
 	}
 	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode == http.StatusForbidden {
+		return nil, ErrFileAccessDenied
+	}
 	if response.StatusCode != http.StatusOK {
+		// A download-path 404 can be temporary; only an explicit invalid-ID rejection is classified above.
 		return nil, ErrFileUnavailable
 	}
 	if response.ContentLength > limit {
