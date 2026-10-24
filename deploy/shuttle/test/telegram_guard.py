@@ -1,4 +1,4 @@
-"""Owned-stand Telegram egress: only the configured account can receive messages."""
+"""Owned-stand Telegram egress: only configured accounts can receive messages."""
 import json
 import os
 import re
@@ -30,12 +30,14 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 class GuardServer(ThreadingHTTPServer):
-    def __init__(self, address, token, recipient, upstream="https://api.telegram.org", launch_url=""):
-        if not re.fullmatch(r"[0-9]+:[A-Za-z0-9_-]+", token) or not 0 < recipient < 1 << 52:
+    def __init__(self, address, token, recipient, upstream="https://api.telegram.org", launch_url="", additional_recipients=()):
+        recipients = (recipient, *additional_recipients)
+        if not re.fullmatch(r"[0-9]+:[A-Za-z0-9_-]+", token) or any(type(value) is not int or not 0 < value < 1 << 52 for value in recipients):
             raise ValueError("Invalid test bot or recipient configuration")
         self.bot_prefix = "/bot" + token + "/"
         self.file_prefix = "/file/bot" + token + "/"
-        self.recipient = recipient
+        self.recipients = frozenset(recipients)
+        self.recipient_bytes = frozenset(str(value).encode("ascii") for value in recipients)
         if launch_url:
             parsed = urlsplit(launch_url)
             if (parsed.scheme != "https" or not parsed.hostname or parsed.username is not None
@@ -109,13 +111,13 @@ class GuardHandler(BaseHTTPRequestHandler):
                 return
         if method == "sendChatAction" and not (
                 set(data) == {"chat_id", "action"} and type(data["chat_id"]) is int
-                and data["chat_id"] == self.server.recipient and data["action"] == "typing"):
+                and data["chat_id"] in self.server.recipients and data["action"] == "typing"):
             self.reject(403)
             return
         if method == "sendMessage":
             recipient = data.get("chat_id")
             reply = data.get("reply_parameters", {})
-            if type(recipient) is not int or recipient != self.server.recipient or not isinstance(reply, dict) \
+            if type(recipient) is not int or recipient not in self.server.recipients or not isinstance(reply, dict) \
                     or reply.get("chat_id", recipient) != recipient or "business_connection_id" in data:
                 self.reject(403)
                 return
@@ -124,13 +126,13 @@ class GuardHandler(BaseHTTPRequestHandler):
     def allowed_menu(self, method, data):
         if method == "setChatMenuButton":
             return (set(data) == {"chat_id", "menu_button"}
-                and type(data["chat_id"]) is int and data["chat_id"] == self.server.recipient
+                and type(data["chat_id"]) is int and data["chat_id"] in self.server.recipients
                 and data["menu_button"] == {"type": "commands"})
         if set(data) - {"commands", "scope", "language_code"} or data.get("language_code", "") not in ("", "ru"):
             return False
         scope = data.get("scope")
         if not isinstance(scope, dict) or set(scope) != {"type", "chat_id"} or scope["type"] != "chat" \
-                or type(scope["chat_id"]) is not int or scope["chat_id"] != self.server.recipient:
+                or type(scope["chat_id"]) is not int or scope["chat_id"] not in self.server.recipients:
             return False
         commands = data.get("commands")
         if not isinstance(commands, list) or not 0 < len(commands) <= 100:
@@ -166,7 +168,7 @@ class GuardHandler(BaseHTTPRequestHandler):
         return (recipient.get_all("Content-Disposition") == ['form-data; name="chat_id"']
             and document.get_all("Content-Disposition") == ['form-data; name="document"; filename="zinusya-avatar.jpg"']
             and recipient.get_filename() is None
-            and recipient.get_payload(decode=True) == str(self.server.recipient).encode("ascii")
+            and recipient.get_payload(decode=True) in self.server.recipient_bytes
             and document.get_content_disposition() == "form-data"
             and document.get_filename() == "zinusya-avatar.jpg"
             and body is not None and 0 < len(body) <= 4 << 20)
@@ -259,7 +261,8 @@ if __name__ == "__main__":
             raise ValueError()
         recipient = int(os.environ["TEST_TELEGRAM_USER_ID"])
         server = GuardServer(("0.0.0.0", 8080), token, recipient,
-            launch_url=os.environ.get("TEST_MINI_APP_LAUNCH_URL", ""))
+            launch_url=os.environ.get("TEST_MINI_APP_LAUNCH_URL", ""),
+            additional_recipients=tuple(int(value) for value in os.environ.get("TEST_TELEGRAM_ADDITIONAL_USER_IDS", "").split(",") if value))
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain(os.environ["TEST_TLS_CERT"], os.environ["TEST_TLS_KEY"])
         server.socket = context.wrap_socket(server.socket, server_side=True)

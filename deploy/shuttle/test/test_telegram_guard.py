@@ -82,6 +82,44 @@ class GuardTests(unittest.TestCase):
             self.assertTrue(json.load(response)["ok"])
         self.assertEqual(self.forwarded, [("/bot999:fake/sendMessage", body)])
 
+    def test_additional_recipient_preserves_primary_and_rejects_other_accounts(self):
+        self.guard.shutdown()
+        self.guard.server_close()
+        self.guard = telegram_guard.GuardServer(("127.0.0.1", 0), "999:fake", 42,
+            "http://127.0.0.1:" + str(self.upstream.server_port), additional_recipients=(44,))
+        thread = threading.Thread(target=self.guard.serve_forever, daemon=True)
+        thread.start()
+        self.threads.append(thread)
+        for recipient in (42, 44):
+            for method, body in (
+                ("sendMessage", {"chat_id": recipient, "text": "QA"}),
+                ("sendChatAction", {"chat_id": recipient, "action": "typing"}),
+                ("setChatMenuButton", {"chat_id": recipient, "menu_button": {"type": "commands"}}),
+                ("setMyCommands", {"commands": [{"command": "avatar", "description": "Avatar"}],
+                                   "scope": {"type": "chat", "chat_id": recipient}}),
+            ):
+                with self.request("/bot999:fake/" + method, body) as response:
+                    self.assertTrue(json.load(response)["ok"])
+        for recipient in (43, "44", True):
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                self.request("/bot999:fake/sendMessage", {"chat_id": recipient, "text": "blocked"})
+            self.assertEqual(error.exception.code, 403)
+            error.exception.close()
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            self.request("/bot999:fake/sendMessage", {"chat_id": 44, "reply_parameters": {"chat_id": 42}})
+        self.assertEqual(error.exception.code, 403)
+        error.exception.close()
+        for recipient in (42, 44):
+            raw = (b'--qa-boundary\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n' +
+                str(recipient).encode() + b'\r\n--qa-boundary\r\nContent-Disposition: form-data; '
+                b'name="document"; filename="zinusya-avatar.jpg"\r\n\r\njpeg\r\n--qa-boundary--\r\n')
+            request = urllib.request.Request("http://127.0.0.1:" + str(self.guard.server_port) +
+                "/bot999:fake/sendDocument", data=raw,
+                headers={"Content-Type": "multipart/form-data; boundary=qa-boundary"})
+            with urllib.request.urlopen(request, timeout=3) as response:
+                self.assertTrue(json.load(response)["ok"])
+        self.assertEqual(len(self.forwarded), 10)
+
     def test_unknown_methods_and_wrong_bot_never_reach_upstream(self):
         for path in ("/bot999:wrong/sendMessage", "/bot999:fake/sendPhoto", "/bot999:fake/getMe?x=1"):
             with self.subTest(path=path), self.assertRaises(urllib.error.HTTPError) as error:
