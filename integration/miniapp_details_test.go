@@ -204,8 +204,10 @@ func TestMiniAppDetailsJournalFailureRollsBackPrivateWriteReceiptAndExpectation(
 	)
 	require.NoError(t, err)
 	_, err = h.store.Pool().
-		Exec(t.Context(), `CREATE FUNCTION reject_private_action() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected journal failure'; END $$;
-CREATE TRIGGER reject_private_action BEFORE INSERT ON shuttle_miniapp_details_actions FOR EACH ROW EXECUTE FUNCTION reject_private_action()`)
+		Exec(t.Context(), "CREATE FUNCTION reject_private_action() RETURNS trigger LANGUAGE plpgsql" +
+" AS $$ BEGIN RAISE EXCEPTION 'injected journal failure'; END $$;\nCREATE " +
+"TRIGGER reject_private_action BEFORE INSERT ON shuttle_miniapp_details_a" +
+"ctions FOR EACH ROW EXECUTE FUNCTION reject_private_action()")
 	require.NoError(t, err)
 	operation := uuid.New()
 	body := appDetailsBody(t, operation, 1, "SYNTHETIC-ATOMIC-PASSPORT")
@@ -266,7 +268,8 @@ func TestMiniAppDetailsRecheckSessionAfterOwnerLockWait(t *testing.T) {
 	require.Eventually(t, func() bool {
 		var waiting bool
 		err = h.store.Pool().
-			QueryRow(t.Context(), "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::integer=ANY(pg_blocking_pids(pid)))", blocking.Conn().PgConn().PID()).
+			QueryRow(t.Context(), "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::integer=ANY(pg_bl" +
+"ocking_pids(pid)))", blocking.Conn().PgConn().PID()).
 			Scan(&waiting)
 		return err == nil && waiting
 	}, 3*time.Second, 5*time.Millisecond)

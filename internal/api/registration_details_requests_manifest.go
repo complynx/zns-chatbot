@@ -72,14 +72,19 @@ func detailsRequestMethods(method func(string, string, map[string]any, bool) map
 	id := map[string]any{manifestType: schemaString, schemaFormat: schemaUUID}
 	readiness := method(
 		"readiness",
-		"Read missing legal fields for an explicit event resolved through zinusya_context. Ready means required fields only; it is not consent, capacity or eligibility for a pass.",
+		"Read missing legal fields for an explicit event resolved through zinusya" +
+"_context. Ready means required fields only; it is not consent, capacity " +
+"or eligibility for a pass.",
 		detailsObject(map[string]any{schemaEventID: id}, schemaEventID),
 		false,
 	)
 	readiness[manifestOutputSchema] = detailsReadinessSchema()
 	begin := method(
 		"begin_request",
-		"Open or reuse a durable data expectation for the selected event and current event version. Does not register, reserve, authorize a continuation or extend an existing deadline. Retain the same operation ID and arguments after an uncertain result.",
+		"Open or reuse a durable data expectation for the selected event and curr" +
+"ent event version. Does not register, reserve, authorize a continuation " +
+"or extend an existing deadline. Retain the same operation ID and argumen" +
+"ts after an uncertain result.",
 		detailsObject(
 			map[string]any{
 				schemaEventID:              id,
@@ -94,21 +99,27 @@ func detailsRequestMethods(method func(string, string, map[string]any, bool) map
 	begin[manifestOutputSchema] = detailsRequestStatusSchema()
 	read := method(
 		"request",
-		"Read a current owner-only data expectation snapshot. Recheck current event/readiness before continuing; completion is not registration or consent.",
+		"Read a current owner-only data expectation snapshot. Recheck current eve" +
+"nt/readiness before continuing; completion is not registration or consen" +
+"t.",
 		detailsObject(map[string]any{"request_id": id}, "request_id"),
 		false,
 	)
 	read[manifestOutputSchema] = detailsRequestStatusSchema()
 	operation := method(
 		"request_operation",
-		"Recover the immutable redacted begin_request receipt using arguments.operation_id or the original envelope operation_id on the status endpoint. Missing status is unknown: keep the same key and arguments.",
+		"Recover the immutable redacted begin_request receipt using arguments.ope" +
+"ration_id or the original envelope operation_id on the status endpoint. " +
+"Missing status is unknown: keep the same key and arguments.",
 		detailsObject(map[string]any{detailsOperationID: id}, detailsOperationID),
 		false,
 	)
 	operation[manifestOutputSchema] = detailsRequestStatusSchema()
 	list := method(
 		"requests",
-		"List up to 20 nonsuperseded owner expectations, including completed or expired ones, ordered by request UUID. Follow next until absent; snapshots are context, never consent.",
+		"List up to 20 nonsuperseded owner expectations, including completed or e" +
+"xpired ones, ordered by request UUID. Follow next until absent; snapshot" +
+"s are context, never consent.",
 		detailsObject(
 			map[string]any{
 				"after": id,

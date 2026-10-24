@@ -146,7 +146,8 @@ func (s *Store) ReserveAvatarDelivery(
 }
 func avatarDeliveryContent(ctx context.Context, tx pgx.Tx, n AvatarDelivery) ([]byte, error) {
 	var raw, content []byte
-	err := tx.QueryRow(ctx, `SELECT receipt,jpeg FROM shuttle_avatars WHERE id=$1 AND user_id=$2 AND draft_id IS NOT NULL`, n.ArtifactID, n.UserID).
+	err := tx.QueryRow(ctx, "SELECT receipt,jpeg FROM shuttle_avatars WHERE id=$1 AND user_id=$2 AND " +
+"draft_id IS NOT NULL", n.ArtifactID, n.UserID).
 		Scan(&raw, &content)
 	if err != nil {
 		return nil, err

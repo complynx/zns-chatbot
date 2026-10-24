@@ -227,7 +227,8 @@ func TestOrderContractFormattingFailureRollsBackAndSingleConnectionDoesNotDeadlo
 	require.NoError(
 		t,
 		reopened.Pool().
-			QueryRow(ctx, "SELECT (SELECT count(*) FROM shuttle_order_preparations),(SELECT count(*) FROM shuttle_order_operations)").
+			QueryRow(ctx, "SELECT (SELECT count(*) FROM shuttle_order_preparations),(SELECT count(*" +
+") FROM shuttle_order_operations)").
 			Scan(&preparations, &receipts),
 	)
 	require.Zero(t, preparations)
@@ -256,12 +257,14 @@ func TestOrderInspectorReturnsExpiredTermsWithoutRenewingAndRechecksCurrentAcces
 	// Advance only this fixture's recorded deadline; do not change the host clock.
 	expired := time.Now().UTC().Add(-time.Second).Truncate(time.Microsecond)
 	_, err := f.H.store.Pool().
-		Exec(ctx, "UPDATE shuttle_order_preparations SET created_at=$2::timestamptz-interval '10 seconds',expires_at=$2 WHERE id=$1", prepared.Preconditions.ProposalID, expired)
+		Exec(ctx, "UPDATE shuttle_order_preparations SET created_at=$2::timestamptz-interva" +
+"l '10 seconds',expires_at=$2 WHERE id=$1", prepared.Preconditions.ProposalID, expired)
 	require.NoError(t, err)
 	expiryJSON, err := json.Marshal(expired)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(ctx, "UPDATE shuttle_order_operations SET result=jsonb_set(result,'{expires_at}',$2::jsonb) WHERE operation_id=$1 AND kind='prepare'", op, string(expiryJSON))
+		Exec(ctx, "UPDATE shuttle_order_operations SET result=jsonb_set(result,'{expires_at" +
+"}',$2::jsonb) WHERE operation_id=$1 AND kind='prepare'", op, string(expiryJSON))
 	require.NoError(t, err)
 	found := inspectOrderHTTP(t, f, op, http.StatusOK)
 	require.True(t, expired.Equal(found.ExpiresAt))
@@ -348,7 +351,9 @@ func TestOrderInspectorRecoversCanonicalReceiptWithNewObservationTime(t *testing
 	originalOp, newOp := uuid.New(), uuid.New()
 	original := prepare(originalOp)
 	_, err := f.H.store.Pool().
-		Exec(ctx, "UPDATE shuttle_order_preparations SET created_at=clock_timestamp()-interval '10 seconds',expires_at=clock_timestamp()-interval '1 second' WHERE id=$1", original.ID)
+		Exec(ctx, "UPDATE shuttle_order_preparations SET created_at=clock_timestamp()-inter" +
+"val '10 seconds',expires_at=clock_timestamp()-interval '1 second' WHERE " +
+"id=$1", original.ID)
 	require.NoError(t, err)
 	fresh := prepare(newOp)
 	require.NotEqual(t, original.ID, fresh.ID)

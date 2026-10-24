@@ -104,7 +104,8 @@ func createArchive(manifest, destination string, output, diagnostics io.Writer) 
 			}
 			_, _ = fmt.Fprintln(
 				diagnostics,
-				"Temporary archive cleanup failed; inspect the output directory. The result identifies any published archive. No data was imported.",
+				"Temporary archive cleanup failed; inspect the output directory. The resu"+
+					"lt identifies any published archive. No data was imported.",
 			)
 			return exitInvalidInput
 		}

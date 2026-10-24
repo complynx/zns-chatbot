@@ -244,7 +244,15 @@ func profileModule() map[string]any {
 	version := map[string]any{manifestType: schemaInteger, schemaMinimum: 0}
 	name := map[string]any{manifestType: schemaString, schemaMinLength: 1, schemaMaxLength: profileNamePartMaxLength}
 	latin := map[string]any{manifestType: schemaString, schemaMaxLength: profileNamePartMaxLength}
-	latinHelp := " Preserve original names. Immediately transliterate confirmed non-Latin components into first_name_latin and last_name_latin in this same write; do not translate or anglicize them. Explicit user or passport Latin spelling takes priority. Both optional Latin fields must be supplied together (both empty clears them), at most 200 characters each and 256 including the separating space. Omission preserves Latin for unchanged originals and clears it when originals change. Latin-only corrections do not synchronize IAM. After an unknown outcome keep the same operation ID and all original arguments. Do not backfill older profiles automatically."
+	latinHelp := " Preserve original names. Immediately transliterate confirmed non-Latin " +
+"components into first_name_latin and last_name_latin in this same write;" +
+" do not translate or anglicize them. Explicit user or passport Latin spe" +
+"lling takes priority. Both optional Latin fields must be supplied togeth" +
+"er (both empty clears them), at most 200 characters each and 256 includi" +
+"ng the separating space. Omission preserves Latin for unchanged original" +
+"s and clears it when originals change. Latin-only corrections do not syn" +
+"chronize IAM. After an unknown outcome keep the same operation ID and al" +
+"l original arguments. Do not backfill older profiles automatically."
 	language := map[string]any{manifestType: schemaString, schemaEnum: []string{"auto", "en", "ru"}}
 	input := func(fields map[string]any, required ...string) map[string]any {
 		if required == nil {
@@ -256,13 +264,22 @@ func profileModule() map[string]any {
 
 	get := profileMethod(
 		"get",
-		"Read your independent full name, bot language, profile version and pending name request. Telegram metadata never overwrites these fields. Name is not legal identity. Expired name requests do not affect registration or payment state.",
+		"Read your independent full name, bot language, profile version and pendi" +
+"ng name request. Telegram metadata never overwrites these fields. Name i" +
+"s not legal identity. Expired name requests do not affect registration o" +
+"r payment state.",
 		input(map[string]any{}),
 		false,
 	)
 	setName := profileMethod(
 		"set_name",
-		"Save the user's explicitly supplied or confirmed real first_name and last_name separately; components may contain spaces. Do not guess a split by word position: ask when ambiguous. Read get first and send expected_version. This finishes any pending name request and schedules name-only IAM synchronization; it does not prove IAM has updated or change legal registration details. Never copy Telegram hints without the user's confirmation."+latinHelp,
+		"Save the user's explicitly supplied or confirmed real first_name and las" +
+"t_name separately; components may contain spaces. Do not guess a split b" +
+"y word position: ask when ambiguous. Read get first and send expected_ve" +
+"rsion. This finishes any pending name request and schedules name-only IA" +
+"M synchronization; it does not prove IAM has updated or change legal reg" +
+"istration details. Never copy Telegram hints without the user's confirma" +
+"tion."+latinHelp,
 		input(
 			map[string]any{
 				schemaExpectedVersion: version,
@@ -279,7 +296,10 @@ func profileModule() map[string]any {
 	)
 	setLanguage := profileMethod(
 		"set_language",
-		"Save the user's explicit interface language choice: en, ru, or auto for Telegram fallback. Agent replies still follow meaningful current user text; neutral input uses conversation then interface language. This preserves a pending name request.",
+		"Save the user's explicit interface language choice: en, ru, or auto for " +
+"Telegram fallback. Agent replies still follow meaningful current user te" +
+"xt; neutral input uses conversation then interface language. This preser" +
+"ves a pending name request.",
 		input(
 			map[string]any{schemaExpectedVersion: version, schemaBotLanguage: language},
 			schemaExpectedVersion,
@@ -289,13 +309,21 @@ func profileModule() map[string]any {
 	)
 	request := profileMethod(
 		"request_name",
-		"Record a bounded request for the user's full name, then ask conversationally. Existing active request and deadline are preserved. No message is captured automatically; unrelated conversation is allowed.",
+		"Record a bounded request for the user's full name, then ask conversation" +
+"ally. Existing active request and deadline are preserved. No message is " +
+"captured automatically; unrelated conversation is allowed.",
 		input(map[string]any{schemaExpectedVersion: version}, schemaExpectedVersion),
 		true,
 	)
 	complete := profileMethod(
 		"complete_name",
-		"After explicit user input or confirmation, save separate real first_name and last_name and finish the matching unexpired name request. Components may contain spaces; clarify an ambiguous split. Requires get's version and expectation ID. Schedules name-only IAM synchronization, not legal registration details. A local receipt does not prove remote IAM completion. Stale or expired requests conflict; reread and follow current user intent."+latinHelp,
+		"After explicit user input or confirmation, save separate real first_name" +
+" and last_name and finish the matching unexpired name request. Component" +
+"s may contain spaces; clarify an ambiguous split. Requires get's version" +
+" and expectation ID. Schedules name-only IAM synchronization, not legal " +
+"registration details. A local receipt does not prove remote IAM completi" +
+"on. Stale or expired requests conflict; reread and follow current user i" +
+"ntent."+latinHelp,
 		input(
 			map[string]any{
 				schemaExpectedVersion: version,
@@ -314,7 +342,9 @@ func profileModule() map[string]any {
 	)
 	cancel := profileMethod(
 		"cancel_name",
-		"Cancel only the matching pending name request after user intent; no business object changes. Requires current profile version and expectation ID.",
+		"Cancel only the matching pending name request after user intent; no busi" +
+"ness object changes. Requires current profile version and expectation ID" +
+".",
 		input(
 			map[string]any{schemaExpectedVersion: version, "expectation_id": uuidField},
 			schemaExpectedVersion,
@@ -324,7 +354,11 @@ func profileModule() map[string]any {
 	)
 	operation := profileMethod(
 		"operation",
-		"Reconcile the original immutable result of a profile write using arguments.operation_id. The status endpoint also accepts protocol_version and the original operation_id in the envelope without arguments. Missing status is unknown; retain the same operation ID and arguments after uncertainty.",
+		"Reconcile the original immutable result of a profile write using argumen" +
+"ts.operation_id. The status endpoint also accepts protocol_version and t" +
+"he original operation_id in the envelope without arguments. Missing stat" +
+"us is unknown; retain the same operation ID and arguments after uncertai" +
+"nty.",
 		input(map[string]any{"operation_id": uuidField}, "operation_id"),
 		false,
 	)

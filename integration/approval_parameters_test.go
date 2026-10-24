@@ -62,8 +62,12 @@ func TestTelegramApprovalShowsCompleteLiteralParametersBeforeButtons(t *testing.
 
 func TestSpecialistAccessApprovalUsesHumanTermsWithoutImplementationFields(t *testing.T) {
 	t.Parallel()
-	const terms = `Grant specialist access: event "QA Party", specialist "alex", account "Specialist QA" (Telegram 402). Changes only access to the timetable and own clients; bookings and payments stay unchanged.`
-	const arguments = `{"event_id":"8cd21b03-601e-40ba-9311-f7c63071fefa","specialist_id":"alex","user_id":"30c95632-d9c5-4773-a386-2e042085792c","active":true,"expected_version":0,"expected_event_version":1,"expected_schedule_version":1}`
+	const terms = "Grant specialist access: event \"QA Party\", specialist \"alex\", account \"S" +
+"pecialist QA\" (Telegram 402). Changes only access to the timetable and o" +
+"wn clients; bookings and payments stay unchanged."
+	const arguments = "{\"event_id\":\"8cd21b03-601e-40ba-9311-f7c63071fefa\",\"specialist_id\":\"alex" +
+"\",\"user_id\":\"30c95632-d9c5-4773-a386-2e042085792c\",\"active\":true,\"expect" +
+"ed_version\":0,\"expected_event_version\":1,\"expected_schedule_version\":1}"
 	for _, text := range []string{terms, ""} {
 		name := "canonical human terms"
 		if text == "" {

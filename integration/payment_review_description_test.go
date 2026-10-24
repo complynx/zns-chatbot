@@ -24,14 +24,17 @@ type paymentDescriptionPreparation struct {
 
 func paymentDescriptionLocale(t *testing.T, f paymentFixture, preference, telegram, fallback string) {
 	t.Helper()
-	_, err := f.H.store.Pool().Exec(t.Context(), `INSERT INTO shuttle_user_profiles(user_id,version,bot_language)
-VALUES($1,0,$2) ON CONFLICT(user_id) DO UPDATE SET bot_language=$2,version=shuttle_user_profiles.version+1`, f.AmbassadorID, preference)
+	_, err := f.H.store.Pool().Exec(t.Context(), "INSERT INTO shuttle_user_profiles(user_id,version,bot_language)\nVALUES($" +
+"1,0,$2) ON CONFLICT(user_id) DO UPDATE SET bot_language=$2,version=shutt" +
+"le_user_profiles.version+1", f.AmbassadorID, preference)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), `UPDATE shuttle_users SET profile=jsonb_set(profile,'{language_code}',to_jsonb($2::text),true) WHERE id=$1`, f.AmbassadorID, telegram)
+		Exec(t.Context(), "UPDATE shuttle_users SET profile=jsonb_set(profile,'{language_code}',to_" +
+"jsonb($2::text),true) WHERE id=$1", f.AmbassadorID, telegram)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), `UPDATE shuttle_settings SET document=jsonb_set(document,'{default_language}',to_jsonb($1::text)) WHERE id=true`, fallback)
+		Exec(t.Context(), "UPDATE shuttle_settings SET document=jsonb_set(document,'{default_langua" +
+"ge}',to_jsonb($1::text)) WHERE id=true", fallback)
 	require.NoError(t, err)
 }
 
@@ -89,8 +92,9 @@ func TestPaymentReviewRejectionDescriptionKeepsMetadataLiteralAndCreditsZero(t *
 	review.Decision, review.AmountMinor = payments.Rejected, 0
 	review.Reason = "**untrusted** ```\nnot a command [link](https://example.invalid)"
 	payer := "Payer **literal** ``` @example"
-	_, err := f.H.store.Pool().Exec(t.Context(), `INSERT INTO shuttle_user_profiles(user_id,version,full_name)
-VALUES($1,0,$2) ON CONFLICT(user_id) DO UPDATE SET full_name=$2,version=shuttle_user_profiles.version+1`, f.OwnerID, payer)
+	_, err := f.H.store.Pool().Exec(t.Context(), "INSERT INTO shuttle_user_profiles(user_id,version,full_name)\nVALUES($1,0" +
+",$2) ON CONFLICT(user_id) DO UPDATE SET full_name=$2,version=shuttle_use" +
+"r_profiles.version+1", f.OwnerID, payer)
 	require.NoError(t, err)
 	code, raw := paymentRequest(t, f, f.Ambassador, "review/prepare", "readable-rejection", review)
 	require.Equal(t, http.StatusOK, code, string(raw))

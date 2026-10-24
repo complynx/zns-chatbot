@@ -321,10 +321,11 @@ func TestPaymentNotificationRepairDoesNotStarveHealthyRecipientBehindWaitingPage
 	file := paymentFile(t, f.H, f.OwnerID, 94001, "fair-notification-proof", time.Now().UTC().Truncate(time.Second))
 	evidence := submittedPayment(t, f, "fair-notification-submit", file, 3087, payments.Initial)
 	// Seed ordering so the healthy recipient is strictly beyond the first bounded page.
-	_, err := f.H.store.Pool().Exec(context.Background(), `UPDATE shuttle_payment_notifications SET id=CASE
- WHEN recipient_id=$1 THEN 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid
- ELSE ('00000000-'||substr(md5(id::text),9,4)||'-'||substr(md5(id::text),13,4)||'-'||substr(md5(id::text),17,4)||'-'||substr(md5(id::text),21,12))::uuid END
- WHERE evidence_id=$2`, f.AmbassadorID, evidence.ID)
+	_, err := f.H.store.Pool().Exec(context.Background(), "UPDATE shuttle_payment_notifications SET id=CASE\n WHEN recipient_id=$1 T" +
+"HEN 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid\n ELSE ('00000000-'||sub" +
+"str(md5(id::text),9,4)||'-'||substr(md5(id::text),13,4)||'-'||substr(md5" +
+"(id::text),17,4)||'-'||substr(md5(id::text),21,12))::uuid END\n WHERE evi" +
+"dence_id=$2", f.AmbassadorID, evidence.ID)
 	require.NoError(t, err)
 	f.H.start(t)
 	healthy := uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")

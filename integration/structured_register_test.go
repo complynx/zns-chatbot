@@ -33,6 +33,27 @@ func registrationButton(t *testing.T, h *harness, update, message, user int64, d
 	return task.ID
 }
 
+func TestStructuredRegisterEmptyPagesDeliverWithoutInlineKeyboard(t *testing.T) {
+	t.Parallel()
+	p := newPeers(t)
+	p.loomDown = true
+	h := setup(t, p)
+	for n, command := range []string{"/register", "/register after " + uuid.NewString()} {
+		id := h.submitText(t, int64(92700+n), command)
+		h.await(t, id, "completed")
+		h.awaitReplies(t, n+1)
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, message := range p.sent {
+		require.Contains(t, message.Text, "No open registrations")
+		keyboard, ok := message.ReplyMarkup.(*telegram.ReplyKeyboardMarkup)
+		require.True(t, ok)
+		require.NotEmpty(t, keyboard.Keyboard)
+	}
+	require.Empty(t, p.runs)
+}
+
 func TestStructuredRegisterNoLoomRestartAndCanonicalReceipt(t *testing.T) {
 	t.Parallel()
 	p := newPeers(t)
@@ -162,7 +183,8 @@ func TestStructuredRegisterRecoversCommittedReceiptAfterChoiceExpiry(t *testing.
 	require.NoError(t, err)
 	// Model a successful commit before its task checkpoint, then the deadline passing.
 	_, err = h.store.Pool().
-		Exec(t.Context(), `UPDATE shuttle_tasks SET snapshot=jsonb_set(snapshot,'{registration_entry,expires_at}',to_jsonb($2::text)) WHERE id=$1`, prompt, time.Now().Add(-time.Second).UTC().Format(time.RFC3339Nano))
+		Exec(t.Context(), "UPDATE shuttle_tasks SET snapshot=jsonb_set(snapshot,'{registration_entr" +
+"y,expires_at}',to_jsonb($2::text)) WHERE id=$1", prompt, time.Now().Add(-time.Second).UTC().Format(time.RFC3339Nano))
 	require.NoError(t, err)
 	h.stop(t)
 	h.start(t)
@@ -257,7 +279,8 @@ func TestStructuredRegisterExpiryIsCheckedAfterOwnerLock(t *testing.T) {
 	require.Eventually(t, func() bool {
 		var waiting bool
 		queryErr := h.store.Pool().
-			QueryRow(t.Context(), `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%shuttle_users%')`).
+			QueryRow(t.Context(), "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
+"ase() AND wait_event_type='Lock' AND query LIKE '%shuttle_users%')").
 			Scan(&waiting)
 		return queryErr == nil && waiting
 	}, 3*time.Second, 5*time.Millisecond)

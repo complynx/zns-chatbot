@@ -61,7 +61,8 @@ func TestHistoryApplyWorksWithoutPermanentSchemaCreate(t *testing.T) {
 	require.NoError(
 		t,
 		runtime.Pool().
-			QueryRow(ctx, "SELECT has_schema_privilege(current_user,$1,'CREATE'),has_database_privilege(current_user,current_database(),'TEMPORARY')", config.RuntimeParams["search_path"]).
+			QueryRow(ctx, "SELECT has_schema_privilege(current_user,$1,'CREATE'),has_database_privi" +
+"lege(current_user,current_database(),'TEMPORARY')", config.RuntimeParams["search_path"]).
 			Scan(&permanentCreate, &temporaryCreate),
 	)
 	require.False(t, permanentCreate)

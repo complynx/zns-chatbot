@@ -78,7 +78,8 @@ func TestFileReadClassifiesOnlyExplicitCloudSizeRefusal(t *testing.T) {
 		{"failure-envelope-on-200", 200, refusal, true},
 		{"other-bad-request", 400, `{"ok":false,"error_code":400,"description":"Bad Request: wrong file_id"}`, false},
 		{"near-match", 400, `{"ok":false,"error_code":400,"description":"Bad Request: file is too big PRIVATE"}`, false},
-		{"rate-limit", 429, `{"ok":false,"error_code":429,"description":"Bad Request: file is too big","parameters":{"retry_after":3}}`, false},
+		{"rate-limit", 429, "{\"ok\":false,\"error_code\":429,\"description\":\"Bad Request: file is too big" +
+"\",\"parameters\":{\"retry_after\":3}}", false},
 		{"server-error", 500, `{"ok":false,"error_code":500,"description":"Bad Request: file is too big"}`, false},
 		{"incoherent-status", 500, refusal, false},
 		{"missing-ok", 400, `{"error_code":400,"description":"Bad Request: file is too big"}`, false},

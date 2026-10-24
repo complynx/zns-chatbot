@@ -143,7 +143,18 @@ func eventChangeDocumentSchema() map[string]any {
 func eventChangeMethod() map[string]any {
 	method := administrativeRead(
 		"change_event",
-		"Create or fully replace this deployment's event configuration only after an explicit global-administrator request and exact approval. Read event first for replacement; supply explicit id, expected_version (0 creates) and the FULL document. Times must be absolute instants plus an IANA display timezone. Module IDs are syntactically validated, not a built-in allowlist. Omitting/null registration or deposit REMOVES that policy; omitted modules are disabled. No registration, pass assignment/cancellation, frozen pass terms, allocation or money is changed. Five-minute proposal, expiry/version/current actor rechecked at execution. Reconcile the SAME operation after uncertainty; not_found never proves safe replacement. Original result is historical even after later edits. Operator operation IDs are a separate namespace.",
+		"Create or fully replace this deployment's event configuration only after"+
+			" an explicit global-administrator request and exact approval. Read event"+
+			" first for replacement; supply explicit id, expected_version (0 creates)"+
+			" and the FULL document. Times must be absolute instants plus an IANA dis"+
+			"play timezone. Module IDs are syntactically validated, not a built-in al"+
+			"lowlist. Omitting/null registration or deposit REMOVES that policy; omit"+
+			"ted modules are disabled. No registration, pass assignment/cancellation,"+
+			" frozen pass terms, allocation or money is changed. Five-minute proposal"+
+			", expiry/version/current actor rechecked at execution. Reconcile the SAM"+
+			"E operation after uncertainty; not_found never proves safe replacement. "+
+			"Original result is historical even after later edits. Operator operation"+
+			" IDs are a separate namespace.",
 		map[string]any{
 			"id":                  map[string]any{manifestType: schemaString, schemaFormat: schemaUUID},
 			schemaExpectedVersion: map[string]any{manifestType: schemaInteger, schemaMinimum: 0},

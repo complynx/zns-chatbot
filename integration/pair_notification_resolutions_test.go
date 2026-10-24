@@ -101,7 +101,8 @@ func TestPairNotificationAdminResolutionPreservesConsentAndOriginalReceipt(t *te
 			awaitPairNotice(t, f, id, state)
 			f.H.stop(t)
 			_, err := f.H.store.Pool().
-				Exec(ctx, "UPDATE shuttle_notification_resolutions SET expires_at=clock_timestamp()-interval '1 second' WHERE operation_id='pair-resolution'")
+				Exec(ctx, "UPDATE shuttle_notification_resolutions SET expires_at=clock_timestamp()" +
+"-interval '1 second' WHERE operation_id='pair-resolution'")
 			require.NoError(t, err)
 			f.H.start(t)
 			require.Equal(t, first, executePairNoticeResolution(t, f, admin, body))

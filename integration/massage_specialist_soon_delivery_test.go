@@ -68,7 +68,8 @@ func TestMassageSpecialistSoonDeliveryCapturesOnlyDueScopedActiveEvents(t *testi
 	raw, err := json.Marshal(booking.Snapshot)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), `UPDATE shuttle_massage_bookings SET starts_at=$2,treatment_ends_at=$3,occupancy_ends_at=$4,snapshot=$5 WHERE id=$1`, booking.ID, terms.StartsAt, terms.TreatmentEndsAt, terms.OccupancyEndsAt, raw)
+		Exec(t.Context(), "UPDATE shuttle_massage_bookings SET starts_at=$2,treatment_ends_at=$3,oc" +
+"cupancy_ends_at=$4,snapshot=$5 WHERE id=$1", booking.ID, terms.StartsAt, terms.TreatmentEndsAt, terms.OccupancyEndsAt, raw)
 	require.NoError(t, err)
 	require.NoError(
 		t,
@@ -168,7 +169,8 @@ func TestMassageSpecialistSoonDeliveryRechecksCapturedAuthorityAndCancellation(t
 				cancelMassageForTest(t, f, staff, booking)
 			case "ended":
 				_, err = f.H.store.Pool().
-					Exec(t.Context(), "UPDATE shuttle_events SET ends_at=clock_timestamp()-interval '1 second' WHERE id=$1", f.Event.ID)
+					Exec(t.Context(), "UPDATE shuttle_events SET ends_at=clock_timestamp()-interval '1 second' " +
+"WHERE id=$1", f.Event.ID)
 				require.NoError(t, err)
 			}
 			reserved, err := f.H.store.ReserveMassageSpecialistNotification(

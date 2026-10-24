@@ -244,7 +244,9 @@ func (s *Store) prepareAvatarDeliveryResolution(
 		Delivery:  n,
 		ExpiresAt: now.Time.UTC().Add(avatarResolutionPreparationTTL),
 		Description: fmt.Sprintf(
-			"%s avatar delivery %s for recipient %s, state %s, version %d. Reason: %s. Dismiss does not prove delivery. Retry checks current recipient access before sending.",
+			"%s avatar delivery %s for recipient %s, state %s, version %d. Reason: %s" +
+". Dismiss does not prove delivery. Retry checks current recipient access" +
+" before sending.",
 			a.Action,
 			n.ID,
 			n.UserID,
@@ -254,7 +256,8 @@ func (s *Store) prepareAvatarDeliveryResolution(
 		),
 	}
 	if a.Action == notificationRetry && n.State == deliveryUnknown {
-		result.Description += " Telegram may already have received this document. Retry can send a duplicate. Check the receipt and chat first; retry only as a last resort."
+		result.Description += " Telegram may already have received this document. Retry can send a dupl" +
+"icate. Check the receipt and chat first; retry only as a last resort."
 	}
 	raw, err := json.Marshal(result)
 	if err != nil {

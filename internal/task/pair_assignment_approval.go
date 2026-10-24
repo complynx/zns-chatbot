@@ -126,7 +126,8 @@ func fullPairAssignmentApproval(
 		if language == "ru" {
 			title = "Это назначение уже выполнено. Продолжение сверит исходный результат и не назначит пассы повторно."
 		} else {
-			title = "This assignment was already completed. Continue to reconcile the original result; this does not assign passes again."
+			title = "This assignment was already completed. Continue to reconcile the origina" +
+"l result; this does not assign passes again."
 		}
 	}
 

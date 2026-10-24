@@ -51,8 +51,11 @@ func TestMiniAppProfileLatinJournalFailureIsAtomicAndRetryable(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &session))
 	ctx := t.Context()
 	_, err := h.store.Pool().
-		Exec(ctx, `CREATE FUNCTION reject_latin_journal_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'journal unavailable'; END $$;
-CREATE TRIGGER reject_latin_journal_fixture BEFORE INSERT ON shuttle_miniapp_profile_actions FOR EACH ROW EXECUTE FUNCTION reject_latin_journal_fixture()`)
+		Exec(ctx, "CREATE FUNCTION reject_latin_journal_fixture() RETURNS trigger LANGUAGE " +
+"plpgsql AS $$ BEGIN RAISE EXCEPTION 'journal unavailable'; END $$;\nCREAT" +
+"E TRIGGER reject_latin_journal_fixture BEFORE INSERT ON shuttle_miniapp_" +
+"profile_actions FOR EACH ROW EXECUTE FUNCTION reject_latin_journal_fixtu" +
+"re()")
 	require.NoError(t, err)
 	op := uuid.New()
 	body, err := json.Marshal(map[string]any{"operation_id": op, "expected_version": 0,
@@ -67,7 +70,8 @@ CREATE TRIGGER reject_latin_journal_fixture BEFORE INSERT ON shuttle_miniapp_pro
 	require.Empty(t, current.FirstName)
 	require.Empty(t, current.FirstNameLatin)
 	_, err = h.store.Pool().
-		Exec(ctx, `DROP TRIGGER reject_latin_journal_fixture ON shuttle_miniapp_profile_actions; DROP FUNCTION reject_latin_journal_fixture()`)
+		Exec(ctx, "DROP TRIGGER reject_latin_journal_fixture ON shuttle_miniapp_profile_act" +
+"ions; DROP FUNCTION reject_latin_journal_fixture()")
 	require.NoError(t, err)
 	code, raw, _ = appCall(t, h, http.MethodPost, "/app/profile/name", string(body), session.Token, appTestOrigin)
 	require.Equal(t, http.StatusOK, code, string(raw))

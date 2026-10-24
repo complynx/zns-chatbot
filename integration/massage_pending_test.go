@@ -107,10 +107,12 @@ func TestMassagePendingRemainsDiscoverableAfterEntitlementLossUntilExpiry(t *tes
 	proposal, err := f.H.store.PrepareOwnMassageBooking(t.Context(), owner, uuid.New(), args)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_events SET modules=array_remove(modules,'massage'),version=version+1 WHERE id=$1", f.Event.ID)
+		Exec(t.Context(), "UPDATE shuttle_events SET modules=array_remove(modules,'massage'),versio" +
+"n=version+1 WHERE id=$1", f.Event.ID)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_registrations SET state='waitlisted' WHERE event_id=$1 AND user_id=$2", f.Event.ID, owner.UserID)
+		Exec(t.Context(), "UPDATE shuttle_registrations SET state='waitlisted' WHERE event_id=$1 AN" +
+"D user_id=$2", f.Event.ID, owner.UserID)
 	require.NoError(t, err)
 	choices := massageAppCall[events.ContextList](t, f, session, http.MethodGet, "/app/massage/events", nil)
 	require.Len(t, choices.Events, 1, "Pending-only event remains discoverable")
@@ -129,7 +131,8 @@ func TestMassagePendingRemainsDiscoverableAfterEntitlementLossUntilExpiry(t *tes
 	_, err = f.H.store.AdoptOwnMassageBooking(t.Context(), owner, uuid.New(), proposal.ID, args)
 	require.Error(t, err, "Informational discovery does not restore booking entitlement")
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_massage_preparations SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1", proposal.ID)
+		Exec(t.Context(), "UPDATE shuttle_massage_preparations SET expires_at=clock_timestamp()-int" +
+"erval '1 second' WHERE id=$1", proposal.ID)
 	require.NoError(t, err)
 	require.Empty(t, massageAgentPending(t, f, uuid.Nil, 20).Proposals)
 	choices = massageAppCall[events.ContextList](t, f, session, http.MethodGet, "/app/massage/events", nil)

@@ -71,7 +71,9 @@ func TestMassageSpecialistSoonPreferencesRetainsLegacyReceipts(t *testing.T) {
 	require.NoError(t, err)
 	_, err = pool.Exec(
 		t.Context(),
-		`INSERT INTO shuttle_massage_specialist_preference_operations(user_id,operation_id,event_id,source,request_hash,result) VALUES($1,$2,$3,'agent',$4,$5)`,
+		"INSERT INTO shuttle_massage_specialist_preference_operations(user_id,ope" +
+"ration_id,event_id,source,request_hash,result) VALUES($1,$2,$3,'agent',$" +
+"4,$5)",
 		staff.UserID,
 		op,
 		f.Event.ID,
@@ -109,7 +111,8 @@ func TestMassageSpecialistSoonPreferencesRetainsLegacyReceipts(t *testing.T) {
 	var original []byte
 	require.NoError(
 		t,
-		pool.QueryRow(t.Context(), "SELECT result FROM shuttle_massage_specialist_preference_operations WHERE operation_id=$1", op).
+		pool.QueryRow(t.Context(), "SELECT result FROM shuttle_massage_specialist_preference_operations WHER" +
+"E operation_id=$1", op).
 			Scan(&original),
 	)
 	require.JSONEq(t, string(legacy), string(original))

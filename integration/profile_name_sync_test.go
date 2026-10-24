@@ -87,12 +87,15 @@ func TestProfileNameRiverWorkerRecoversAfterIAMOutageAndAppRestart(t *testing.T)
 		return err == nil && (state == "retryable" || state == "scheduled")
 	}, 10*time.Second, 20*time.Millisecond)
 	_, updateErr := h.store.Pool().
-		Exec(ctx, `UPDATE river_job SET state='available',scheduled_at=clock_timestamp() WHERE kind='zinusya_profile_name_sync' AND state IN ('retryable','scheduled')`)
+		Exec(ctx, "UPDATE river_job SET state='available',scheduled_at=clock_timestamp() WH" +
+"ERE kind='zinusya_profile_name_sync' AND state IN ('retryable','schedule" +
+"d')")
 	require.NoError(t, updateErr)
 	require.Eventually(t, func() bool {
 		var deferred bool
-		err := h.store.Pool().QueryRow(ctx, `SELECT j.state='scheduled' AND j.scheduled_at>=n.next_attempt_at
-FROM river_job j CROSS JOIN shuttle_profile_name_sync n WHERE j.kind='zinusya_profile_name_sync' ORDER BY j.id DESC LIMIT 1`).Scan(&deferred)
+		err := h.store.Pool().QueryRow(ctx, "SELECT j.state='scheduled' AND j.scheduled_at>=n.next_attempt_at\nFROM ri" +
+"ver_job j CROSS JOIN shuttle_profile_name_sync n WHERE j.kind='zinusya_p" +
+"rofile_name_sync' ORDER BY j.id DESC LIMIT 1").Scan(&deferred)
 		return err == nil && deferred
 	}, 10*time.Second, 20*time.Millisecond)
 	h.stop(t)
@@ -210,7 +213,8 @@ func TestStructuredProfileNameRepairsLateOldWriteAfterNewNameWasAcknowledged(t *
 	require.Equal(t, latest.LastName, remoteLastName)
 	remoteLastName = "Old" // IAM finally applies the older request after the newer read-back.
 	_, err := h.store.Pool().
-		Exec(ctx, `UPDATE shuttle_profile_name_sync SET next_attempt_at=clock_timestamp()-interval '1 second' WHERE user_id=$1`, userID)
+		Exec(ctx, "UPDATE shuttle_profile_name_sync SET next_attempt_at=clock_timestamp()-i" +
+"nterval '1 second' WHERE user_id=$1", userID)
 	require.NoError(t, err)
 	ready, err := h.store.ReadyProfileNames(ctx, 123, "org")
 	require.NoError(t, err)

@@ -125,7 +125,8 @@ func TestMassageAvailabilityAppliesPartyLimitAndCurrentAccess(t *testing.T) {
 	_, err = f.H.store.OwnMassageAvailability(t.Context(), ownerProfileScope(t, f.H, f.AdminID), args)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_events SET modules=array_remove(modules,'massage'),version=version+1 WHERE id=$1", f.Event.ID)
+		Exec(t.Context(), "UPDATE shuttle_events SET modules=array_remove(modules,'massage'),versio" +
+"n=version+1 WHERE id=$1", f.Event.ID)
 	require.NoError(t, err)
 	_, err = f.H.store.OwnMassageAvailability(t.Context(), owner, args)
 	require.ErrorIs(t, err, pgx.ErrNoRows)

@@ -122,21 +122,24 @@ SELECT user_id,1,'Анна Иванова','Анна','Иванова','user' FR
 		s.Pool().QueryRow(t.Context(), "SELECT to_jsonb(p)::text FROM shuttle_user_profiles p").Scan(&originalProfile),
 	)
 	var objects string
-	const objectQuery = "SELECT array_agg(oid ORDER BY oid)::text FROM pg_class WHERE relnamespace=current_schema()::regnamespace"
+	const objectQuery = "SELECT array_agg(oid ORDER BY oid)::text FROM pg_class WHERE relnamespac" +
+"e=current_schema()::regnamespace"
 	require.NoError(t, s.Pool().QueryRow(t.Context(), objectQuery).Scan(&objects))
 	require.NoError(t, s.Migrate(t.Context()))
 	var retainedHistory, retainedProfile string
 	require.NoError(
 		t,
 		s.Pool().
-			QueryRow(t.Context(), "SELECT jsonb_agg(to_jsonb(v) ORDER BY id)::text FROM goose_db_version v WHERE version_id<=73").
+			QueryRow(t.Context(), "SELECT jsonb_agg(to_jsonb(v) ORDER BY id)::text FROM goose_db_version v " +
+"WHERE version_id<=73").
 			Scan(&retainedHistory),
 	)
 	require.Equal(t, history, retainedHistory)
 	require.NoError(
 		t,
 		s.Pool().
-			QueryRow(t.Context(), "SELECT (to_jsonb(p)-'first_name_latin'-'last_name_latin')::text FROM shuttle_user_profiles p").
+			QueryRow(t.Context(), "SELECT (to_jsonb(p)-'first_name_latin'-'last_name_latin')::text FROM shu" +
+"ttle_user_profiles p").
 			Scan(&retainedProfile),
 	)
 	require.Equal(t, originalProfile, retainedProfile)
@@ -168,8 +171,9 @@ func TestLatinNameInvalidationSupportsOldAndTransactionalNewWriters(t *testing.T
 	s := testStore(t)
 	task := accepted(t, s, 1)
 	_, err := s.Pool().
-		Exec(t.Context(), `INSERT INTO shuttle_user_profiles(user_id,version,full_name,first_name,last_name,name_source,first_name_latin,last_name_latin)
-VALUES($1,1,'Анна Иванова','Анна','Иванова','user','Anna','Ivanova')`, task.UserID)
+		Exec(t.Context(), "INSERT INTO shuttle_user_profiles(user_id,version,full_name,first_name,l" +
+"ast_name,name_source,first_name_latin,last_name_latin)\nVALUES($1,1,'Анна" +
+" Иванова','Анна','Иванова','user','Anna','Ivanova')", task.UserID)
 	require.NoError(t, err)
 	check := func(first, last string) {
 		t.Helper()
@@ -177,7 +181,8 @@ VALUES($1,1,'Анна Иванова','Анна','Иванова','user','Anna',
 		require.NoError(
 			t,
 			s.Pool().
-				QueryRow(t.Context(), `SELECT first_name_latin,last_name_latin FROM shuttle_user_profiles WHERE user_id=$1`, task.UserID).
+				QueryRow(t.Context(), "SELECT first_name_latin,last_name_latin FROM shuttle_user_profiles WHERE" +
+" user_id=$1", task.UserID).
 				Scan(&gotFirst, &gotLast),
 		)
 		require.Equal(t, first, gotFirst)
@@ -188,7 +193,8 @@ VALUES($1,1,'Анна Иванова','Анна','Иванова','user','Anna',
 	require.NoError(t, err)
 	check("Anna", "Ivanova")
 	_, err = s.Pool().
-		Exec(t.Context(), `UPDATE shuttle_user_profiles SET first_name='Мария',full_name='Мария Иванова' WHERE user_id=$1`, task.UserID)
+		Exec(t.Context(), "UPDATE shuttle_user_profiles SET first_name='Мария',full_name='Мария Ива" +
+"нова' WHERE user_id=$1", task.UserID)
 	require.NoError(t, err)
 	check("", "")
 	tx, err := s.Pool().Begin(t.Context())

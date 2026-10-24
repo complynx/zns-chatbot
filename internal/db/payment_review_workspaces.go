@@ -202,7 +202,8 @@ func (s *Store) CurrentPaymentReviewWorkspace(
 		return PaymentReviewWorkspace{}, err
 	}
 	var id uuid.UUID
-	err = tx.QueryRow(ctx, `SELECT id FROM shuttle_payment_review_workspaces WHERE actor_id=$1 AND event_id=$2 AND evidence_id=$3 ORDER BY revision DESC LIMIT 1`, scope.UserID, eventID, evidenceID).
+	err = tx.QueryRow(ctx, "SELECT id FROM shuttle_payment_review_workspaces WHERE actor_id=$1 AND e" +
+"vent_id=$2 AND evidence_id=$3 ORDER BY revision DESC LIMIT 1", scope.UserID, eventID, evidenceID).
 		Scan(&id)
 	if err != nil {
 		return PaymentReviewWorkspace{}, err
@@ -267,7 +268,8 @@ func (s *Store) preparePaymentReviewWorkspace(
 		return PaymentReviewWorkspace{}, err
 	}
 	var latest int64
-	err = tx.QueryRow(ctx, `SELECT COALESCE(max(revision),0) FROM shuttle_payment_review_workspaces WHERE actor_id=$1 AND evidence_id=$2`, scope.UserID, args.Review.EvidenceID).
+	err = tx.QueryRow(ctx, "SELECT COALESCE(max(revision),0) FROM shuttle_payment_review_workspaces " +
+"WHERE actor_id=$1 AND evidence_id=$2", scope.UserID, args.Review.EvidenceID).
 		Scan(&latest)
 	if err != nil {
 		return PaymentReviewWorkspace{}, err
@@ -294,7 +296,8 @@ func (s *Store) preparePaymentReviewWorkspace(
 	}
 	_, err = tx.Exec(
 		ctx,
-		`INSERT INTO shuttle_payment_review_workspaces(id,actor_id,event_id,evidence_id,revision,proposal_id,state) VALUES($1,$2,$3,$4,$5,$6,'prepared')`,
+		"INSERT INTO shuttle_payment_review_workspaces(id,actor_id,event_id,evide" +
+"nce_id,revision,proposal_id,state) VALUES($1,$2,$3,$4,$5,$6,'prepared')",
 		id,
 		scope.UserID,
 		w.EventID,
@@ -491,8 +494,9 @@ func (s *Store) PreparePaymentReviewCommit(
 	}
 	_, err = tx.Exec(
 		ctx,
-		`INSERT INTO shuttle_payment_review_calls(actor_id,operation_id,kind,request_hash,workspace_id,proposal_id,expires_at,source)
- VALUES($1,$2,'commit',$3,$4,$5,$6,'agent')`,
+		"INSERT INTO shuttle_payment_review_calls(actor_id,operation_id,kind,requ" +
+"est_hash,workspace_id,proposal_id,expires_at,source)\n VALUES($1,$2,'comm" +
+"it',$3,$4,$5,$6,'agent')",
 		scope.UserID,
 		op,
 		hash[:],
@@ -578,7 +582,8 @@ func completeWorkspaceReview(
 	}
 	_, err = tx.Exec(
 		ctx,
-		`UPDATE shuttle_payment_review_calls SET result=$3,completed_at=clock_timestamp() WHERE actor_id=$1 AND operation_id=$2`,
+		"UPDATE shuttle_payment_review_calls SET result=$3,completed_at=clock_tim" +
+"estamp() WHERE actor_id=$1 AND operation_id=$2",
 		scope.UserID,
 		op,
 		raw,

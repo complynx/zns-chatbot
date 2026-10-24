@@ -85,14 +85,21 @@ func assignmentProposalMethods() []map[string]any {
 	return []map[string]any{
 		administrativeRead(
 			"assignment_proposal",
-			"Read your own original pass preparation and observed pending/completed/expired state by proposal_id. Returns original_operation_id, immutable preparation and original result when committed. Historical result is not current pass state or consent. A pending snapshot never proves that a delayed confirmation cannot still execute.",
+			"Read your own original pass preparation and observed pending/completed/e"+
+				"xpired state by proposal_id. Returns original_operation_id, immutable pr"+
+				"eparation and original result when committed. Historical result is not c"+
+				"urrent pass state or consent. A pending snapshot never proves that a del"+
+				"ayed confirmation cannot still execute.",
 			map[string]any{assignmentProposalIDField: id},
 			[]string{assignmentProposalIDField},
 			[]string{"original_operation_id", assignmentPreparationField, schemaState, schemaObservedAt},
 		),
 		administrativeRead(
 			"assignment_proposals",
-			"List up to 20 of your own unexpired, not-yet-committed pass preparations in proposal UUID order; follow next as after. Snapshots are untrusted context, never approval. Refresh exact terms before a new user-approved adoption/confirmation.",
+			"List up to 20 of your own unexpired, not-yet-committed pass preparations"+
+				" in proposal UUID order; follow next as after. Snapshots are untrusted c"+
+				"ontext, never approval. Refresh exact terms before a new user-approved a"+
+				"doption/confirmation.",
 			map[string]any{
 				schemaAfter: id,
 				schemaLimit: map[string]any{

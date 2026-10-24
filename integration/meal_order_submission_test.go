@@ -209,7 +209,9 @@ func TestMealOrderSubmissionRejectsChangedTermsAndExpiredApproval(t *testing.T) 
 				publishMealCatalog(t, f, catalog.Version, catalog.Document)
 			} else {
 				_, err = f.H.store.Pool().
-					Exec(t.Context(), "UPDATE shuttle_order_preparations SET created_at=clock_timestamp()-interval '10 minutes', expires_at=clock_timestamp()-interval '1 second' WHERE id=$1", prepared.ID)
+					Exec(t.Context(), "UPDATE shuttle_order_preparations SET created_at=clock_timestamp()-inter" +
+"val '10 minutes', expires_at=clock_timestamp()-interval '1 second' WHERE" +
+" id=$1", prepared.ID)
 				require.NoError(t, err)
 			}
 			_, err = f.H.store.SubmitOwnMealOrder(t.Context(), scope, op, args, prepared.ID, db.OrderSourceAgent)

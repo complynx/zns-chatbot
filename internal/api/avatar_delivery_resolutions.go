@@ -240,7 +240,18 @@ func avatarDeliveryAdministrativeMethods() []map[string]any {
 	uuidField := map[string]any{manifestType: schemaString, schemaFormat: schemaUUID}
 	method := administrativeRead(
 		"resolve_avatar_delivery",
-		"Retry or dismiss a saved-draft avatar document with current global administrator authority. Inspect avatar_delivery and the Telegram chat first: unknown may already be delivered; retry can duplicate the document and is a last resort. Never generate another avatar to retry delivery. Exact confirmation binds delivery/version/action/reason. Dismiss does not prove delivery. Retry rechecks the captured recipient. Reconcile the same operation ID before any new action. To continue your existing unexpired proposal from another interface, use its exact original arguments plus optional resume_proposal_id; this binds the new operation to that proposal without extending expiry or supplying consent. A fresh exact approval is still required. Completed/expired proposals must be reconciled, never adopted as fresh consent.",
+		"Retry or dismiss a saved-draft avatar document with current global admin"+
+			"istrator authority. Inspect avatar_delivery and the Telegram chat first:"+
+			" unknown may already be delivered; retry can duplicate the document and "+
+			"is a last resort. Never generate another avatar to retry delivery. Exact"+
+			" confirmation binds delivery/version/action/reason. Dismiss does not pro"+
+			"ve delivery. Retry rechecks the captured recipient. Reconcile the same o"+
+			"peration ID before any new action. To continue your existing unexpired p"+
+			"roposal from another interface, use its exact original arguments plus op"+
+			"tional resume_proposal_id; this binds the new operation to that proposal"+
+			" without extending expiry or supplying consent. A fresh exact approval i"+
+			"s still required. Completed/expired proposals must be reconciled, never "+
+			"adopted as fresh consent.",
 		map[string]any{
 			schemaAvatarDeliveryID: uuidField,
 			schemaResumeProposalID: uuidField,
@@ -270,7 +281,11 @@ func avatarDeliveryAdministrativeMethods() []map[string]any {
 		method,
 		administrativeRead(
 			"avatar_delivery",
-			"Inspect one saved-draft avatar delivery in this bot and organization, including the captured recipient, version, attempt and bounded Telegram receipt. No image bytes or credentials are returned. An unknown outcome is not proof of non-delivery. Use resolve_avatar_delivery only after explicit confirmation.",
+			"Inspect one saved-draft avatar delivery in this bot and organization, in"+
+				"cluding the captured recipient, version, attempt and bounded Telegram re"+
+				"ceipt. No image bytes or credentials are returned. An unknown outcome is"+
+				" not proof of non-delivery. Use resolve_avatar_delivery only after expli"+
+				"cit confirmation.",
 			map[string]any{schemaAvatarDeliveryID: uuidField},
 			[]string{schemaAvatarDeliveryID},
 			[]string{"id", "artifact_id", schemaUserID, schemaState, schemaVersion, "receipt"},

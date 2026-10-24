@@ -113,7 +113,8 @@ func TestOrderEvidenceReadAndRecoveryRequireCurrentModule(t *testing.T) {
 	owner := paymentScope(t, f.H, f.OwnerID, false)
 	actor := paymentScope(t, f.H, f.AmbassadorID, false)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_events SET modules=ARRAY['registrations'],version=version+1 WHERE id=$1", f.Event.ID)
+		Exec(t.Context(), "UPDATE shuttle_events SET modules=ARRAY['registrations'],version=version" +
+"+1 WHERE id=$1", f.Event.ID)
 	require.NoError(t, err)
 	_, err = f.H.store.OrderEvidenceOperationByID(t.Context(), owner, op, db.OrderEvidenceSubmissionReceipt)
 	require.Error(t, err)

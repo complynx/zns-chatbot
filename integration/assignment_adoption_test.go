@@ -147,7 +147,8 @@ func TestAssignmentAdoptionSharesCanonicalReceiptAcrossRestartAndConcurrentEnvel
 	)
 	require.Equal(t, 1, receipts)
 	_, err = h.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_assignment_preparations SET expires_at=clock_timestamp()-interval '1 minute' WHERE proposal_id=$1", original.Preconditions.ProposalID)
+		Exec(t.Context(), "UPDATE shuttle_assignment_preparations SET expires_at=clock_timestamp()-" +
+"interval '1 minute' WHERE proposal_id=$1", original.Preconditions.ProposalID)
 	require.NoError(t, err)
 	_, err = h.store.Pool().
 		Exec(t.Context(), "UPDATE shuttle_events SET modules='{}',version=version+1 WHERE id=$1", event.ID)
@@ -329,7 +330,8 @@ func TestAssignmentAdoptionRechecksExpiryAfterCanonicalLock(t *testing.T) {
 	require.Eventually(t, func() bool {
 		var waiting bool
 		e := h.store.Pool().
-			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::integer=ANY(pg_blocking_pids(pid)))", writer.Conn().PgConn().PID()).
+			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::integer=ANY(pg_bl" +
+"ocking_pids(pid)))", writer.Conn().PgConn().PID()).
 			Scan(&waiting)
 		return e == nil && waiting
 	}, 2*time.Second, 10*time.Millisecond)

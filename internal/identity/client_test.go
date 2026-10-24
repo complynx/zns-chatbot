@@ -253,7 +253,8 @@ func testUser(id string) iamUser {
 	var u iamUser
 	_ = json.Unmarshal(
 		[]byte(
-			`{"userId":"`+id+`","state":"USER_STATE_ACTIVE","details":{"resourceOwner":"org"},"human":{"email":{"email":"tg+123+456@telegram.invalid","isVerified":true}}}`,
+			`{"userId":"`+id+"\",\"state\":\"USER_STATE_ACTIVE\",\"details\":{\"resourceOwner\":\"org\"},\"human"+
+				"\":{\"email\":{\"email\":\"tg+123+456@telegram.invalid\",\"isVerified\":true}}}",
 		),
 		&u,
 	)

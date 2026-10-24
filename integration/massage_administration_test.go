@@ -128,7 +128,8 @@ func TestMassageAdministrationReadBoundsPagesWithoutDroppingRecords(t *testing.T
 	three, _ := bookMassage(t, f, other, args)
 	// Stored labels are untrusted; JSON escaping must not exceed the advertised result limit.
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_massage_bookings SET snapshot=jsonb_set(snapshot,'{event_name}',to_jsonb($2::text)) WHERE event_id=$1", f.Event.ID, strings.Repeat("<", 4500))
+		Exec(t.Context(), "UPDATE shuttle_massage_bookings SET snapshot=jsonb_set(snapshot,'{event_" +
+"name}',to_jsonb($2::text)) WHERE event_id=$1", f.Event.ID, strings.Repeat("<", 4500))
 	require.NoError(t, err)
 	page := readAdministrativeMassage(t, f, uuid.Nil, 20)
 	require.NotEmpty(t, page.Bookings)

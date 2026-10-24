@@ -53,7 +53,14 @@ func (s *Server) knowledgeNoticeDiagnostics(
 func knowledgeNoticeDiagnosticsMethod() map[string]any {
 	return administrativeRead(
 		"knowledge_notification",
-		"Inspect a knowledge notice's delivery locators, original event origin, attempt ID and Telegram receipt with current global administrator authority. No proposed text or raw outbound payload is returned. Use resolve_notification with notification_kind=knowledge for exact audited retry/dismiss. Pass event_id only for event-origin suggestions; omit it for general suggestions. Unknown may already be delivered: check receipt/chat before an explicit last-resort retry. Never repeat suggestion or moderation to resend a notice.",
+		"Inspect a knowledge notice's delivery locators, original event origin, a"+
+			"ttempt ID and Telegram receipt with current global administrator authori"+
+			"ty. No proposed text or raw outbound payload is returned. Use resolve_no"+
+			"tification with notification_kind=knowledge for exact audited retry/dism"+
+			"iss. Pass event_id only for event-origin suggestions; omit it for genera"+
+			"l suggestions. Unknown may already be delivered: check receipt/chat befo"+
+			"re an explicit last-resort retry. Never repeat suggestion or moderation "+
+			"to resend a notice.",
 		map[string]any{
 			"id": map[string]any{manifestType: schemaString, schemaFormat: schemaUUID},
 		},

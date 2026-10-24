@@ -154,7 +154,9 @@ func writeFinalizedAvatar(
 	}
 	_, err = tx.Exec(
 		ctx,
-		`INSERT INTO shuttle_avatars(id,user_id,operation_id,request_hash,receipt,jpeg,draft_id,draft_version,native,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+		"INSERT INTO shuttle_avatars(id,user_id,operation_id,request_hash,receipt" +
+",jpeg,draft_id,draft_version,native,created_at) VALUES($1,$2,$3,$4,$5,$6" +
+",$7,$8,$9,$10)",
 		result.ArtifactID,
 		scope.UserID,
 		a.OperationID,

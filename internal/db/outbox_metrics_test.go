@@ -31,8 +31,9 @@ func TestOutboxMetricsCountChunksIndependentlyOfTaskAndPreserveRowsAcrossBaselin
 		if state == "retryable" {
 			age = -time.Minute
 		}
-		_, err = s.Pool().Exec(ctx, `INSERT INTO shuttle_outbox(id,task_id,dedup_key,chunk_seq,payload,state,created_at)
-		 VALUES($1,$2,$3,$4,'{"private-payload":"not a label"}',$5,statement_timestamp()-$6::double precision*interval '1 second')`,
+		_, err = s.Pool().Exec(ctx, "INSERT INTO shuttle_outbox(id,task_id,dedup_key,chunk_seq,payload,state," +
+"created_at)\n\t\t VALUES($1,$2,$3,$4,'{\"private-payload\":\"not a label\"}',$5" +
+",statement_timestamp()-$6::double precision*interval '1 second')",
 			id, task.ID, id.String(), index, state, age.Seconds())
 		require.NoError(t, err)
 	}
@@ -58,11 +59,13 @@ func TestOutboxMetricsCountChunksIndependentlyOfTaskAndPreserveRowsAcrossBaselin
 	require.NoError(t, s.Migrate(ctx))
 	var exists bool
 	require.NoError(t, s.Pool().QueryRow(ctx,
-		"SELECT EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname=current_schema() AND indexname='shuttle_outbox_unresolved_metrics_idx')").
+		"SELECT EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname=current_schema()" +
+" AND indexname='shuttle_outbox_unresolved_metrics_idx')").
 		Scan(&exists))
 	require.True(t, exists)
-	_, err = s.Pool().Exec(ctx, `INSERT INTO shuttle_outbox(id,task_id,dedup_key,chunk_seq,payload)
-		 VALUES($1,$2,$3,100,'{"changed retry":true}') ON CONFLICT(dedup_key) DO NOTHING`, uuid.New(), task.ID, first.String())
+	_, err = s.Pool().Exec(ctx, "INSERT INTO shuttle_outbox(id,task_id,dedup_key,chunk_seq,payload)\n\t\t VA" +
+"LUES($1,$2,$3,100,'{\"changed retry\":true}') ON CONFLICT(dedup_key) DO NO" +
+"THING", uuid.New(), task.ID, first.String())
 	require.NoError(t, err)
 	var after string
 	require.NoError(t, s.Pool().QueryRow(ctx,

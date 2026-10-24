@@ -182,7 +182,11 @@ func saveRegistrationDetails(
 	}
 	_, err = tx.Exec(
 		ctx,
-		`INSERT INTO shuttle_registration_details(user_id,version,encrypted_record,legal_name_present,passport_number_present) VALUES($1,$2,$3,$4,$5) ON CONFLICT(user_id) DO UPDATE SET version=EXCLUDED.version,encrypted_record=EXCLUDED.encrypted_record,legal_name_present=EXCLUDED.legal_name_present,passport_number_present=EXCLUDED.passport_number_present`,
+		"INSERT INTO shuttle_registration_details(user_id,version,encrypted_recor"+
+			"d,legal_name_present,passport_number_present) VALUES($1,$2,$3,$4,$5) ON "+
+			"CONFLICT(user_id) DO UPDATE SET version=EXCLUDED.version,encrypted_recor"+
+			"d=EXCLUDED.encrypted_record,legal_name_present=EXCLUDED.legal_name_prese"+
+			"nt,passport_number_present=EXCLUDED.passport_number_present",
 		owner,
 		status.Version,
 		encrypted,
@@ -199,7 +203,8 @@ func replayRegistrationDetails(
 	digest []byte,
 ) (registrationdetails.Status, error) {
 	var stored, raw []byte
-	err := tx.QueryRow(ctx, `SELECT request_hash,result FROM shuttle_registration_details_operations WHERE user_id=$1 AND operation_id=$2`, owner, operation).
+	err := tx.QueryRow(ctx, "SELECT request_hash,result FROM shuttle_registration_details_operations "+
+		"WHERE user_id=$1 AND operation_id=$2", owner, operation).
 		Scan(&stored, &raw)
 	if err != nil {
 		return registrationdetails.Status{}, err
@@ -230,7 +235,8 @@ func (s *Store) RegistrationDetailsOperation(
 		return registrationdetails.Status{}, err
 	}
 	var raw []byte
-	if err = tx.QueryRow(ctx, `SELECT result FROM shuttle_registration_details_operations WHERE user_id=$1 AND operation_id=$2`, scope.UserID, operation).
+	if err = tx.QueryRow(ctx, "SELECT result FROM shuttle_registration_details_operations WHERE user_id"+
+		"=$1 AND operation_id=$2", scope.UserID, operation).
 		Scan(&raw); err != nil {
 		return registrationdetails.Status{}, err
 	}

@@ -134,7 +134,8 @@ func TestAvatarAdoptionNeverRenewsExpiredOrCompletedConsent(t *testing.T) {
 	_, err = g.h.store.AdoptAvatarDeliveryResolution(t.Context(), admin, expiredAlias, expired.ID, args)
 	require.NoError(t, err)
 	_, err = g.h.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_avatar_delivery_resolutions SET expires_at=clock_timestamp()-interval '1 second' WHERE proposal_id=$1", expired.ID)
+		Exec(t.Context(), "UPDATE shuttle_avatar_delivery_resolutions SET expires_at=clock_timestam" +
+"p()-interval '1 second' WHERE proposal_id=$1", expired.ID)
 	require.NoError(t, err)
 	for _, op := range []uuid.UUID{expiredAlias, uuid.New()} {
 		_, err = g.h.store.AdoptAvatarDeliveryResolution(t.Context(), admin, op, expired.ID, args)

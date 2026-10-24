@@ -48,7 +48,13 @@ func avatarPreviewMethod(
 	}
 	preview := method(
 		"preview_draft",
-		"Render an authoritative read-only preview of the saved draft_id and expected_version. Returns a JPEG descriptor whose versioned download path rechecks current ownership, version and pinned frame. A changed draft rejects; reread it before requesting another preview. Creates no artifact, operation receipt, task or Telegram delivery. Old preview links conflict after a later edit. Use Zinusya file IDs/descriptors; never embed image bytes in conversation JSON.",
+		"Render an authoritative read-only preview of the saved draft_id and expe"+
+			"cted_version. Returns a JPEG descriptor whose versioned download path re"+
+			"checks current ownership, version and pinned frame. A changed draft reje"+
+			"cts; reread it before requesting another preview. Creates no artifact, o"+
+			"peration receipt, task or Telegram delivery. Old preview links conflict "+
+			"after a later edit. Use Zinusya file IDs/descriptors; never embed image "+
+			"bytes in conversation JSON.",
 		previewInput,
 		avatarPreviewSchema(),
 	)

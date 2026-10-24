@@ -466,7 +466,9 @@ func TestMiniAppPaymentReviewHTTPPayerDisplayAndAccess(t *testing.T) {
 	_, err := f.H.store.Pool().Exec(t.Context(), `UPDATE shuttle_users SET profile=$2 WHERE id=$1`, f.OwnerID, profile)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), `INSERT INTO shuttle_user_profiles(user_id,version,full_name) VALUES($1,1,'Chosen payer') ON CONFLICT(user_id) DO UPDATE SET full_name=EXCLUDED.full_name`, f.OwnerID)
+		Exec(t.Context(), "INSERT INTO shuttle_user_profiles(user_id,version,full_name) VALUES($1,1" +
+",'Chosen payer') ON CONFLICT(user_id) DO UPDATE SET full_name=EXCLUDED.f" +
+"ull_name", f.OwnerID)
 	require.NoError(t, err)
 	eventPath := paymentAppPath + "events/" + review.EventID.String()
 	code, raw, _ := appCall(t, f.H, http.MethodGet, eventPath, "", session.Token, appTestOrigin)

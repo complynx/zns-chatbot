@@ -107,7 +107,10 @@ func notificationMethods() []map[string]any {
 		notificationResolutionMethod(),
 		administrativeRead(
 			"notifications",
-			"List this deployment's durable payment notification metadata, including blocked and unknown delivery outcomes. UUID pages, max/default 20; follow next as after. A Telegram timeout is not proof of non-delivery. Do not resend unknown messages blindly.",
+			"List this deployment's durable payment notification metadata, including " +
+"blocked and unknown delivery outcomes. UUID pages, max/default 20; follo" +
+"w next as after. A Telegram timeout is not proof of non-delivery. Do not" +
+" resend unknown messages blindly.",
 			map[string]any{
 				schemaState: map[string]any{
 					manifestType: schemaString,
@@ -134,7 +137,11 @@ func notificationMethods() []map[string]any {
 		),
 		administrativeRead(
 			"notification",
-			"Inspect a durable payment notification's frozen business event, recipient, current delivery state/version and Telegram receipt. Current global administrator authority required. No credentials or downloaded file bytes. Unknown send remains uncertain; the ledger is independent of notification delivery.",
+			"Inspect a durable payment notification's frozen business event, recipien" +
+"t, current delivery state/version and Telegram receipt. Current global a" +
+"dministrator authority required. No credentials or downloaded file bytes" +
+". Unknown send remains uncertain; the ledger is independent of notificat" +
+"ion delivery.",
 			map[string]any{"id": uuidField},
 			[]string{"id"},
 			[]string{"id", schemaState, schemaVersion, paymentSchemaReceipt},

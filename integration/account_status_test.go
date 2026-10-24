@@ -69,7 +69,8 @@ func TestAccountStatusPreservesWaitlistsPaidHistoryAndPendingMoney(t *testing.T)
 	require.Equal(t, payments.TopUp, assigned.Pass.Purpose)
 	confirmExpectationPayment(t, f, 9258, payments.TopUp, 1)
 	_, err = f.H.store.Pool().
-		Exec(ctx, "UPDATE shuttle_events SET starts_at=now()-interval '2 days',ends_at=now()-interval '1 day' WHERE id=$1", f.Event.ID)
+		Exec(ctx, "UPDATE shuttle_events SET starts_at=now()-interval '2 days',ends_at=now(" +
+")-interval '1 day' WHERE id=$1", f.Event.ID)
 	require.NoError(t, err)
 	assigned = find(read(), f.Event.ID)
 	require.True(t, assigned.Pass.Balance.FullyPaid)
@@ -233,7 +234,8 @@ WHERE relation='shuttle_passes'::regclass AND NOT granted)`).Scan(&waiting)
 		return queryErr == nil && waiting
 	}, 3*time.Second, 5*time.Millisecond)
 	_, err = f.H.store.Pool().
-		Exec(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 second' WHERE user_id=$1", f.OwnerID)
+		Exec(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interva" +
+"l '1 second' WHERE user_id=$1", f.OwnerID)
 	require.NoError(t, err)
 	require.NoError(t, blocking.Commit(ctx))
 	select {

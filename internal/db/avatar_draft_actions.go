@@ -40,24 +40,28 @@ func (s *Store) RecentNativeAvatarDraftActions(
 	}
 	rows, err := tx.Query(
 		ctx,
-		`SELECT actions.operation_id,actions.draft_id,actions.kind,actions.version,actions.created_at,actions.artifact_id,actions.delivery_id,
- d.source_file_id,coalesce(f.kind,''),coalesce(n.state,''),coalesce((n.receipt->>'crop_button_offered')::boolean,false),
- (n.receipt#>>'{ui,crop_opened_at}')::timestamptz
- FROM (
- SELECT user_id,operation_id,draft_id,kind,(result->>'version')::bigint AS version,created_at,NULL::uuid AS artifact_id,NULL::uuid AS delivery_id FROM shuttle_avatar_draft_operations WHERE user_id=$2 AND native
- UNION ALL
- SELECT user_id,operation_id,draft_id,'finalize',draft_version,created_at,id, (receipt->>'delivery_id')::uuid FROM shuttle_avatars WHERE user_id=$2 AND native AND draft_id IS NOT NULL
- UNION ALL
- SELECT a.user_id,(n.receipt#>>'{ui,crop_open_operation_id}')::uuid,a.draft_id,'crop_open',a.draft_version,
- (n.receipt#>>'{ui,crop_opened_at}')::timestamptz,a.id,n.id
- FROM shuttle_avatars a JOIN shuttle_avatar_deliveries n ON n.artifact_id=a.id AND n.user_id=a.user_id
- WHERE a.user_id=$2 AND a.draft_id IS NOT NULL AND n.receipt#>>'{ui,crop_opened_at}' IS NOT NULL
-	 ) actions JOIN shuttle_tasks task ON task.user_id=actions.user_id
- LEFT JOIN shuttle_avatar_drafts d ON d.id=actions.draft_id AND d.user_id=actions.user_id
- LEFT JOIN shuttle_files f ON f.id=d.source_file_id AND f.user_id=actions.user_id
- LEFT JOIN shuttle_avatar_deliveries n ON n.id=actions.delivery_id AND n.user_id=actions.user_id
- WHERE task.id=$1 AND task.user_id=$2 AND actions.created_at<task.created_at
- ORDER BY actions.created_at DESC,actions.operation_id LIMIT 5`,
+		"SELECT actions.operation_id,actions.draft_id,actions.kind,actions.versio" +
+"n,actions.created_at,actions.artifact_id,actions.delivery_id,\n d.source_" +
+"file_id,coalesce(f.kind,''),coalesce(n.state,''),coalesce((n.receipt->>'" +
+"crop_button_offered')::boolean,false),\n (n.receipt#>>'{ui,crop_opened_at" +
+"}')::timestamptz\n FROM (\n SELECT user_id,operation_id,draft_id,kind,(res" +
+"ult->>'version')::bigint AS version,created_at,NULL::uuid AS artifact_id" +
+",NULL::uuid AS delivery_id FROM shuttle_avatar_draft_operations WHERE us" +
+"er_id=$2 AND native\n UNION ALL\n SELECT user_id,operation_id,draft_id,'fi" +
+"nalize',draft_version,created_at,id, (receipt->>'delivery_id')::uuid FRO" +
+"M shuttle_avatars WHERE user_id=$2 AND native AND draft_id IS NOT NULL\n " +
+"UNION ALL\n SELECT a.user_id,(n.receipt#>>'{ui,crop_open_operation_id}'):" +
+":uuid,a.draft_id,'crop_open',a.draft_version,\n (n.receipt#>>'{ui,crop_op" +
+"ened_at}')::timestamptz,a.id,n.id\n FROM shuttle_avatars a JOIN shuttle_a" +
+"vatar_deliveries n ON n.artifact_id=a.id AND n.user_id=a.user_id\n WHERE " +
+"a.user_id=$2 AND a.draft_id IS NOT NULL AND n.receipt#>>'{ui,crop_opened" +
+"_at}' IS NOT NULL\n\t ) actions JOIN shuttle_tasks task ON task.user_id=ac" +
+"tions.user_id\n LEFT JOIN shuttle_avatar_drafts d ON d.id=actions.draft_i" +
+"d AND d.user_id=actions.user_id\n LEFT JOIN shuttle_files f ON f.id=d.sou" +
+"rce_file_id AND f.user_id=actions.user_id\n LEFT JOIN shuttle_avatar_deli" +
+"veries n ON n.id=actions.delivery_id AND n.user_id=actions.user_id\n WHER" +
+"E task.id=$1 AND task.user_id=$2 AND actions.created_at<task.created_at\n" +
+" ORDER BY actions.created_at DESC,actions.operation_id LIMIT 5",
 		taskID,
 		scope.UserID,
 	)

@@ -52,7 +52,9 @@ func mealDocumentSchema() map[string]any {
 			"payment_deadline": map[string]any{
 				manifestType:        schemaString,
 				schemaFormat:        schemaDateTime,
-				manifestDescription: "One explicit deadline for submitting payment evidence for event meals; not the ambassador review deadline. Omit only for legacy/descriptive catalogs without financial submission.",
+				manifestDescription: "One explicit deadline for submitting payment evidence for event meals; n" +
+"ot the ambassador review deadline. Omit only for legacy/descriptive cata" +
+"logs without financial submission.",
 			},
 			schemaCurrency: map[string]any{manifestType: schemaString, schemaPattern: schemaCurrencyPattern},
 			schemaCurrencyScale: map[string]any{

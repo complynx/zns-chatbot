@@ -43,6 +43,27 @@ func TestStructuredNavigationNeedsNoLoomAndReplaysAcceptedUpdates(t *testing.T) 
 	}
 }
 
+func TestNativeCommandsWithEmptyCatalogsKeepSendableKeyboards(t *testing.T) {
+	t.Parallel()
+	p := newPeers(t)
+	p.loomDown = true
+	h := setup(t, p)
+	seedNamedTelegramUser(t, h)
+	commands := []string{"/start", "/menu", "/profile", "/registrations", "/register", "/orders", "/massage", "/avatar", "/pairs", "/payments", "/knowledge"}
+	for n, command := range commands {
+		id := h.submitText(t, int64(92800+n), command)
+		h.await(t, id, "completed")
+		h.awaitReplies(t, n+1)
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, message := range p.sent {
+		require.False(t, invalidTelegramMarkup(message.ReplyMarkup))
+	}
+	require.Empty(t, p.runs)
+	require.Zero(t, p.loomUnavailableCalls)
+}
+
 func TestStructuredNavigationPreservesAgentQuestionAcrossLoomOutageAndRestart(t *testing.T) {
 	t.Parallel()
 	p := newPeers(t)

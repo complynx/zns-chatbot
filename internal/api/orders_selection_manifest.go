@@ -15,7 +15,10 @@ func ordersSelectionMethods() []map[string]any {
 	}
 	read := paymentMethod(
 		"selection",
-		"Read your saved event selection and historical quote. Version zero means no saved draft. Current assigned pass and enabled orders module are required. Closed or removed catalog items remain in saved history; never imply a reservation, submitted order or current price guarantee.",
+		"Read your saved event selection and historical quote. Version zero means" +
+" no saved draft. Current assigned pass and enabled orders module are req" +
+"uired. Closed or removed catalog items remain in saved history; never im" +
+"ply a reservation, submitted order or current price guarantee.",
 		ordersEventProperties(),
 		[]string{schemaEventID},
 		fields,
@@ -28,7 +31,18 @@ func ordersSelectionMethods() []map[string]any {
 	properties[ordersSchemaSelections] = ordersSelectionSchema(0)
 	save := paymentMethod(
 		"save_selection",
-		"Save only quantities explicitly requested by the user as an unsubmitted draft. Read catalog and selection first; supply their event, catalog and draft versions. The server calculates and stores the complete historical quote; no client price is accepted. Explicit selections:[] clears only this draft and advances its revision, with no quote or order cancellation. Missing/null selections is invalid. Stale versions conflict; do not silently reprice or overwrite. No recipient, capacity hold, debt, payment or submitted order is created. Same operation and normalized body replay the original receipt even after newer changes; changed arguments require a new operation only after user intent. On uncertain response reconcile the same operation; not_found is unknown, not permission to replace it.",
+		"Save only quantities explicitly requested by the user as an unsubmitted " +
+"draft. Read catalog and selection first; supply their event, catalog and" +
+" draft versions. The server calculates and stores the complete historica" +
+"l quote; no client price is accepted. Explicit selections:[] clears only" +
+" this draft and advances its revision, with no quote or order cancellati" +
+"on. Missing/null selections is invalid. Stale versions conflict; do not " +
+"silently reprice or overwrite. No recipient, capacity hold, debt, paymen" +
+"t or submitted order is created. Same operation and normalized body repl" +
+"ay the original receipt even after newer changes; changed arguments requ" +
+"ire a new operation only after user intent. On uncertain response reconc" +
+"ile the same operation; not_found is unknown, not permission to replace " +
+"it.",
 		properties,
 		[]string{
 			schemaEventID,
@@ -45,7 +59,10 @@ func ordersSelectionMethods() []map[string]any {
 	save[manifestDedupWindow] = agentRegistrationDedupSeconds
 	operation := paymentMethod(
 		"selection_operation",
-		"Recover your original saved-selection receipt by operation UUID. This returns historical quantities/quote only after checking current access to that operation's event. not_found is an unknown result, never evidence that a retry with a new operation is safe.",
+		"Recover your original saved-selection receipt by operation UUID. This re" +
+"turns historical quantities/quote only after checking current access to " +
+"that operation's event. not_found is an unknown result, never evidence t" +
+"hat a retry with a new operation is safe.",
 		map[string]any{detailsOperationID: map[string]any{manifestType: schemaString, schemaFormat: schemaUUID}},
 		[]string{detailsOperationID},
 		fields,
@@ -53,7 +70,12 @@ func ordersSelectionMethods() []map[string]any {
 	operation[manifestPath] = ordersSelectionPath + "selection_operation"
 	list := paymentMethod(
 		"events",
-		"List events where your assigned pass permits orders, including unpaid/overdue and past events needed for saved selection history. UUID pagination returns at most20 events; use next as after until absent. Disabled orders modules, other owners and waitlist alone grant no access. Dates use the supplied IANA timezone. Listing never selects an event or changes a draft.",
+		"List events where your assigned pass permits orders, including unpaid/ov" +
+"erdue and past events needed for saved selection history. UUID paginatio" +
+"n returns at most20 events; use next as after until absent. Disabled ord" +
+"ers modules, other owners and waitlist alone grant no access. Dates use " +
+"the supplied IANA timezone. Listing never selects an event or changes a " +
+"draft.",
 		map[string]any{schemaAfter: map[string]any{manifestType: schemaString, schemaFormat: schemaUUID}},
 		nil,
 		[]string{schemaEvents},

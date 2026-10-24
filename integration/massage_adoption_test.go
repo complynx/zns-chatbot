@@ -260,7 +260,8 @@ func TestMassageAdoptionRejectsWrongBindingExpiryAndPrepareConsent(t *testing.T)
 	)
 	require.Equal(t, http.StatusBadRequest, code, string(raw))
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_massage_preparations SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1", prepared.ID)
+		Exec(t.Context(), "UPDATE shuttle_massage_preparations SET expires_at=clock_timestamp()-int" +
+"erval '1 second' WHERE id=$1", prepared.ID)
 	require.NoError(t, err)
 	code, raw = adminRequest(
 		t,
@@ -349,10 +350,12 @@ func TestMassageAdoptionRechecksNewBookingAccessButKeepsHistoricalCancellation(t
 	cancelProposal, err := f.H.store.PrepareOwnMassageCancellation(t.Context(), owner, cancelOp, cancelArgs)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_events SET modules=array_remove(modules,'massage'),version=version+1 WHERE id=$1", f.Event.ID)
+		Exec(t.Context(), "UPDATE shuttle_events SET modules=array_remove(modules,'massage'),versio" +
+"n=version+1 WHERE id=$1", f.Event.ID)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_registrations SET state='waitlisted' WHERE event_id=$1 AND user_id=$2", f.Event.ID, owner.UserID)
+		Exec(t.Context(), "UPDATE shuttle_registrations SET state='waitlisted' WHERE event_id=$1 AN" +
+"D user_id=$2", f.Event.ID, owner.UserID)
 	require.NoError(t, err)
 	code, raw := adminRequest(
 		t,

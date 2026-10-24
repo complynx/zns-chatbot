@@ -286,8 +286,10 @@ func (s *Service) registrationRetry(ctx context.Context, t *db.Task, c checkpoin
 		i,
 		structuredText(
 			ru,
-			"The registration choice could not be verified, changed, or expired. Open /register again; an existing role cannot be changed here.",
-			"Не удалось проверить выбор, он изменился или истёк. Открой /register заново; изменить существующую роль здесь нельзя.",
+			"The registration choice could not be verified, changed, or expired. Open" +
+" /register again; an existing role cannot be changed here.",
+			"Не удалось проверить выбор, он изменился или истёк. Открой /register зан" +
+"ово; изменить существующую роль здесь нельзя.",
 		),
 		nil,
 		ru,
@@ -304,7 +306,7 @@ func (s *Service) finishRegistration(
 	ru bool,
 ) error {
 	out := structuredOutput(i, text, nil, ru, "")
-	if keyboard != nil {
+	if keyboard != nil && len(keyboard.InlineKeyboard) > 0 {
 		var payload telegram.SendMessageRequest
 		if err := json.Unmarshal(out[len(out)-1].Payload, &payload); err != nil {
 			return err

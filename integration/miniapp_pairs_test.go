@@ -175,7 +175,8 @@ func TestMiniAppPairsDenyWrongExpiredAndRevokedSessionsBeforeReplay(t *testing.T
 				session.Generation = sha256.Sum256([]byte("different-key"))
 			case "expired":
 				_, err = f.H.store.Pool().
-					Exec(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 second' WHERE bearer_hash=$1", session.Bearer[:])
+					Exec(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interva" +
+"l '1 second' WHERE bearer_hash=$1", session.Bearer[:])
 				require.NoError(t, err)
 			case "logout":
 				require.NoError(t, f.H.store.LogoutMiniAppSession(ctx, f.A.BotID, session.Bearer, session.Generation))
@@ -226,7 +227,9 @@ func TestMiniAppPairsRecheckLogoutAfterWaitingForEventLock(t *testing.T) {
 	require.Eventually(t, func() bool {
 		var waiting bool
 		e := f.H.store.Pool().
-			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid)))", blocking.Conn().PgConn().PID()).
+			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
+"ase() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid" +
+")))", blocking.Conn().PgConn().PID()).
 			Scan(&waiting)
 		return e == nil && waiting
 	}, 3*time.Second, 5*time.Millisecond)

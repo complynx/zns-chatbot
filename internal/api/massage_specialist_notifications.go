@@ -97,7 +97,11 @@ func massageSpecialistNotificationMethods() []map[string]any {
 	return []map[string]any{
 		administrativeRead(
 			"massage_specialist_notifications",
-			"List this deployment's specialist booking/cancellation notification metadata with current global administrator authority. Default/max page20; follow next as after. Captured grant/preference generations are immutable. Unknown does not prove non-delivery. No outbound payload, client name or contact is returned.",
+			"List this deployment's specialist booking/cancellation notification meta"+
+				"data with current global administrator authority. Default/max page20; fo"+
+				"llow next as after. Captured grant/preference generations are immutable."+
+				" Unknown does not prove non-delivery. No outbound payload, client name o"+
+				"r contact is returned.",
 			map[string]any{
 				schemaState: map[string]any{manifestType: schemaString},
 				schemaAfter: uuidField,
@@ -112,7 +116,15 @@ func massageSpecialistNotificationMethods() []map[string]any {
 		),
 		administrativeRead(
 			"massage_specialist_notification",
-			"Inspect specialist notification metadata, state/version, captured grant/preference generations, attempt ID and Telegram receipt. No raw outbound payload or client contact/profile. Use resolve_notification with notification_kind=massage_specialist for exact audited retry/dismiss. Unknown retry may duplicate; inspect receipt/chat first and retry only as a last resort. Retry never rebases captured generations and rechecks current module, recipient, binding, preference and booking state. Cancelled notices require a cancelled booking. Never repeat the business action to resend a notice.",
+			"Inspect specialist notification metadata, state/version, captured grant/"+
+				"preference generations, attempt ID and Telegram receipt. No raw outbound"+
+				" payload or client contact/profile. Use resolve_notification with notifi"+
+				"cation_kind=massage_specialist for exact audited retry/dismiss. Unknown "+
+				"retry may duplicate; inspect receipt/chat first and retry only as a last"+
+				" resort. Retry never rebases captured generations and rechecks current m"+
+				"odule, recipient, binding, preference and booking state. Cancelled notic"+
+				"es require a cancelled booking. Never repeat the business action to rese"+
+				"nd a notice.",
 			map[string]any{"id": uuidField},
 			[]string{"id"},
 			[]string{"id", schemaState, schemaVersion, paymentSchemaReceipt},

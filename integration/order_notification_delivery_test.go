@@ -55,7 +55,8 @@ func TestOrderNotificationDeliveryResumesAndKeepsOneNoticePerRecipient(t *testin
 	p.miniAppLaunchURL = "https://fixture.invalid/app/"
 	// Assign authority before admission: the producer sees this owner twice.
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), "INSERT INTO shuttle_event_authorities(event_id,user_id,role,version) VALUES($1,$2,'ambassador',1)", f.Event.ID, scope.UserID)
+		Exec(t.Context(), "INSERT INTO shuttle_event_authorities(event_id,user_id,role,version) VAL" +
+"UES($1,$2,'ambassador',1)", f.Event.ID, scope.UserID)
 	require.NoError(t, err)
 	operation := uuid.New()
 	args := orderEvidenceArgs(t, f, order, 99830, "dual-role-notice-proof")
@@ -184,7 +185,8 @@ func TestOrderNotificationDeliveryUnknownRequiresAuthorizedExactResolution(t *te
 			require.Equal(t, "order", result.NotificationKind)
 			require.JSONEq(t, string(unknown.Receipt), string(result.PreviousReceipt))
 			_, err := f.H.store.Pool().
-				Exec(t.Context(), "UPDATE shuttle_notification_resolutions SET expires_at=clock_timestamp()-interval '1 second' WHERE operation_id=$1", "order-notice-resolution")
+				Exec(t.Context(), "UPDATE shuttle_notification_resolutions SET expires_at=clock_timestamp()" +
+"-interval '1 second' WHERE operation_id=$1", "order-notice-resolution")
 			require.NoError(t, err)
 			f.H.start(t)
 			if action == "retry" {
@@ -241,7 +243,8 @@ func TestOrderNotificationDeliveryRechecksAuthorityAfterIAMWait(t *testing.T) {
 			require.NoError(
 				t,
 				f.H.store.Pool().
-					QueryRow(t.Context(), "SELECT id FROM shuttle_order_evidence_notices WHERE evidence_id=$1 AND recipient_id=$2", n.EvidenceID, f.AmbassadorID).
+					QueryRow(t.Context(), "SELECT id FROM shuttle_order_evidence_notices WHERE evidence_id=$1 AND r" +
+"ecipient_id=$2", n.EvidenceID, f.AmbassadorID).
 					Scan(&ambassadorNotice),
 			)
 			f.H.start(t)

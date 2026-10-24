@@ -389,7 +389,8 @@ func TestAvatarFinalizationAPIRechecksDraftAndNativeSessionDuringRender(t *testi
 				require.NoError(t, err)
 			} else {
 				_, err := f.h.store.Pool().
-					Exec(t.Context(), "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 second' WHERE user_id=$1", f.scope.UserID)
+					Exec(t.Context(), "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interva" +
+"l '1 second' WHERE user_id=$1", f.scope.UserID)
 				require.NoError(t, err)
 				expected = http.StatusUnauthorized
 			}

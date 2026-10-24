@@ -103,7 +103,8 @@ func TestMealCatalogExactCASAuthorityExpiryAndHistoricalConfiguration(t *testing
 	expired, err := f.H.store.PrepareMealCatalog(ctx, admin, expiredOp, change)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(ctx, "UPDATE shuttle_meal_catalog_preparations SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1", expired.ID)
+		Exec(ctx, "UPDATE shuttle_meal_catalog_preparations SET expires_at=clock_timestamp(" +
+")-interval '1 second' WHERE id=$1", expired.ID)
 	require.NoError(t, err)
 	_, err = f.H.store.ChangeMealCatalog(
 		ctx,
@@ -140,7 +141,8 @@ func TestMealCatalogCannotExpireWhileAuthorityCheckWaits(t *testing.T) {
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(ctx, "UPDATE shuttle_meal_catalog_preparations SET expires_at=clock_timestamp()+interval '1 second' WHERE id=$1 RETURNING expires_at", prepared.ID).
+			QueryRow(ctx, "UPDATE shuttle_meal_catalog_preparations SET expires_at=clock_timestamp(" +
+")+interval '1 second' WHERE id=$1 RETURNING expires_at", prepared.ID).
 			Scan(&cutoff),
 	)
 	_, err = f.H.store.ChangeMealCatalog(ctx, admin, op, prepared.ID, change, func(context.Context) error {

@@ -47,7 +47,8 @@ func historyAccountsFixture(t *testing.T) (*harness, db.ProfileScope, db.History
 	require.NoError(t, err)
 	request := db.HistoryAccountsRequest{ArchiveID: archive.ArchiveID, SHA256: digest}
 	rows, err := h.store.Pool().
-		Query(t.Context(), `SELECT id,owner_telegram_id FROM shuttle_legacy_history_records WHERE source_role='users' ORDER BY owner_telegram_id`)
+		Query(t.Context(), "SELECT id,owner_telegram_id FROM shuttle_legacy_history_records WHERE so" +
+"urce_role='users' ORDER BY owner_telegram_id")
 	require.NoError(t, err)
 	defer rows.Close()
 	for rows.Next() {

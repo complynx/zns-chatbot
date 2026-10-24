@@ -3,7 +3,9 @@ package api
 import "net/http"
 
 // manifest advertises account tools and user-scoped administrative discovery.
-const botDescription = "Zinusya (Зинуся) is the zns-chatbot assistant for Zouk Non Stop events. Help users with their explicit requests using authorized tools; answer in the language of the user message."
+const botDescription = "Zinusya (Зинуся) is the zns-chatbot assistant for Zouk Non Stop events. " +
+	"Help users with their explicit requests using authorized tools; answer i" +
+	"n the language of the user message."
 
 const (
 	agentServiceID        = "zinusya"

@@ -141,7 +141,8 @@ func TestMassageSpecialistPreferenceHTTPSharedReceiptsAndBareLoomStatus(t *testi
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(t.Context(), "SELECT count(*) FROM shuttle_massage_specialist_preference_operations WHERE user_id=$1", staff.UserID).
+			QueryRow(t.Context(), "SELECT count(*) FROM shuttle_massage_specialist_preference_operations WH" +
+"ERE user_id=$1", staff.UserID).
 			Scan(&operations),
 	)
 	require.Equal(t, 2, operations)
@@ -411,7 +412,8 @@ func TestMassageSpecialistPreferenceHTTPRechecksNativeSessionAfterIAMWait(t *tes
 			switch change {
 			case "session_expired":
 				_, err := f.H.store.Pool().
-					Exec(t.Context(), "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 second' WHERE user_id=$1", staff.UserID)
+					Exec(t.Context(), "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interva" +
+"l '1 second' WHERE user_id=$1", staff.UserID)
 				require.NoError(t, err)
 				expected = http.StatusUnauthorized
 			case "binding_revoked":

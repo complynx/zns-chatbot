@@ -50,9 +50,10 @@ func (s *Store) RecordIAMNameOrigin(
 	}
 	_, err = tx.Exec(
 		ctx,
-		`INSERT INTO shuttle_iam_name_origins(user_id,origin) VALUES($1,$2)
-ON CONFLICT(user_id) DO UPDATE SET origin=CASE WHEN EXCLUDED.origin='technical' AND shuttle_iam_name_origins.origin='existing'
-THEN 'technical' ELSE shuttle_iam_name_origins.origin END`,
+		"INSERT INTO shuttle_iam_name_origins(user_id,origin) VALUES($1,$2)\nON CO" +
+"NFLICT(user_id) DO UPDATE SET origin=CASE WHEN EXCLUDED.origin='technica" +
+"l' AND shuttle_iam_name_origins.origin='existing'\nTHEN 'technical' ELSE " +
+"shuttle_iam_name_origins.origin END",
 		userID,
 		origin,
 	)
@@ -120,7 +121,8 @@ func iamNameImportState(ctx context.Context, tx pgx.Tx, scope ProfileScope, writ
 		return p, false, err
 	}
 	var allowed bool
-	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM shuttle_iam_name_origins WHERE user_id=$1 AND origin='existing' AND checked_at IS NULL)`, scope.UserID).
+	err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM shuttle_iam_name_origins WHERE user_id=$1 AN" +
+"D origin='existing' AND checked_at IS NULL)", scope.UserID).
 		Scan(&allowed)
 	return p, allowed, err
 }

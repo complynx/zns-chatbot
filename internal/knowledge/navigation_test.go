@@ -12,7 +12,8 @@ import (
 
 func TestOutlineAndSectionKeepOriginalMarkdown(t *testing.T) {
 	t.Parallel()
-	body := "Intro\r\n# Зук\r\nOriginal **text**.\r\n```md\r\n# Not a heading\r\n```\r\n## Detail\r\nDetails\r\n# Зук\r\nSecond\r\n# Зук-2\r\nThird\r\n# Зук\r\nFourth\r\n"
+	body := "Intro\r\n# Зук\r\nOriginal **text**.\r\n```md\r\n# Not a heading\r\n```\r\n## Deta" +
+		"il\r\nDetails\r\n# Зук\r\nSecond\r\n# Зук-2\r\nThird\r\n# Зук\r\nFourth\r\n"
 	outline, err := knowledge.Outline(body, knowledge.OutlineRequest{})
 	if err != nil {
 		t.Fatal(err)
@@ -209,7 +210,8 @@ func TestFindLiteralUnicodeContextAndContinuation(t *testing.T) {
 
 func TestFindAnchorsPreambleAndLaterNestedSections(t *testing.T) {
 	t.Parallel()
-	body := "needle preamble\n# One\nfirst\n# Two\nsecond\n# Three\nthird\n# Four\nneedle parent\n## Repeat\nneedle nested\n## Repeat\nneedle repeated\n# End\nend"
+	body := "needle preamble\n# One\nfirst\n# Two\nsecond\n# Three\nthird\n# Four\nneedle par" +
+		"ent\n## Repeat\nneedle nested\n## Repeat\nneedle repeated\n# End\nend"
 	result, err := knowledge.Find(body, knowledge.FindRequest{Query: "needle"})
 	if err != nil {
 		t.Fatal(err)

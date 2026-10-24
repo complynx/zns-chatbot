@@ -147,14 +147,18 @@ func TestMassageReminderCancellationReceiptFailureRollsBackSuppression(t *testin
 	proposal, err := f.H.store.PrepareOwnMassageCancellation(t.Context(), owner, op, args)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), `CREATE FUNCTION fail_reminder_cancel_receipt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic reminder cancel receipt failure'; END $$;
- CREATE TRIGGER fail_reminder_cancel_receipt BEFORE INSERT ON shuttle_massage_operations FOR EACH ROW EXECUTE FUNCTION fail_reminder_cancel_receipt()`)
+		Exec(t.Context(), "CREATE FUNCTION fail_reminder_cancel_receipt() RETURNS trigger LANGUAGE " +
+"plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic reminder cancel receipt f" +
+"ailure'; END $$;\n CREATE TRIGGER fail_reminder_cancel_receipt BEFORE INS" +
+"ERT ON shuttle_massage_operations FOR EACH ROW EXECUTE FUNCTION fail_rem" +
+"inder_cancel_receipt()")
 	require.NoError(t, err)
 	_, err = f.H.store.CancelOwnMassage(t.Context(), owner, op, proposal.ID, args)
 	require.ErrorContains(t, err, "synthetic reminder cancel receipt failure")
 	require.Equal(t, before, bookingReminders(t, f, booking.ID))
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "DROP TRIGGER fail_reminder_cancel_receipt ON shuttle_massage_operations; DROP FUNCTION fail_reminder_cancel_receipt()")
+		Exec(t.Context(), "DROP TRIGGER fail_reminder_cancel_receipt ON shuttle_massage_operations;" +
+" DROP FUNCTION fail_reminder_cancel_receipt()")
 	require.NoError(t, err)
 	_, err = f.H.store.CancelOwnMassage(t.Context(), owner, op, proposal.ID, args)
 	require.NoError(t, err)
@@ -173,7 +177,8 @@ func TestMassageReminderSettingsRescheduleOnlySchedulableAndKeepRetryEmbargo(t *
 	}
 	first := bookingReminders(t, f, bookings[0].ID)
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_massage_reminders SET state='retryable',next_attempt_at=clock_timestamp()+interval '1 day' WHERE id=$1", first[db.MassageReminderShort].ID)
+		Exec(t.Context(), "UPDATE shuttle_massage_reminders SET state='retryable',next_attempt_at=c" +
+"lock_timestamp()+interval '1 day' WHERE id=$1", first[db.MassageReminderShort].ID)
 	require.NoError(t, err)
 	for index, state := range []string{"delivered", "delivery_unknown", "send_inflight", "delivery_blocked"} {
 		b := bookings[1+index/2]
@@ -182,7 +187,8 @@ func TestMassageReminderSettingsRescheduleOnlySchedulableAndKeepRetryEmbargo(t *
 			kind = db.MassageReminderShort
 		}
 		_, err = f.H.store.Pool().
-			Exec(t.Context(), "UPDATE shuttle_massage_reminders SET state=$2,attempt_id=$3 WHERE booking_id=$1 AND kind=$4", b.ID, state, uuid.New(), kind)
+			Exec(t.Context(), "UPDATE shuttle_massage_reminders SET state=$2,attempt_id=$3 WHERE bookin" +
+"g_id=$1 AND kind=$4", b.ID, state, uuid.New(), kind)
 		require.NoError(t, err)
 	}
 	before := []map[string]db.MassageReminder{}
@@ -234,8 +240,11 @@ func TestMassageReminderSettingsFailureRollsBackSettingsAuditAndDueTimes(t *test
 	require.NoError(t, err)
 	audits := settingsAuditCount(t, f.H)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), `CREATE FUNCTION fail_reminder_reschedule() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic reminder reschedule failure'; END $$;
- CREATE TRIGGER fail_reminder_reschedule BEFORE UPDATE ON shuttle_massage_reminders FOR EACH ROW EXECUTE FUNCTION fail_reminder_reschedule()`)
+		Exec(t.Context(), "CREATE FUNCTION fail_reminder_reschedule() RETURNS trigger LANGUAGE plpg" +
+"sql AS $$ BEGIN RAISE EXCEPTION 'synthetic reminder reschedule failure';" +
+" END $$;\n CREATE TRIGGER fail_reminder_reschedule BEFORE UPDATE ON shutt" +
+"le_massage_reminders FOR EACH ROW EXECUTE FUNCTION fail_reminder_resched" +
+"ule()")
 	require.NoError(t, err)
 	doc := settings.Document
 	doc.MassageNotifyClientPriorLongSeconds = 7200

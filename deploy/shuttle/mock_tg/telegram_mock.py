@@ -8,6 +8,7 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 import secrets
 import signal
 import sqlite3
@@ -18,7 +19,7 @@ from email.parser import BytesParser
 from email.policy import default
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError
-from urllib.parse import parse_qs, urlencode, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 MAX_BODY = 8 * 1024 * 1024
@@ -45,6 +46,59 @@ def packed(value):
     return json.dumps(value, ensure_ascii=False, separators=(',', ':'))
 
 
+def reply_markup(value, inline_only=False):
+    """Match Bot API array parsing; empty arrays mean no attached keyboard."""
+    if not isinstance(value, dict):
+        raise APIError('Bad Request: Object expected as reply markup')
+    for field in ('keyboard', 'inline_keyboard'):
+        if field not in value:
+            continue
+        if not isinstance(value[field], list):
+            raise APIError('Bad Request: Field "' + field + '" must be an Array')
+        for row in value[field]:
+            if row is None:
+                continue
+            if not isinstance(row, list):
+                raise APIError('Bad Request: Keyboard row must be an Array')
+            for button in row:
+                if field == 'keyboard' and isinstance(button, str):
+                    continue
+                if not isinstance(button, dict) or not isinstance(button.get('text'), str):
+                    raise APIError('Bad Request: Keyboard button must have text')
+                if field == 'inline_keyboard' and not any(key in button for key in (
+                        'url', 'callback_data', 'callback_game', 'pay', 'switch_inline_query',
+                        'switch_inline_query_chosen_chat', 'switch_inline_query_current_chat',
+                        'login_url', 'web_app', 'copy_text', 'disabled')):
+                    raise APIError('Bad Request: Text buttons are not allowed in the inline keyboard')
+                callback = button.get('callback_data')
+                if callback is not None and not button.get('url') and (
+                        not isinstance(callback, str) or not 1 <= len(callback.encode()) <= 64):
+                    raise APIError('Bad Request: BUTTON_DATA_INVALID')
+    value = dict(value)
+    for field in ('keyboard', 'inline_keyboard'):
+        if field in value:
+            value[field] = [row for row in value[field] if row]
+    kind = next((key for key in ('keyboard', 'inline_keyboard') if value.get(key)), None)
+    if kind is None:
+        kind = next((key for key in ('remove_keyboard', 'force_reply') if value.get(key)), None)
+    if inline_only and kind not in (None, 'inline_keyboard'):
+        raise APIError('Bad Request: inline keyboard expected')
+    if kind is None:
+        return None
+    result = dict(value)
+    for key in ('keyboard', 'inline_keyboard', 'remove_keyboard', 'force_reply'):
+        if key != kind:
+            result.pop(key, None)
+    if kind == 'inline_keyboard':
+        for row in result[kind]:
+            for button in row:
+                if button.get('url'):
+                    url = urlsplit(button['url'])
+                    if url.scheme in ('http', 'https') and not url.path:
+                        button['url'] = urlunsplit(url._replace(path='/'))
+    return result
+
+
 class Store:
     """One SQLite connection serializes mutations; webhook I/O holds no DB lock."""
     def __init__(self, config):
@@ -62,6 +116,9 @@ class Store:
         CREATE TABLE IF NOT EXISTS faults(id INTEGER PRIMARY KEY AUTOINCREMENT, method TEXT, kind TEXT, remaining INTEGER, retry_after INTEGER);
         CREATE TABLE IF NOT EXISTS counters(name TEXT PRIMARY KEY, value INTEGER);
         CREATE TABLE IF NOT EXISTS raw_messages(chat_id INTEGER, message_id INTEGER, digest TEXT, PRIMARY KEY(chat_id,message_id));
+        CREATE TABLE IF NOT EXISTS message_keyboards(chat_id INTEGER, message_id INTEGER, data TEXT,
+            PRIMARY KEY(chat_id,message_id));
+        CREATE TABLE IF NOT EXISTS bot_settings(name TEXT PRIMARY KEY, data TEXT NOT NULL);
         ''')
         self.db.commit()
         prefix = config['token'].split(':', 1)[0]
@@ -190,9 +247,70 @@ class Store:
                 return False
             time.sleep(.05)
 
+    def bot_setting(self, method, data):
+        if method.endswith('MyCommands'):
+            scope = data.get('scope', {'type': 'default'})
+            language = data.get('language_code', '')
+            if not isinstance(scope, dict) or not isinstance(scope.get('type'), str) or not isinstance(language, str) \
+                    or (language and re.fullmatch('[a-z]{2}', language) is None):
+                raise APIError('Bad Request: invalid commands scope or language')
+            key = 'commands:' + json.dumps(scope, sort_keys=True) + ':' + language
+            default = []
+            if method == 'setMyCommands':
+                value = data.get('commands')
+                if value is None:
+                    value = []
+                if not isinstance(value, list) or len(value) > 100 or any(
+                        not isinstance(command, dict) or not isinstance(command.get('command'), str)
+                        or re.fullmatch('[a-z0-9_]{1,32}', command['command']) is None
+                        or not isinstance(command.get('description'), str)
+                        or not 1 <= len(command['description']) <= 256 for command in value):
+                    raise APIError('Bad Request: invalid bot commands')
+            elif method == 'deleteMyCommands':
+                self.db.execute('DELETE FROM bot_settings WHERE name=?', (key,))
+                return True
+        else:
+            key = 'menu:' + str(data.get('chat_id', 'default'))
+            default = {'type': 'default'}
+            if method == 'setChatMenuButton':
+                value = data.get('menu_button', {'type': 'default'})
+                if not isinstance(value, dict) or value.get('type') not in ('default', 'commands', 'web_app'):
+                    raise APIError('Bad Request: invalid menu button')
+                if value['type'] == 'web_app' and (not isinstance(value.get('text'), str)
+                        or not isinstance(value.get('web_app'), dict)
+                        or not isinstance(value['web_app'].get('url'), str)):
+                    raise APIError('Bad Request: invalid Web App menu')
+                if value['type'] == 'default':
+                    self.db.execute('DELETE FROM bot_settings WHERE name=?', (key,))
+                    return True
+        if method.startswith('set'):
+            self.db.execute('INSERT OR REPLACE INTO bot_settings VALUES(?,?)', (key, packed(value)))
+            self.journal('bot_setting', {'key': key, 'value': value})
+            return True
+        row = self.db.execute('SELECT data FROM bot_settings WHERE name=?', (key,)).fetchone()
+        return json.loads(row[0]) if row else default
+
     def effect(self, method, data, uploads):
+        data = dict(data)
+        if method in ('sendMessage', 'sendDocument', 'editMessageText', 'editMessageReplyMarkup') and 'reply_markup' in data:
+            markup = reply_markup(data['reply_markup'], inline_only=method.startswith('editMessage'))
+            if markup is None:
+                data.pop('reply_markup')
+            else:
+                data['reply_markup'] = markup
         if method == 'getMe':
             return self.bot
+        if method == 'sendChatAction':
+            action = str(data.get('action', '')).lower()
+            if action not in ('typing', 'upload_photo', 'record_video', 'upload_video', 'record_voice', 'upload_voice',
+                              'record_audio', 'upload_audio', 'upload_document', 'choose_sticker', 'find_location',
+                              'pick_up_location', 'record_video_note', 'upload_video_note', 'cancel'):
+                raise APIError('Bad Request: wrong action')
+            int(data['chat_id'])
+            self.journal('chat_action', dict(data, action=action))
+            return True
+        if method in ('setMyCommands', 'getMyCommands', 'deleteMyCommands', 'setChatMenuButton', 'getChatMenuButton'):
+            return self.bot_setting(method, data)
         if method == 'answerCallbackQuery':
             self.journal('callback_answer', data)
             return True
@@ -201,12 +319,19 @@ class Store:
             name, mime, body = self.file(file_id)
             return {'file_id': file_id, 'file_unique_id': hashlib.sha256(file_id.encode()).hexdigest()[:24],
                     'file_size': len(body), 'file_path': 'fixtures/' + file_id}
-        if method == 'editMessageText':
+        if method in ('editMessageText', 'editMessageReplyMarkup'):
             old = self.message(data['chat_id'], data['message_id'])
-            value = dict(old, text=str(data['text']), edit_date=int(time.time()))
-            value.pop('entities', None)
-            if data.get('entities'):
-                value['entities'] = data['entities']
+            keyboard = self.db.execute(
+                'SELECT data FROM message_keyboards WHERE chat_id=? AND message_id=?',
+                (int(data['chat_id']), int(data['message_id']))).fetchone()
+            if keyboard and 'inline_keyboard' not in json.loads(keyboard[0]):
+                raise APIError("Bad Request: message can't be edited")
+            value = dict(old, edit_date=int(time.time()))
+            if method == 'editMessageText':
+                value['text'] = str(data['text'])
+                value.pop('entities', None)
+                if data.get('entities'):
+                    value['entities'] = data['entities']
             value.pop('reply_markup', None)
             if 'reply_markup' in data:
                 value['reply_markup'] = data['reply_markup']
@@ -236,7 +361,16 @@ class Store:
             if 'caption' in data:
                 value['caption'] = data['caption']
         if 'reply_markup' in data:
-            value['reply_markup'] = data['reply_markup']
+            markup = data['reply_markup']
+            if chat['type'] != 'private' and any(
+                    isinstance(button, dict) and 'web_app' in button
+                    for row in markup.get('inline_keyboard', markup.get('keyboard', [])) for button in row):
+                raise APIError('Bad Request: Web App buttons are only allowed in private chats')
+            if 'inline_keyboard' in markup:
+                value['reply_markup'] = markup
+            else:
+                self.db.execute('INSERT OR REPLACE INTO message_keyboards VALUES(?,?,?)',
+                                (chat_id, value['message_id'], packed(markup)))
         reply_id = data.get('reply_to_message_id') or data.get('reply_parameters', {}).get('message_id')
         if reply_id:
             value['reply_to_message'] = self.message(chat_id, reply_id)
@@ -356,7 +490,12 @@ class Store:
                 message = self.message(data['chat_id'], data['message_id'])
                 if message['chat']['type'] == 'private' and data['user']['id'] != message['chat']['id']:
                     raise APIError('private keyboard belongs to another user', 403)
-                markup = message.get('reply_markup', {})
+                markup = message.get('reply_markup')
+                if markup is None:
+                    row = self.db.execute(
+                        'SELECT data FROM message_keyboards WHERE chat_id=? AND message_id=?',
+                        (message['chat']['id'], message['message_id'])).fetchone()
+                    markup = json.loads(row[0]) if row else {}
                 inline = 'inline_keyboard' in markup
                 keyboard = markup.get('inline_keyboard', markup.get('keyboard', []))
                 row, column = int(data['row']), int(data['column'])
@@ -462,8 +601,11 @@ class Handler(BaseHTTPRequestHandler):
             data, uploads = {k: v[-1] for k, v in parse_qs(raw.decode(), keep_blank_values=True).items()}, {}
         else:
             data, uploads = json.loads(raw or b'{}'), {}
-        for key in ('reply_markup', 'reply_parameters'):
+        for key in ('reply_markup', 'reply_parameters', 'scope', 'commands', 'menu_button'):
             if isinstance(data.get(key), str):
+                if key == 'reply_markup' and not data[key]:
+                    data.pop(key)
+                    continue
                 data[key] = json.loads(data[key])
         return data, uploads
 

@@ -72,7 +72,8 @@ func TestRateLimitAndBoundedResponse(t *testing.T) {
 		outcome    telegram.Outcome
 		retry      bool
 	}{
-		{"rate-limit", `{"ok":false,"error_code":429,"parameters":{"retry_after":3},"description":"secret"}`, 429, telegram.Rejected, true},
+		{"rate-limit", "{\"ok\":false,\"error_code\":429,\"parameters\":{\"retry_after\":3},\"description" +
+"\":\"secret\"}", 429, telegram.Rejected, true},
 		{"oversized", strings.Repeat("x", telegram.MaxResponseBytes+1), 200, telegram.Unknown, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

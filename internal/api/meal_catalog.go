@@ -156,7 +156,10 @@ func (s *Server) prepareMealCatalog(
 	out.Body.Status, out.Body.OperationID, out.Body.Arguments = agentPrepared, in.Body.OperationID, prepared.Arguments
 	out.Body.Preconditions.ProposalID, out.Body.ExpiresAt = prepared.ID, prepared.ExpiresAt
 	out.Body.Description = fmt.Sprintf(
-		"Replace meal catalog for event %s at event version %d, catalog version %d. Currency %s, %d days. All prices include mandatory charges. Existing saved receipts remain historical. No order, reservation or payment changes.",
+		"Replace meal catalog for event %s at event version %d, catalog version %" +
+"d. Currency %s, %d days. All prices include mandatory charges. Existing " +
+"saved receipts remain historical. No order, reservation or payment chang" +
+"es.",
 		prepared.Arguments.EventID,
 		prepared.Arguments.ExpectedEventVersion,
 		prepared.Arguments.ExpectedVersion,

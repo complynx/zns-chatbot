@@ -122,7 +122,8 @@ func insertDetailsRequestReceipt(
 	}
 	_, err = tx.Exec(
 		ctx,
-		`INSERT INTO shuttle_registration_details_request_operations(user_id,operation_id,request_hash,result) VALUES($1,$2,$3,$4)`,
+		"INSERT INTO shuttle_registration_details_request_operations(user_id,oper" +
+"ation_id,request_hash,result) VALUES($1,$2,$3,$4)",
 		owner,
 		operation,
 		digest,
@@ -238,7 +239,9 @@ func ensureDetailsRequest(
 	}
 	_, err = tx.Exec(
 		ctx,
-		`UPDATE shuttle_registration_details_requests SET superseded_at=$3 WHERE user_id=$1 AND event_id=$2 AND completed_at IS NULL AND superseded_at IS NULL`,
+		"UPDATE shuttle_registration_details_requests SET superseded_at=$3 WHERE " +
+"user_id=$1 AND event_id=$2 AND completed_at IS NULL AND superseded_at IS" +
+" NULL",
 		owner,
 		event.ID,
 		now.Time,
@@ -259,7 +262,10 @@ func ensureDetailsRequest(
 	id := uuid.New()
 	_, err = tx.Exec(
 		ctx,
-		`INSERT INTO shuttle_registration_details_requests(id,user_id,event_id,event_version,event_timezone,legal_name_required,passport_number_required,created_at,expires_at,completed_at,completed_details_version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+		"INSERT INTO shuttle_registration_details_requests(id,user_id,event_id,ev" +
+"ent_version,event_timezone,legal_name_required,passport_number_required," +
+"created_at,expires_at,completed_at,completed_details_version) VALUES($1," +
+"$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
 		id,
 		owner,
 		event.ID,
@@ -359,7 +365,8 @@ func replayDetailsRequest(
 	digest []byte,
 ) (DetailsRequestStatus, error) {
 	var stored, raw []byte
-	if err := tx.QueryRow(ctx, `SELECT request_hash,result FROM shuttle_registration_details_request_operations WHERE user_id=$1 AND operation_id=$2`, owner, operation).
+	if err := tx.QueryRow(ctx, "SELECT request_hash,result FROM shuttle_registration_details_request_ope" +
+"rations WHERE user_id=$1 AND operation_id=$2", owner, operation).
 		Scan(&stored, &raw); err != nil {
 		return DetailsRequestStatus{}, err
 	}
@@ -378,9 +385,10 @@ func resolveDetailsRequests(ctx context.Context, tx pgx.Tx, owner uuid.UUID, sta
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, `UPDATE shuttle_registration_details_requests SET completed_at=$5,completed_details_version=$2
-WHERE user_id=$1 AND completed_at IS NULL AND superseded_at IS NULL AND expires_at>$5
-AND (NOT legal_name_required OR $3) AND (NOT passport_number_required OR $4)`, owner, status.Version, status.LegalNamePresent, status.PassportNumberPresent, now.Time)
+	_, err = tx.Exec(ctx, "UPDATE shuttle_registration_details_requests SET completed_at=$5,complet" +
+"ed_details_version=$2\nWHERE user_id=$1 AND completed_at IS NULL AND supe" +
+"rseded_at IS NULL AND expires_at>$5\nAND (NOT legal_name_required OR $3) " +
+"AND (NOT passport_number_required OR $4)", owner, status.Version, status.LegalNamePresent, status.PassportNumberPresent, now.Time)
 	return err
 }
 
@@ -399,7 +407,8 @@ func (s *Store) DetailsRequestOperation(
 		return DetailsRequestStatus{}, err
 	}
 	var raw []byte
-	if err = tx.QueryRow(ctx, `SELECT result FROM shuttle_registration_details_request_operations WHERE user_id=$1 AND operation_id=$2`, scope.UserID, operation).
+	if err = tx.QueryRow(ctx, "SELECT result FROM shuttle_registration_details_request_operations WHERE" +
+" user_id=$1 AND operation_id=$2", scope.UserID, operation).
 		Scan(&raw); err != nil {
 		return DetailsRequestStatus{}, err
 	}

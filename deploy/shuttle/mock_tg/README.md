@@ -12,6 +12,30 @@ supports multiple users and private/group/supergroup chat IDs. Whether Zinusya
 accepts a group operation remains application policy; a mock group is not proof
 of product support for groups.
 
+## Bot API behavior
+
+The fixture validates keyboard payloads before accepting a message. Null
+`keyboard` and `inline_keyboard` fields are rejected. Empty arrays, null rows
+and empty rows attach no keyboard. Inline buttons require an action; callback
+payloads are limited to 1..64 UTF-8 bytes. Reply keyboards take precedence when
+both forms are present. Web App buttons require a private chat.
+
+Only inline markup appears in returned Message JSON. Reply keyboard state is
+stored separately for QA clicks. A message sent with a reply keyboard cannot be
+edited. `editMessageReplyMarkup` changes inline buttons without changing text;
+omitting markup in `editMessageText` clears the previous inline buttons.
+
+Command lists are stored by exact scope and language. `getMyCommands` does not
+resolve the effective client menu through fallback. Null and empty command lists
+clear that scope. `setChatMenuButton` and `getChatMenuButton` preserve per-chat
+settings; the `default` result means inheritance, not an effective Commands
+button. `sendChatAction` records an action without creating a message.
+
+These rules cover the supported fixture methods, not the full Bot API. Error
+codes and accepted effects matter; error prose, generated IDs and timestamps may
+differ. Rendering, command-menu caching and Telegram client behavior require a
+real-client check. Unsupported methods fail explicitly.
+
 ## Create and start
 
 Requires Docker, Python 3.12+ and reviewed local Linux bot/Loom/file-worker images. The source

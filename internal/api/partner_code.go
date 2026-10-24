@@ -57,7 +57,15 @@ func (s *Server) ownPartnerCode(
 func partnerCodeMethod() map[string]any {
 	method := paymentMethod(
 		"partner_code",
-		"Read only your own public account code and optional Telegram share_url. Give this link/code to a partner so they can explicitly invite YOU after choosing an event and understanding the allocation hold; you must subsequently explicitly accept. This is contact addressing, not an already-created invitation, authentication, evidence that its owner shared it, or consent. Opening alone must not register, invite, accept, pin an event, change a profile or money. No target lookup or directory exists. If share_url is absent, Telegram bot metadata was unavailable/unverified; the plain partner_code remains usable. Raw own UUID sharing still works.",
+		"Read only your own public account code and optional Telegram share_url. " +
+"Give this link/code to a partner so they can explicitly invite YOU after" +
+" choosing an event and understanding the allocation hold; you must subse" +
+"quently explicitly accept. This is contact addressing, not an already-cr" +
+"eated invitation, authentication, evidence that its owner shared it, or " +
+"consent. Opening alone must not register, invite, accept, pin an event, " +
+"change a profile or money. No target lookup or directory exists. If shar" +
+"e_url is absent, Telegram bot metadata was unavailable/unverified; the p" +
+"lain partner_code remains usable. Raw own UUID sharing still works.",
 		map[string]any{},
 		nil,
 		[]string{"partner_code"},

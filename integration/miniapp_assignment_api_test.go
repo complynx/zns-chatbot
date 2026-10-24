@@ -208,10 +208,12 @@ func TestMiniAppAssignmentHTTPListsReadableParticipantsAndPages(t *testing.T) {
 	t.Parallel()
 	f := setupAssignmentApp(t)
 	_, err := f.h.store.Pool().
-		Exec(t.Context(), "INSERT INTO shuttle_user_profiles(user_id,version,full_name,bot_language) VALUES($1,1,'Readable Participant','en')", f.entry.UserID)
+		Exec(t.Context(), "INSERT INTO shuttle_user_profiles(user_id,version,full_name,bot_language" +
+") VALUES($1,1,'Readable Participant','en')", f.entry.UserID)
 	require.NoError(t, err)
 	_, err = f.h.store.Pool().
-		Exec(t.Context(), `UPDATE shuttle_users SET profile='{"first_name":"Telegram name","passport_number":"PRIVATE-98702"}' WHERE id=$1`, f.entry.UserID)
+		Exec(t.Context(), "UPDATE shuttle_users SET profile='{\"first_name\":\"Telegram name\",\"passpor" +
+"t_number\":\"PRIVATE-98702\"}' WHERE id=$1", f.entry.UserID)
 	require.NoError(t, err)
 	eventIDs := map[uuid.UUID]bool{f.event.ID: true}
 	registrationsByID := map[uuid.UUID]bool{f.entry.ID: true}
@@ -359,7 +361,8 @@ func TestMiniAppAssignmentHTTPLogoutAndGenerationDenyCompletedReceipt(t *testing
 				)
 			} else {
 				_, err := f.h.store.Pool().
-					Exec(t.Context(), "UPDATE shuttle_miniapp_sessions SET key_generation=$1 WHERE bearer_hash=$2", make([]byte, sha256.Size), bearer[:])
+					Exec(t.Context(), "UPDATE shuttle_miniapp_sessions SET key_generation=$1 WHERE bearer_hash=" +
+"$2", make([]byte, sha256.Size), bearer[:])
 				require.NoError(t, err)
 			}
 			code, raw = assignmentAppCall(t, f, f.session, http.MethodPost, "/confirm", input)
@@ -526,7 +529,8 @@ func TestMiniAppAssignmentHTTPRecentKeepsLatestBoundedRecovery(t *testing.T) {
 		newest = prep
 	}
 	_, err := f.h.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_assignment_preparations SET expires_at=clock_timestamp()-interval '1 second' WHERE proposal_id=$1", newest.ID)
+		Exec(t.Context(), "UPDATE shuttle_assignment_preparations SET expires_at=clock_timestamp()-" +
+"interval '1 second' WHERE proposal_id=$1", newest.ID)
 	require.NoError(t, err)
 	page := assignmentAppRecent(t, f, f.session)
 	require.Len(t, page.Proposals, 20)

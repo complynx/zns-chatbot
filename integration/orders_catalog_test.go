@@ -101,7 +101,8 @@ func TestOrdersCatalogExactEditAndAssignedUnpaidOwnerRead(t *testing.T) {
 	expiredOperation := uuid.New()
 	expired := prepareCatalog(t, f, expiredOperation, a)
 	_, expiryErr := f.H.store.Pool().Exec(context.Background(),
-		"UPDATE shuttle_orders_catalog_preparations SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1", expired.ID)
+		"UPDATE shuttle_orders_catalog_preparations SET expires_at=clock_timestam" +
+"p()-interval '1 second' WHERE id=$1", expired.ID)
 	require.NoError(t, expiryErr)
 	expiredStatus, _ := commitCatalog(t, f, expiredOperation, expired)
 	require.Equal(t, "rejected", expiredStatus, "Expired approval cannot publish its first result")
@@ -133,7 +134,8 @@ func TestOrdersCatalogExactEditAndAssignedUnpaidOwnerRead(t *testing.T) {
 	require.Equal(t, "succeeded", status)
 	require.Equal(t, int64(2), second.Version)
 	_, err := f.H.store.Pool().
-		Exec(context.Background(), "UPDATE shuttle_orders_catalog_preparations SET expires_at=clock_timestamp()-interval '1 hour' WHERE id=$1", p.ID)
+		Exec(context.Background(), "UPDATE shuttle_orders_catalog_preparations SET expires_at=clock_timestam" +
+"p()-interval '1 hour' WHERE id=$1", p.ID)
 	require.NoError(t, err)
 	status, replay := commitCatalog(t, f, op, p)
 	require.Equal(t, "succeeded", status)
@@ -169,7 +171,8 @@ func TestOrdersCatalogRechecksModuleBindingEventVersionAndApproval(t *testing.T)
 	code, _ := readCatalog(t, f, f.Owner, f.Event.ID)
 	require.Equal(t, http.StatusNotFound, code)
 	_, err = f.H.store.Pool().
-		Exec(ctx, "UPDATE shuttle_events SET modules=ARRAY['registrations','orders'],version=version+1 WHERE id=$1", f.Event.ID)
+		Exec(ctx, "UPDATE shuttle_events SET modules=ARRAY['registrations','orders'],versio" +
+"n=version+1 WHERE id=$1", f.Event.ID)
 	require.NoError(t, err)
 	code, _ = readCatalog(t, f, f.Owner, f.Event.ID)
 	require.Equal(t, http.StatusOK, code)

@@ -66,7 +66,8 @@ func TestDetailsRequestBeginAndOwnAdminEventConfirmationDoNotDeadlock(t *testing
 	var beginPID uint32
 	require.Eventually(t, func() bool {
 		e := h.store.Pool().
-			QueryRow(ctx, `SELECT pid FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)) LIMIT 1`, control.Conn().PgConn().PID()).
+			QueryRow(ctx, "SELECT pid FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)) LIM" +
+"IT 1", control.Conn().PgConn().PID()).
 			Scan(&beginPID)
 		return e == nil
 	}, 3*time.Second, 10*time.Millisecond)

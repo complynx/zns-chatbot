@@ -551,7 +551,11 @@ func (p *peers) telegram(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	_ = json.NewDecoder(r.Body).Decode(&message)
+	if err := json.NewDecoder(r.Body).Decode(&message); err != nil || invalidTelegramMarkup(message.ReplyMarkup) {
+		w.WriteHeader(http.StatusBadRequest)
+		respond(w, map[string]any{"ok": false, "error_code": 400, "description": "Bad Request: invalid keyboard array"})
+		return
+	}
 	p.sent = append(p.sent, message)
 	if p.rejectSendOnce {
 		p.rejectSendOnce = false
@@ -1185,7 +1189,11 @@ func TestFailedReceiptPersistenceBecomesUnknownWithoutRestart(t *testing.T) {
 	// Inject the critical database write failure after HTTP send succeeds. This
 	// schema-local trigger leaves admission, reservation and reconciliation usable.
 	_, err := h.store.Pool().
-		Exec(context.Background(), `CREATE FUNCTION fail_successful_receipt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.state='delivered' THEN RAISE EXCEPTION 'receipt write unavailable'; END IF; RETURN NEW; END $$; CREATE TRIGGER receipt_failure BEFORE UPDATE ON shuttle_outbox FOR EACH ROW EXECUTE FUNCTION fail_successful_receipt()`)
+		Exec(context.Background(), "CREATE FUNCTION fail_successful_receipt() RETURNS trigger LANGUAGE plpgs" +
+"ql AS $$ BEGIN IF NEW.state='delivered' THEN RAISE EXCEPTION 'receipt wr" +
+"ite unavailable'; END IF; RETURN NEW; END $$; CREATE TRIGGER receipt_fai" +
+"lure BEFORE UPDATE ON shuttle_outbox FOR EACH ROW EXECUTE FUNCTION fail_" +
+"successful_receipt()")
 	require.NoError(t, err)
 	id := h.submit(t, 14)
 	h.awaitReplies(t, 1)

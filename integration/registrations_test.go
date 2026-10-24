@@ -21,7 +21,8 @@ func registrationUser(t *testing.T, h *harness, tgID int64, admin bool) (uuid.UU
 	id := uuid.New()
 	subject := "registration-" + id.String()
 	_, err := h.store.Pool().
-		Exec(context.Background(), "INSERT INTO shuttle_users(id,bot_id,tg_user_id,profile,zitadel_subject,zitadel_org) VALUES($1,123,$2,'{}',$3,'org')", id, tgID, subject)
+		Exec(context.Background(), "INSERT INTO shuttle_users(id,bot_id,tg_user_id,profile,zitadel_subject,z" +
+"itadel_org) VALUES($1,123,$2,'{}',$3,'org')", id, tgID, subject)
 	require.NoError(t, err)
 	h.peers.mu.Lock()
 	defer h.peers.mu.Unlock()

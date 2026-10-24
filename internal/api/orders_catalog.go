@@ -151,7 +151,10 @@ func (s *Server) prepareOrdersCatalog(
 	out.Body.Status, out.Body.OperationID, out.Body.Arguments = agentPrepared, in.Body.OperationID, prepared.Arguments
 	out.Body.Preconditions.ProposalID, out.Body.ExpiresAt = prepared.ID, prepared.ExpiresAt
 	out.Body.Description = fmt.Sprintf(
-		"Replace orders catalog for event %s at event version %d, catalog version %d. Currency %s, %d items, %d offers. Prices are base prices; declared resource ceilings are configuration only. No order occupancy, reservation or money change.",
+		"Replace orders catalog for event %s at event version %d, catalog version" +
+" %d. Currency %s, %d items, %d offers. Prices are base prices; declared " +
+"resource ceilings are configuration only. No order occupancy, reservatio" +
+"n or money change.",
 		prepared.Arguments.EventID,
 		prepared.Arguments.ExpectedEventVersion,
 		prepared.Arguments.ExpectedVersion,

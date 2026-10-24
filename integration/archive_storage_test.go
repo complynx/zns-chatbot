@@ -78,7 +78,8 @@ func TestStoredArchivePreservesExactChunksAndOriginalReceipt(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &receipt))
 	require.False(t, receipt.Validation.Inspection.ImportPerformed)
 	rows, err := h.store.Pool().
-		Query(context.Background(), "SELECT ordinal,content FROM shuttle_legacy_archive_chunks WHERE archive_id=$1 ORDER BY ordinal", receipt.ArchiveID)
+		Query(context.Background(), "SELECT ordinal,content FROM shuttle_legacy_archive_chunks WHERE archive_" +
+"id=$1 ORDER BY ordinal", receipt.ArchiveID)
 	require.NoError(t, err)
 	var restored bytes.Buffer
 	count := 0
@@ -111,7 +112,8 @@ func TestStoredArchivePreservesExactChunksAndOriginalReceipt(t *testing.T) {
 	require.Equal(t, receipt.Validation, validated.Result)
 	// A receipt survives expired approval and missing source bytes.
 	_, err = h.store.Pool().
-		Exec(context.Background(), "UPDATE shuttle_legacy_archive_preparations SET expires_at=clock_timestamp()-interval '1 hour' WHERE id=$1", r.ProposalID)
+		Exec(context.Background(), "UPDATE shuttle_legacy_archive_preparations SET expires_at=clock_timestam" +
+"p()-interval '1 hour' WHERE id=$1", r.ProposalID)
 	require.NoError(t, err)
 	code, replay := storeArchiveBytes(t, h, admin, r, nil)
 	require.Equal(t, http.StatusOK, code, string(replay))
@@ -124,7 +126,9 @@ func TestStoredArchivePreservesExactChunksAndOriginalReceipt(t *testing.T) {
 	require.NoError(
 		t,
 		h.store.Pool().
-			QueryRow(context.Background(), "SELECT (SELECT count(*) FROM shuttle_legacy_archives),(SELECT count(*) FROM shuttle_legacy_archive_operations),(SELECT count(*) FROM shuttle_users),(SELECT count(*) FROM shuttle_tasks)").
+			QueryRow(context.Background(), "SELECT (SELECT count(*) FROM shuttle_legacy_archives),(SELECT count(*) F" +
+"ROM shuttle_legacy_archive_operations),(SELECT count(*) FROM shuttle_use" +
+"rs),(SELECT count(*) FROM shuttle_tasks)").
 			Scan(&archives, &operations, &users, &tasks),
 	)
 	require.Equal(t, 1, archives)
@@ -172,7 +176,9 @@ func TestCorruptArchiveRollsBackAlreadyWrittenChunks(t *testing.T) {
 	require.NoError(
 		t,
 		h.store.Pool().
-			QueryRow(context.Background(), "SELECT (SELECT count(*) FROM shuttle_legacy_archives),(SELECT count(*) FROM shuttle_legacy_archive_chunks),(SELECT count(*) FROM shuttle_legacy_archive_operations)").
+			QueryRow(context.Background(), "SELECT (SELECT count(*) FROM shuttle_legacy_archives),(SELECT count(*) F" +
+"ROM shuttle_legacy_archive_chunks),(SELECT count(*) FROM shuttle_legacy_" +
+"archive_operations)").
 			Scan(&archives, &chunks, &operations),
 	)
 	require.Zero(t, archives)
@@ -187,7 +193,8 @@ func TestArchiveStorageExpiredProposalCannotStoreArchive(t *testing.T) {
 	raw, digest := receivingArchive(t, 123)
 	r := storageRequest(t, h, admin, digest)
 	_, err := h.store.Pool().
-		Exec(context.Background(), "UPDATE shuttle_legacy_archive_preparations SET expires_at=clock_timestamp()-interval '1 hour' WHERE id=$1", r.ProposalID)
+		Exec(context.Background(), "UPDATE shuttle_legacy_archive_preparations SET expires_at=clock_timestam" +
+"p()-interval '1 hour' WHERE id=$1", r.ProposalID)
 	require.NoError(t, err)
 	code, _ := storeArchiveBytes(t, h, admin, r, raw)
 	require.Equal(t, http.StatusConflict, code)

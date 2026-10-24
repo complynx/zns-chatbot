@@ -92,7 +92,8 @@ func TestDetailsRequestsKeepOneDeadlineAndFulfillWithoutStartingAgent(t *testing
 	require.NoError(
 		t,
 		h.store.Pool().
-			QueryRow(t.Context(), `SELECT coalesce(jsonb_agg(result),'[]') FROM shuttle_registration_details_request_operations`).
+			QueryRow(t.Context(), "SELECT coalesce(jsonb_agg(result),'[]') FROM shuttle_registration_detail" +
+"s_request_operations").
 			Scan(&receipts),
 	)
 	require.NotContains(t, string(rows), "SYNTHETIC-REGISTRATION-DETAIL")
@@ -114,7 +115,9 @@ func TestDetailsRequestsPreserveHistoricalReceiptsAcrossExpiryAndEventChanges(t 
 	operation := uuid.New()
 	first := beginDetailsRequest(t, h, scope, event, operation)
 	_, err := h.store.Pool().
-		Exec(t.Context(), `UPDATE shuttle_registration_details_requests SET created_at=clock_timestamp()-interval '3 hours',expires_at=clock_timestamp()-interval '1 second' WHERE id=$1`, first.Request.ID)
+		Exec(t.Context(), "UPDATE shuttle_registration_details_requests SET created_at=clock_timest" +
+"amp()-interval '3 hours',expires_at=clock_timestamp()-interval '1 second" +
+"' WHERE id=$1", first.Request.ID)
 	require.NoError(t, err)
 	expired, err := h.store.DetailsRequest(t.Context(), scope, first.Request.ID)
 	require.NoError(t, err)
@@ -217,8 +220,11 @@ func TestDetailsRequestFulfillmentRollsBackWithPrivateWriteAndReceipt(t *testing
 	)
 	require.NoError(t, err)
 	_, err = h.store.Pool().
-		Exec(t.Context(), `CREATE FUNCTION refuse_details_fulfillment() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture rejects fulfillment';END $$;
-CREATE TRIGGER refuse_details_fulfillment BEFORE UPDATE ON shuttle_registration_details_requests FOR EACH ROW EXECUTE FUNCTION refuse_details_fulfillment()`)
+		Exec(t.Context(), "CREATE FUNCTION refuse_details_fulfillment() RETURNS trigger LANGUAGE pl" +
+"pgsql AS $$ BEGIN RAISE EXCEPTION 'fixture rejects fulfillment';END $$;\n" +
+"CREATE TRIGGER refuse_details_fulfillment BEFORE UPDATE ON shuttle_regis" +
+"tration_details_requests FOR EACH ROW EXECUTE FUNCTION refuse_details_fu" +
+"lfillment()")
 	require.NoError(t, err)
 	mutation := registrationdetails.Mutation{
 		OperationID:     uuid.New(),

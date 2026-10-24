@@ -155,8 +155,18 @@ func (s *Service) structuredView(
 	case menuCommand, startCommand:
 		return structuredText(
 			ru,
-			"Hi! I’m Zinusya, your assistant for the Zouk Non Stop community and events. I can help with registrations, passes and the services below.\n\n/profile — My profile\n/registrations — My registrations and passes\n/register — Register for an event\n/orders — Saved order selection\n/massage — Massage bookings\n/avatar — My avatar\n/pairs — Pair invitations\n/payments — Pass payment\n/knowledge — Community and event knowledge",
-			"Привет! Я ЗиНуСя, помощница сообщества и мероприятий Zouk Non Stop. Помогу с регистрациями, пассами и сервисами ниже.\n\n/profile — Мой профиль\n/registrations — Мои регистрации и пассы\n/register — Регистрация на эвент\n/orders — Сохранённый выбор для заказа\n/massage — Записи на массаж\n/avatar — Моя аватарка\n/pairs — Приглашения в пару\n/payments — Оплата пасса\n/knowledge — База знаний сообщества и эвентов",
+			"Hi! I’m Zinusya, your assistant for the Zouk Non Stop community and even" +
+"ts. I can help with registrations, passes and the services below.\n\n/prof" +
+"ile — My profile\n/registrations — My registrations and passes\n/register " +
+"— Register for an event\n/orders — Saved order selection\n/massage — Massa" +
+"ge bookings\n/avatar — My avatar\n/pairs — Pair invitations\n/payments — Pa" +
+"ss payment\n/knowledge — Community and event knowledge",
+			"Привет! Я ЗиНуСя, помощница сообщества и мероприятий Zouk Non Stop. Помо" +
+"гу с регистрациями, пассами и сервисами ниже.\n\n/profile — Мой профиль\n/r" +
+"egistrations — Мои регистрации и пассы\n/register — Регистрация на эвент\n" +
+"/orders — Сохранённый выбор для заказа\n/massage — Записи на массаж\n/avat" +
+"ar — Моя аватарка\n/pairs — Приглашения в пару\n/payments — Оплата пасса\n/" +
+"knowledge — База знаний сообщества и эвентов",
 		), nil, nil
 	case paymentsCommand:
 		return s.structuredPaymentsView(ru), nil, nil
@@ -168,8 +178,10 @@ func (s *Service) structuredView(
 		}
 		return structuredText(
 			ru,
-			"Open pair invitations to share your partner code, invite or respond. Opening the form does not create a pair or give consent.",
-			"Открой приглашения в пару, чтобы передать свой код, пригласить или ответить. Открытие формы не создаёт пару и не означает согласия.",
+			"Open pair invitations to share your partner code, invite or respond. Ope" +
+"ning the form does not create a pair or give consent.",
+			"Открой приглашения в пару, чтобы передать свой код, пригласить или ответ" +
+"ить. Открытие формы не создаёт пару и не означает согласия.",
 		), nil, nil
 	case avatarCommand:
 		if s.options.MiniAppURL == "" {
@@ -179,7 +191,8 @@ func (s *Service) structuredView(
 		}
 		return structuredText(
 			ru,
-			"Open the form to upload an original, adjust the crop and save your avatar. Opening the form does not change your avatar.",
+			"Open the form to upload an original, adjust the crop and save your avata" +
+"r. Opening the form does not change your avatar.",
 			"Открой форму, загрузи оригинал, настрой обрезку и сохрани аватарку. Открытие формы не меняет аватарку.",
 		), nil, nil
 	case ordersCommand:
@@ -201,8 +214,10 @@ func (s *Service) structuredView(
 		}
 		return structuredText(
 			ru,
-			"Open the form to choose an event and review a massage slot or cancel your booking. A preview does not reserve a slot or confirm payment.",
-			"Открой форму, выбери эвент и проверь время массажа или отмени свою запись. Предпросмотр не занимает место и не подтверждает оплату.",
+			"Open the form to choose an event and review a massage slot or cancel you" +
+"r booking. A preview does not reserve a slot or confirm payment.",
+			"Открой форму, выбери эвент и проверь время массажа или отмени свою запис" +
+"ь. Предпросмотр не занимает место и не подтверждает оплату.",
 		), nil, nil
 	case knowledgeCommand:
 		return s.structuredKnowledgeView(ru), nil, nil
@@ -397,8 +412,12 @@ func (s *Service) structuredPaymentsView(ru bool) string {
 	}
 	return structuredText(
 		ru,
-		"Send your payment proof to this chat, then open the form to choose your pass, file and amount. Submission shares the proof for review; only an ambassador or event administrator can confirm payment.",
-		"Пришли подтверждение оплаты в этот чат, затем открой форму и выбери пасс, файл и сумму. Файл отправляется на проверку; оплату подтверждает амбассадор или администратор эвента.",
+		"Send your payment proof to this chat, then open the form to choose your " +
+"pass, file and amount. Submission shares the proof for review; only an a" +
+"mbassador or event administrator can confirm payment.",
+		"Пришли подтверждение оплаты в этот чат, затем открой форму и выбери пасс" +
+", файл и сумму. Файл отправляется на проверку; оплату подтверждает амбас" +
+"садор или администратор эвента.",
 	)
 }
 

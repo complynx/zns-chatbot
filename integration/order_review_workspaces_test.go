@@ -105,7 +105,9 @@ func TestOrderReviewWorkspaceHandoffsCanonicalRecoveryAndRestart(t *testing.T) {
 			// Recovery must precede freshness checks; both canonical columns and the
 			// saved presentation timestamp are deliberately expired after completion.
 			_, err = reopened.Pool().
-				Exec(t.Context(), `UPDATE shuttle_order_evidence_preparations SET expires_at=clock_timestamp()-interval '1 hour',document=jsonb_set(document,'{expires_at}',to_jsonb(clock_timestamp()-interval '1 hour')) WHERE id=$1`, w.Preparation.ID)
+				Exec(t.Context(), "UPDATE shuttle_order_evidence_preparations SET expires_at=clock_timestam" +
+"p()-interval '1 hour',document=jsonb_set(document,'{expires_at}',to_json" +
+"b(clock_timestamp()-interval '1 hour')) WHERE id=$1", w.Preparation.ID)
 			require.NoError(t, err)
 			agent, err := reopened.CommitOrderReviewWorkspace(t.Context(), scope, agentOp, args, prep.ID)
 			require.NoError(t, err)
@@ -154,7 +156,9 @@ func TestOrderReviewWorkspaceHandoffsCanonicalRecoveryAndRestart(t *testing.T) {
 			require.NoError(
 				t,
 				reopened.Pool().
-					QueryRow(t.Context(), `SELECT (SELECT count(*) FROM shuttle_order_evidence_reviews WHERE evidence_id=$1),(SELECT count(*) FROM shuttle_order_evidence_operations WHERE operation_id=$2 AND kind='review')`, review.EvidenceID, w.ID).
+					QueryRow(t.Context(), "SELECT (SELECT count(*) FROM shuttle_order_evidence_reviews WHERE eviden" +
+"ce_id=$1),(SELECT count(*) FROM shuttle_order_evidence_operations WHERE " +
+"operation_id=$2 AND kind='review')", review.EvidenceID, w.ID).
 					Scan(&reviews, &receipts),
 			)
 			require.Equal(t, 1, reviews)
@@ -238,7 +242,9 @@ func TestOrderReviewWorkspaceAtomicRollbackIncludesAliasAndCompletion(t *testing
 				event, table = "UPDATE OF result", "shuttle_order_review_calls"
 			}
 			_, err = f.H.store.Pool().
-				Exec(t.Context(), "CREATE FUNCTION fail_shared_order_review() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'synthetic shared order review failure'; END$$; CREATE TRIGGER fail_shared_order_review BEFORE "+event+" ON "+table+" FOR EACH ROW EXECUTE FUNCTION fail_shared_order_review()")
+				Exec(t.Context(), "CREATE FUNCTION fail_shared_order_review() RETURNS trigger LANGUAGE plpg" +
+"sql AS $$BEGIN RAISE EXCEPTION 'synthetic shared order review failure'; " +
+"END$$; CREATE TRIGGER fail_shared_order_review BEFORE "+event+" ON "+table+" FOR EACH ROW EXECUTE FUNCTION fail_shared_order_review()")
 			require.NoError(t, err)
 			_, err = f.H.store.CommitOrderReviewWorkspace(t.Context(), scope, op, args, prep.ID)
 			require.Error(t, err)
@@ -353,7 +359,8 @@ func TestOrderReviewWorkspaceNativeSessionRecheckedAfterEventWait(t *testing.T) 
 	require.Eventually(t, func() bool {
 		var count int
 		readErr := f.H.store.Pool().
-			QueryRow(ctx, "SELECT count(*) FROM pg_stat_activity WHERE $1::integer=ANY(pg_blocking_pids(pid))", blocker.Conn().PgConn().PID()).
+			QueryRow(ctx, "SELECT count(*) FROM pg_stat_activity WHERE $1::integer=ANY(pg_blocking_" +
+"pids(pid))", blocker.Conn().PgConn().PID()).
 			Scan(&count)
 		return readErr == nil && count > 0
 	}, 3*time.Second, 20*time.Millisecond)
@@ -455,7 +462,11 @@ func TestOrderReviewNativeReceiptFailureRollsBackNewAlias(t *testing.T) {
 	)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), `CREATE FUNCTION fail_native_order_alias() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'synthetic native alias failure'; END$$; CREATE TRIGGER fail_native_order_alias BEFORE UPDATE OF result ON shuttle_order_review_calls FOR EACH ROW EXECUTE FUNCTION fail_native_order_alias()`)
+		Exec(t.Context(), "CREATE FUNCTION fail_native_order_alias() RETURNS trigger LANGUAGE plpgs" +
+"ql AS $$BEGIN RAISE EXCEPTION 'synthetic native alias failure'; END$$; C" +
+"REATE TRIGGER fail_native_order_alias BEFORE UPDATE OF result ON shuttle" +
+"_order_review_calls FOR EACH ROW EXECUTE FUNCTION fail_native_order_alia" +
+"s()")
 	require.NoError(t, err)
 	op := uuid.New()
 	_, err = f.H.store.CommitMiniAppOrderReviewWorkspace(
@@ -471,14 +482,17 @@ func TestOrderReviewNativeReceiptFailureRollsBackNewAlias(t *testing.T) {
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(t.Context(), `SELECT (SELECT count(*) FROM shuttle_order_review_calls WHERE operation_id=$1),(SELECT count(*) FROM shuttle_order_evidence_reviews WHERE evidence_id=$2)`, op, review.EvidenceID).
+			QueryRow(t.Context(), "SELECT (SELECT count(*) FROM shuttle_order_review_calls WHERE operation_" +
+"id=$1),(SELECT count(*) FROM shuttle_order_evidence_reviews WHERE eviden" +
+"ce_id=$2)", op, review.EvidenceID).
 			Scan(&calls, &reviews),
 	)
 	require.Zero(t, calls)
 	require.Zero(t, reviews)
 	require.Equal(t, int64(8), orderAllocationUnits(t, f, "held"))
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "DROP TRIGGER fail_native_order_alias ON shuttle_order_review_calls; DROP FUNCTION fail_native_order_alias()")
+		Exec(t.Context(), "DROP TRIGGER fail_native_order_alias ON shuttle_order_review_calls; DROP" +
+" FUNCTION fail_native_order_alias()")
 	require.NoError(t, err)
 	result, err := f.H.store.CommitMiniAppOrderReviewWorkspace(
 		t.Context(),
@@ -562,7 +576,9 @@ func TestOrderReviewWorkspaceExpiredConsentCannotStartNewDecision(t *testing.T) 
 	prep, err := f.H.store.PrepareOrderReviewCommit(t.Context(), scope, op, orderReviewCommit(w))
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), `UPDATE shuttle_order_evidence_preparations SET expires_at=clock_timestamp()-interval '1 hour',document=jsonb_set(document,'{expires_at}',to_jsonb(clock_timestamp()-interval '1 hour')) WHERE id=$1`, w.Preparation.ID)
+		Exec(t.Context(), "UPDATE shuttle_order_evidence_preparations SET expires_at=clock_timestam" +
+"p()-interval '1 hour',document=jsonb_set(document,'{expires_at}',to_json" +
+"b(clock_timestamp()-interval '1 hour')) WHERE id=$1", w.Preparation.ID)
 	require.NoError(t, err)
 	_, err = f.H.store.CommitOrderReviewWorkspace(t.Context(), scope, op, orderReviewCommit(w), prep.ID)
 	require.ErrorIs(t, err, db.ErrConflict)

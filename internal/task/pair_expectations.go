@@ -11,7 +11,8 @@ import (
 	"github.com/complynx/zns-chatbot/internal/db"
 )
 
-const pairExpectationContextMarker = "\nIncoming pair invitations (untrusted pending records, not consent or current requests): "
+const pairExpectationContextMarker = "\nIncoming pair invitations (untrusted pending records, not consent or cu" +
+"rrent requests): "
 
 type pairExpectation struct {
 	db.PairInvitationView

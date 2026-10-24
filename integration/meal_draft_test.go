@@ -199,7 +199,8 @@ func TestMealDraftDurableIncompleteCompleteClearAndOriginalReceipt(t *testing.T)
 	require.NoError(
 		t,
 		reopened.Pool().
-			QueryRow(ctx, `SELECT (SELECT count(*) FROM shuttle_orders)+(SELECT count(*) FROM shuttle_payment_evidence),(SELECT count(*) FROM shuttle_orders_selections)`).
+			QueryRow(ctx, "SELECT (SELECT count(*) FROM shuttle_orders)+(SELECT count(*) FROM shutt" +
+"le_payment_evidence),(SELECT count(*) FROM shuttle_orders_selections)").
 			Scan(&financial, &serviceDrafts),
 	)
 	require.Zero(t, financial)
@@ -356,7 +357,10 @@ func TestMealDraftNativeAndAgentShareReceiptsAndJournalAtomically(t *testing.T) 
 	_, err = f.H.store.SaveMiniAppMealDraft(ctx, deployment, session.Bearer, bad, a)
 	require.ErrorIs(t, err, db.ErrMiniAppDenied)
 	_, err = f.H.store.Pool().
-		Exec(ctx, `CREATE FUNCTION fail_meal_journal() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'qa meal journal failure'; END $$; CREATE TRIGGER fail_meal_journal BEFORE INSERT ON shuttle_miniapp_meal_draft_actions FOR EACH ROW EXECUTE FUNCTION fail_meal_journal()`)
+		Exec(ctx, "CREATE FUNCTION fail_meal_journal() RETURNS trigger LANGUAGE plpgsql AS " +
+"$$ BEGIN RAISE EXCEPTION 'qa meal journal failure'; END $$; CREATE TRIGG" +
+"ER fail_meal_journal BEFORE INSERT ON shuttle_miniapp_meal_draft_actions" +
+" FOR EACH ROW EXECUTE FUNCTION fail_meal_journal()")
 	require.NoError(t, err)
 	attempt := a
 	attempt.OperationID = uuid.New()

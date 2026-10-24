@@ -68,7 +68,8 @@ func TestRegistrationDetailsKeepProfileSeparateAndRecoverHistoricalReceipt(t *te
 	require.NoError(
 		t,
 		h.store.Pool().
-			QueryRow(t.Context(), `SELECT result FROM shuttle_registration_details_operations WHERE user_id=$1 AND operation_id=$2`, user, passport.OperationID).
+			QueryRow(t.Context(), "SELECT result FROM shuttle_registration_details_operations WHERE user_id" +
+"=$1 AND operation_id=$2", user, passport.OperationID).
 			Scan(&receipt),
 	)
 	for _, raw := range [][]byte{encrypted, receipt} {

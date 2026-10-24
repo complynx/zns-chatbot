@@ -78,7 +78,8 @@ func TestMassageBindingGrantRevokeAndOriginalReceiptSurviveNewerChanges(t *testi
 	require.True(t, again.Active)
 	require.Equal(t, int64(3), again.Version)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_massage_binding_operations SET expires_at=clock_timestamp()-interval '1 second' WHERE actor_id=$1 AND operation_id=$2", actor.UserID, op)
+		Exec(t.Context(), "UPDATE shuttle_massage_binding_operations SET expires_at=clock_timestamp" +
+"()-interval '1 second' WHERE actor_id=$1 AND operation_id=$2", actor.UserID, op)
 	require.NoError(t, err)
 	original := args
 	original.ExpectedVersion = 0
@@ -119,7 +120,8 @@ func TestMassageBindingDeniedAndExpiredApprovalDoNotGrantAccess(t *testing.T) {
 	_, err = f.H.store.MassageBindingOperation(t.Context(), actor, op)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_massage_binding_operations SET expires_at=clock_timestamp()-interval '1 second' WHERE actor_id=$1 AND operation_id=$2", actor.UserID, op)
+		Exec(t.Context(), "UPDATE shuttle_massage_binding_operations SET expires_at=clock_timestamp" +
+"()-interval '1 second' WHERE actor_id=$1 AND operation_id=$2", actor.UserID, op)
 	require.NoError(t, err)
 	_, err = f.H.store.ChangeMassageBinding(
 		t.Context(),
@@ -163,7 +165,8 @@ func TestMassageBindingCannotTransferAliasAndRemovalDoesNotResurrectAccess(t *te
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(t.Context(), "SELECT active,version FROM shuttle_massage_specialist_bindings WHERE event_id=$1 AND specialist_id='alex'", args.EventID).
+			QueryRow(t.Context(), "SELECT active,version FROM shuttle_massage_specialist_bindings WHERE eve" +
+"nt_id=$1 AND specialist_id='alex'", args.EventID).
 			Scan(&active, &version),
 	)
 	require.True(t, active)
@@ -186,7 +189,8 @@ func TestMassageBindingCannotTransferAliasAndRemovalDoesNotResurrectAccess(t *te
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(t.Context(), "SELECT active,version FROM shuttle_massage_specialist_bindings WHERE event_id=$1 AND specialist_id='alex'", args.EventID).
+			QueryRow(t.Context(), "SELECT active,version FROM shuttle_massage_specialist_bindings WHERE eve" +
+"nt_id=$1 AND specialist_id='alex'", args.EventID).
 			Scan(&active, &version),
 	)
 	require.False(t, active)
@@ -208,7 +212,8 @@ func TestMassageBindingCannotTransferAliasAndRemovalDoesNotResurrectAccess(t *te
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(t.Context(), "SELECT active FROM shuttle_massage_specialist_bindings WHERE event_id=$1 AND specialist_id='alex'", args.EventID).
+			QueryRow(t.Context(), "SELECT active FROM shuttle_massage_specialist_bindings WHERE event_id=$1" +
+" AND specialist_id='alex'", args.EventID).
 			Scan(&active),
 	)
 	require.False(t, active)
@@ -232,7 +237,11 @@ func TestMassageBindingReceiptFailureRollsBackGrantAndSameOperationRetries(t *te
 	prep, err := f.H.store.PrepareMassageBinding(t.Context(), actor, op, args)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), `CREATE FUNCTION fail_binding_receipt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic binding receipt failure'; END $$; CREATE TRIGGER fail_binding_receipt BEFORE UPDATE ON shuttle_massage_binding_operations FOR EACH ROW WHEN (NEW.result IS NOT NULL) EXECUTE FUNCTION fail_binding_receipt()`)
+		Exec(t.Context(), "CREATE FUNCTION fail_binding_receipt() RETURNS trigger LANGUAGE plpgsql " +
+"AS $$ BEGIN RAISE EXCEPTION 'synthetic binding receipt failure'; END $$;" +
+" CREATE TRIGGER fail_binding_receipt BEFORE UPDATE ON shuttle_massage_bi" +
+"nding_operations FOR EACH ROW WHEN (NEW.result IS NOT NULL) EXECUTE FUNC" +
+"TION fail_binding_receipt()")
 	require.NoError(t, err)
 	_, err = f.H.store.ChangeMassageBinding(
 		t.Context(),
@@ -307,7 +316,10 @@ func TestMassageScheduleFailureRollsBackSpecialistRevocation(t *testing.T) {
 	prep, err = f.H.store.PrepareMassageSchedule(t.Context(), actor, op, schedule)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), `CREATE FUNCTION fail_binding_schedule() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic binding schedule failure'; END $$; CREATE TRIGGER fail_binding_schedule BEFORE UPDATE ON shuttle_massage_schedules FOR EACH ROW EXECUTE FUNCTION fail_binding_schedule()`)
+		Exec(t.Context(), "CREATE FUNCTION fail_binding_schedule() RETURNS trigger LANGUAGE plpgsql" +
+" AS $$ BEGIN RAISE EXCEPTION 'synthetic binding schedule failure'; END $" +
+"$; CREATE TRIGGER fail_binding_schedule BEFORE UPDATE ON shuttle_massage" +
+"_schedules FOR EACH ROW EXECUTE FUNCTION fail_binding_schedule()")
 	require.NoError(t, err)
 	_, err = f.H.store.ChangeMassageSchedule(
 		t.Context(),
@@ -323,7 +335,8 @@ func TestMassageScheduleFailureRollsBackSpecialistRevocation(t *testing.T) {
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(t.Context(), "SELECT active,version FROM shuttle_massage_specialist_bindings WHERE event_id=$1 AND specialist_id='alex'", args.EventID).
+			QueryRow(t.Context(), "SELECT active,version FROM shuttle_massage_specialist_bindings WHERE eve" +
+"nt_id=$1 AND specialist_id='alex'", args.EventID).
 			Scan(&active, &version),
 	)
 	require.True(t, active)
@@ -345,7 +358,8 @@ func TestMassageScheduleFailureRollsBackSpecialistRevocation(t *testing.T) {
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(t.Context(), "SELECT active FROM shuttle_massage_specialist_bindings WHERE event_id=$1 AND specialist_id='alex'", args.EventID).
+			QueryRow(t.Context(), "SELECT active FROM shuttle_massage_specialist_bindings WHERE event_id=$1" +
+" AND specialist_id='alex'", args.EventID).
 			Scan(&active),
 	)
 	require.False(t, active)

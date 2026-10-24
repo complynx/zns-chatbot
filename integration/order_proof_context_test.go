@@ -115,13 +115,15 @@ func TestMiniAppOrderProofContextIsBoundedAndCurrentOwnerAccessFiltered(t *testi
 	_, err = f.H.store.RecentMiniAppOrderEvidenceActions(t.Context(), wrong, task.ID)
 	require.Error(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), `UPDATE shuttle_registrations SET state='waitlisted' WHERE event_id=$1 AND user_id=$2`, f.Event.ID, f.OwnerID)
+		Exec(t.Context(), "UPDATE shuttle_registrations SET state='waitlisted' WHERE event_id=$1 AN" +
+"D user_id=$2", f.Event.ID, f.OwnerID)
 	require.NoError(t, err)
 	rows, err = f.H.store.RecentMiniAppOrderEvidenceActions(t.Context(), scope, task.ID)
 	require.NoError(t, err)
 	require.Empty(t, rows)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), `UPDATE shuttle_registrations SET state='assigned' WHERE event_id=$1 AND user_id=$2`, f.Event.ID, f.OwnerID)
+		Exec(t.Context(), "UPDATE shuttle_registrations SET state='assigned' WHERE event_id=$1 AND " +
+"user_id=$2", f.Event.ID, f.OwnerID)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
 		Exec(t.Context(), `UPDATE shuttle_events SET modules=ARRAY['registrations'] WHERE id=$1`, f.Event.ID)
@@ -144,8 +146,10 @@ func TestMiniAppOrderProofContextJournalFailureRollsBackWholeAdmission(t *testin
 	session := nativeOrderSession(t, f, scope, 11002)
 	deployment := db.EventScope{BotID: scope.BotID, Organization: scope.Organization}
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), `CREATE FUNCTION fail_proof_action() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'fixture journal unavailable'; END$$;
- CREATE TRIGGER fail_proof_action BEFORE INSERT ON shuttle_miniapp_order_evidence_actions FOR EACH ROW EXECUTE FUNCTION fail_proof_action()`)
+		Exec(t.Context(), "CREATE FUNCTION fail_proof_action() RETURNS trigger LANGUAGE plpgsql AS " +
+"$$BEGIN RAISE EXCEPTION 'fixture journal unavailable'; END$$;\n CREATE TR" +
+"IGGER fail_proof_action BEFORE INSERT ON shuttle_miniapp_order_evidence_" +
+"actions FOR EACH ROW EXECUTE FUNCTION fail_proof_action()")
 	require.NoError(t, err)
 	_, err = f.H.store.SubmitMiniAppOrderEvidence(t.Context(), deployment, session, op, args)
 	require.Error(t, err)
@@ -153,13 +157,17 @@ func TestMiniAppOrderProofContextJournalFailureRollsBackWholeAdmission(t *testin
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(t.Context(), `SELECT (SELECT count(*) FROM shuttle_order_evidence)+(SELECT count(*) FROM shuttle_order_evidence_operations)+(SELECT count(*) FROM shuttle_order_evidence_notices)+(SELECT count(*) FROM shuttle_miniapp_order_evidence_actions)`).
+			QueryRow(t.Context(), "SELECT (SELECT count(*) FROM shuttle_order_evidence)+(SELECT count(*) FR" +
+"OM shuttle_order_evidence_operations)+(SELECT count(*) FROM shuttle_orde" +
+"r_evidence_notices)+(SELECT count(*) FROM shuttle_miniapp_order_evidence" +
+"_actions)").
 			Scan(&effects),
 	)
 	require.Zero(t, effects)
 	require.Zero(t, orderAllocationUnits(t, f, "held"))
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), `DROP TRIGGER fail_proof_action ON shuttle_miniapp_order_evidence_actions; DROP FUNCTION fail_proof_action()`)
+		Exec(t.Context(), "DROP TRIGGER fail_proof_action ON shuttle_miniapp_order_evidence_actions" +
+"; DROP FUNCTION fail_proof_action()")
 	require.NoError(t, err)
 	claim, err := f.H.store.SubmitMiniAppOrderEvidence(t.Context(), deployment, session, op, args)
 	require.NoError(t, err)

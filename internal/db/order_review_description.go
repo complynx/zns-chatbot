@@ -109,18 +109,22 @@ func renderOrderReviewSummary(
 	ru bool,
 ) string {
 	e := p.Evidence
-	template, title, note := orderReviewSummaryEnglish, "Confirm order payment?", "Records confirmed payment and occupies this proof's held resources. It does not fulfill the order."
+	template, title, note := orderReviewSummaryEnglish, "Confirm order payment?", "Records confirmed payment and occupies this proof's held resources. It d" +
+"oes not fulfill the order."
 	confirmed := e.QuotedAmountMinor
 	if p.Arguments.Decision == OrderEvidenceRejected {
 		title = "Reject order payment proof?"
 		confirmed = 0
-		note = "Rejects this proof and releases only its held resources, if any. It does not refund money or cancel the order."
+		note = "Rejects this proof and releases only its held resources, if any. It does" +
+" not refund money or cancel the order."
 	}
 	if ru {
-		template, title, note = orderReviewSummaryRussian, "Подтвердить оплату заказа?", "Фиксирует подтверждённую оплату и занимает зарезервированные по этому подтверждению места. Это не выполнение заказа."
+		template, title, note = orderReviewSummaryRussian, "Подтвердить оплату заказа?", "Фиксирует подтверждённую оплату и занимает зарезервированные по этому по" +
+"дтверждению места. Это не выполнение заказа."
 		if p.Arguments.Decision == OrderEvidenceRejected {
 			title = "Отклонить подтверждение оплаты заказа?"
-			note = "Отклоняет это подтверждение и освобождает только его резерв, если он был. Деньги не возвращаются, заказ не отменяется."
+			note = "Отклоняет это подтверждение и освобождает только его резерв, если он был" +
+". Деньги не возвращаются, заказ не отменяется."
 		}
 	}
 	if snapshot.Meal != nil && p.Arguments.Decision == OrderEvidenceConfirmed {

@@ -44,7 +44,8 @@ func massageBookingFixtureWithPeers(
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(t.Context(), "UPDATE shuttle_events SET modules=array_append(modules,'massage'),version=version+1 WHERE id=$1 RETURNING version", f.Event.ID).
+			QueryRow(t.Context(), "UPDATE shuttle_events SET modules=array_append(modules,'massage'),versio" +
+"n=version+1 WHERE id=$1 RETURNING version", f.Event.ID).
 			Scan(&f.Event.Version),
 	)
 	doc := massageDocument(f.Event.Document.StartsAt)
@@ -237,7 +238,8 @@ func TestMassageBookingDeniesChangedExpiredForeignAndIneligibleProposals(t *test
 	_, err = f.H.store.BookOwnMassage(t.Context(), other, uuid.New(), proposal.ID, args, db.MassageSourceAgent)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_massage_preparations SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1", proposal.ID)
+		Exec(t.Context(), "UPDATE shuttle_massage_preparations SET expires_at=clock_timestamp()-int" +
+"erval '1 second' WHERE id=$1", proposal.ID)
 	require.NoError(t, err)
 	_, err = f.H.store.BookOwnMassage(t.Context(), owner, operation, proposal.ID, args, db.MassageSourceAgent)
 	require.ErrorIs(t, err, db.ErrConflict)
@@ -290,7 +292,8 @@ func TestMassageBookingConfigGuardsAndOwnerCancellationSurvivePassLoss(t *testin
 	)
 	require.ErrorIs(t, err, db.ErrConflict)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_registrations SET state='waitlisted' WHERE event_id=$1 AND user_id=$2", f.Event.ID, owner.UserID)
+		Exec(t.Context(), "UPDATE shuttle_registrations SET state='waitlisted' WHERE event_id=$1 AN" +
+"D user_id=$2", f.Event.ID, owner.UserID)
 	require.NoError(t, err)
 	cancellation := db.MassageCancellationArguments{
 		EventID:         f.Event.ID,

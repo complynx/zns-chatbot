@@ -85,7 +85,20 @@ func settingsDocumentSchema() map[string]any {
 func settingsChangeMethod() map[string]any {
 	method := administrativeRead(
 		"update_settings",
-		"Replace application-wide runtime settings after reading settings and obtaining exact approval. Supply expected_version and the full document; omitted optional zero values retain documented defaults. Massage reminder lead changes reschedule pending/retryable reminders without clearing retry delays; delivered, unknown and inflight remain unchanged. Browser source retention applies to existing uploads; expired bytes are irrecoverable, completed JPEGs and receipts remain. Lowering the byte quota blocks new uploads without quota-driven eviction. Worker concurrency applies after restart, question timeout is reserved. No startup config or secrets are editable. An original receipt is historical: current process IAM TTL is synchronized from CURRENT DB settings, never from a replayed document. This does not coordinate other running processes. Reconcile the same operation after any lost response/503; not_found never proves a safe replacement write.",
+		"Replace application-wide runtime settings after reading settings and obt" +
+"aining exact approval. Supply expected_version and the full document; om" +
+"itted optional zero values retain documented defaults. Massage reminder " +
+"lead changes reschedule pending/retryable reminders without clearing ret" +
+"ry delays; delivered, unknown and inflight remain unchanged. Browser sou" +
+"rce retention applies to existing uploads; expired bytes are irrecoverab" +
+"le, completed JPEGs and receipts remain. Lowering the byte quota blocks " +
+"new uploads without quota-driven eviction. Worker concurrency applies af" +
+"ter restart, question timeout is reserved. No startup config or secrets " +
+"are editable. An original receipt is historical: current process IAM TTL" +
+" is synchronized from CURRENT DB settings, never from a replayed documen" +
+"t. This does not coordinate other running processes. Reconcile the same " +
+"operation after any lost response/503; not_found never proves a safe rep" +
+"lacement write.",
 		map[string]any{
 			schemaExpectedVersion: map[string]any{manifestType: schemaInteger, schemaMinimum: 1},
 			schemaDocument:        settingsDocumentSchema(),

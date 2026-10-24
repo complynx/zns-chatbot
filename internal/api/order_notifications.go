@@ -72,7 +72,9 @@ func orderNotificationMethods() []map[string]any {
 	return []map[string]any{
 		administrativeRead(
 			"order_notifications",
-			"List this deployment's order payment evidence delivery metadata with current global administrator authority. Default/max page 20; follow next as after. Unknown delivery is not proof of non-delivery.",
+			"List this deployment's order payment evidence delivery metadata with cur" +
+"rent global administrator authority. Default/max page 20; follow next as" +
+" after. Unknown delivery is not proof of non-delivery.",
 			map[string]any{
 				schemaState: map[string]any{manifestType: schemaString},
 				schemaAfter: uuidField,
@@ -87,7 +89,11 @@ func orderNotificationMethods() []map[string]any {
 		),
 		administrativeRead(
 			"order_notification",
-			"Inspect an order payment evidence notification's recipient, state/version, attempt ID, Telegram receipt and original evidence and sold order terms. Use resolve_notification with notification_kind=order for an exact, audited retry or dismissal; unknown retry may duplicate a message. Never repeat the order business action to resend a notification.",
+			"Inspect an order payment evidence notification's recipient, state/versio" +
+"n, attempt ID, Telegram receipt and original evidence and sold order ter" +
+"ms. Use resolve_notification with notification_kind=order for an exact, " +
+"audited retry or dismissal; unknown retry may duplicate a message. Never" +
+" repeat the order business action to resend a notification.",
 			map[string]any{"id": uuidField},
 			[]string{"id"},
 			[]string{"id", schemaState, schemaVersion, paymentSchemaReceipt},

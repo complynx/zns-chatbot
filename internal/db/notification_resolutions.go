@@ -302,7 +302,9 @@ func (s *Store) PrepareNotificationResolution(
 		Arguments: args,
 		ExpiresAt: now.Time.Add(paymentPreparationTTL),
 		Description: fmt.Sprintf(
-			"%s notification %s for recipient %s%s, state %s, version %d. Reason: %s. No payment changes. Dismiss does not prove delivery. Retry rechecks recipient access before sending.",
+			"%s notification %s for recipient %s%s, state %s, version %d. Reason: %s." +
+" No payment changes. Dismiss does not prove delivery. Retry rechecks rec" +
+"ipient access before sending.",
 			args.Action,
 			n.ID,
 			n.RecipientID,
@@ -313,7 +315,8 @@ func (s *Store) PrepareNotificationResolution(
 		),
 	}
 	if args.Action == notificationRetry && n.State == deliveryUnknown {
-		result.Description += " Telegram may already have received this message. Retry can send a duplicate. Check its receipt and the chat first; retry only as a last resort."
+		result.Description += " Telegram may already have received this message. Retry can send a dupli" +
+"cate. Check its receipt and the chat first; retry only as a last resort."
 	}
 	if args.NotificationKind == knowledgeNotificationKind {
 		result.Description = "Knowledge delivery only; no publication or moderation changes. " + result.Description
@@ -328,7 +331,8 @@ func (s *Store) PrepareNotificationResolution(
 		result.Description = "Massage reminder delivery only; no booking or payment changes. " + result.Description
 	}
 	if args.NotificationKind == massageSpecialistNotificationKind {
-		result.Description = "Massage specialist notification delivery only; captured grant and preference generations are retained. No booking or payment changes. " + result.Description
+		result.Description = "Massage specialist notification delivery only; captured grant and prefer" +
+"ence generations are retained. No booking or payment changes. " + result.Description
 	}
 	document, err := json.Marshal(result)
 	if err != nil {

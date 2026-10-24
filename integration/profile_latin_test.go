@@ -78,8 +78,11 @@ func TestProfileLatinSecondWriteFailureRollsBackOriginalAndReceipt(t *testing.T)
 	userID, _ := registrationUser(t, h, 19302, false)
 	scope := ownerProfileScope(t, h, userID)
 	_, err := h.store.Pool().
-		Exec(ctx, `CREATE FUNCTION reject_latin_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Latin storage unavailable'; END $$;
-CREATE TRIGGER reject_latin_fixture BEFORE UPDATE OF first_name_latin,last_name_latin ON shuttle_user_profiles FOR EACH ROW EXECUTE FUNCTION reject_latin_fixture()`)
+		Exec(ctx, "CREATE FUNCTION reject_latin_fixture() RETURNS trigger LANGUAGE plpgsql " +
+"AS $$ BEGIN RAISE EXCEPTION 'Latin storage unavailable'; END $$;\nCREATE " +
+"TRIGGER reject_latin_fixture BEFORE UPDATE OF first_name_latin,last_name" +
+"_latin ON shuttle_user_profiles FOR EACH ROW EXECUTE FUNCTION reject_lat" +
+"in_fixture()")
 	require.NoError(t, err)
 	m := withLatinName(personName(0, "Анна", "Иванова"), "Anna", "Ivanova")
 	_, err = h.store.MutateProfile(ctx, scope, m)
@@ -106,7 +109,8 @@ CREATE TRIGGER reject_latin_fixture BEFORE UPDATE OF first_name_latin,last_name_
 	require.Equal(t, "Ivanova", saved.LastNameLatin)
 	// An older writer knows only original columns. The database clears its stale Latin.
 	_, err = h.store.Pool().
-		Exec(ctx, `UPDATE shuttle_user_profiles SET first_name='Анна',last_name='Петрова',full_name='Анна Петрова',version=version+1 WHERE user_id=$1`, userID)
+		Exec(ctx, "UPDATE shuttle_user_profiles SET first_name='Анна',last_name='Петрова',f" +
+"ull_name='Анна Петрова',version=version+1 WHERE user_id=$1", userID)
 	require.NoError(t, err)
 	current, err = h.store.GetProfile(ctx, scope)
 	require.NoError(t, err)

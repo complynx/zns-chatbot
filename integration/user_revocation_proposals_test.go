@@ -192,10 +192,12 @@ func TestUserRevocationResultFailureRollsBackRevocationAndAudit(t *testing.T) {
 	prep, err := h.store.PrepareUserRevocation(ctx, scope, "revoke", args)
 	require.NoError(t, err)
 	_, err = h.store.Pool().
-		Exec(ctx, `CREATE FUNCTION fail_revocation_result() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture receipt failure'; END $$`)
+		Exec(ctx, "CREATE FUNCTION fail_revocation_result() RETURNS trigger LANGUAGE plpgsq" +
+"l AS $$ BEGIN RAISE EXCEPTION 'fixture receipt failure'; END $$")
 	require.NoError(t, err)
 	_, err = h.store.Pool().
-		Exec(ctx, `CREATE TRIGGER fail_revocation_result BEFORE UPDATE ON shuttle_user_revocation_proposals FOR EACH ROW EXECUTE FUNCTION fail_revocation_result()`)
+		Exec(ctx, "CREATE TRIGGER fail_revocation_result BEFORE UPDATE ON shuttle_user_revo" +
+"cation_proposals FOR EACH ROW EXECUTE FUNCTION fail_revocation_result()")
 	require.NoError(t, err)
 	_, err = h.store.ConfirmUserRevocation(ctx, scope, "revoke", args, prep.ID)
 	require.Error(t, err)

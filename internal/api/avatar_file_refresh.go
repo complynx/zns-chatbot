@@ -98,7 +98,10 @@ func avatarRefetchManifest(history bool) map[string]any {
 	}
 	method := administrativeRead(
 		id,
-		"Refresh a previously returned image descriptor using only its exact external_id. Rechecks current owner and source availability; a preview conflicts after the draft changes. Do not construct or alter locators. If an original is unavailable, ask the person to resend it.",
+		"Refresh a previously returned image descriptor using only its exact exte"+
+			"rnal_id. Rechecks current owner and source availability; a preview confl"+
+			"icts after the draft changes. Do not construct or alter locators. If an "+
+			"original is unavailable, ask the person to resend it.",
 		map[string]any{
 			"external_id": map[string]any{
 				manifestType:    schemaString,

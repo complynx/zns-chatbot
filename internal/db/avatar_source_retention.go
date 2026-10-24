@@ -25,7 +25,8 @@ func expireAvatarSources(ctx context.Context, tx pgx.Tx, owner uuid.UUID) error 
 	}
 	_, err = tx.Exec(
 		ctx,
-		`UPDATE shuttle_avatar_drafts SET original=NULL,original_expired_at=$2 WHERE user_id=$1 AND original IS NOT NULL AND created_at <= $3`,
+		"UPDATE shuttle_avatar_drafts SET original=NULL,original_expired_at=$2 WH" +
+"ERE user_id=$1 AND original IS NOT NULL AND created_at <= $3",
 		owner,
 		now,
 		now.Add(-policy.Retention),
@@ -47,7 +48,10 @@ func avatarDraftQuota(ctx context.Context, tx pgx.Tx, owner uuid.UUID, additiona
 	}
 	var count int
 	var size int64
-	err = tx.QueryRow(ctx, `SELECT count(*) FILTER (WHERE source_file_id IS NOT NULL OR history_record_id IS NOT NULL OR (original_expired_at IS NULL AND created_at > $2)),coalesce(sum(source_size_bytes) FILTER (WHERE original IS NOT NULL),0)::bigint FROM shuttle_avatar_drafts WHERE user_id=$1`, owner, now.Add(-policy.Retention)).
+	err = tx.QueryRow(ctx, "SELECT count(*) FILTER (WHERE source_file_id IS NOT NULL OR history_reco" +
+"rd_id IS NOT NULL OR (original_expired_at IS NULL AND created_at > $2))," +
+"coalesce(sum(source_size_bytes) FILTER (WHERE original IS NOT NULL),0)::" +
+"bigint FROM shuttle_avatar_drafts WHERE user_id=$1", owner, now.Add(-policy.Retention)).
 		Scan(&count, &size)
 	if err != nil {
 		return err
@@ -57,7 +61,8 @@ func avatarDraftQuota(ctx context.Context, tx pgx.Tx, owner uuid.UUID, additiona
 	}
 	if additional > 0 {
 		var total int64
-		if err = tx.QueryRow(ctx, `SELECT coalesce(sum(source_size_bytes),0)::bigint FROM shuttle_avatar_drafts WHERE original IS NOT NULL`).
+		if err = tx.QueryRow(ctx, "SELECT coalesce(sum(source_size_bytes),0)::bigint FROM shuttle_avatar_dr" +
+"afts WHERE original IS NOT NULL").
 			Scan(&total); err != nil {
 			return err
 		}
@@ -84,7 +89,10 @@ func (s *Store) ExpireAvatarSources(ctx context.Context, scope EventScope, after
 	}
 	rows, err := s.pool.Query(
 		ctx,
-		`SELECT DISTINCT u.id FROM shuttle_users u JOIN shuttle_avatar_drafts d ON d.user_id=u.id WHERE u.bot_id=$1 AND u.zitadel_org=$2 AND u.id>$3 AND d.original IS NOT NULL AND d.created_at <= clock_timestamp()-make_interval(secs=>$4) ORDER BY u.id LIMIT $5`,
+		"SELECT DISTINCT u.id FROM shuttle_users u JOIN shuttle_avatar_drafts d O" +
+"N d.user_id=u.id WHERE u.bot_id=$1 AND u.zitadel_org=$2 AND u.id>$3 AND " +
+"d.original IS NOT NULL AND d.created_at <= clock_timestamp()-make_interv" +
+"al(secs=>$4) ORDER BY u.id LIMIT $5",
 		scope.BotID,
 		scope.Organization,
 		after,
@@ -125,7 +133,8 @@ func (s *Store) expireOwnerAvatarSources(ctx context.Context, scope EventScope, 
 	}
 	defer rollbackLegacyArchive(ctx, tx)
 	var locked uuid.UUID
-	err = tx.QueryRow(ctx, `SELECT id FROM shuttle_users WHERE id=$1 AND bot_id=$2 AND zitadel_org=$3 FOR UPDATE SKIP LOCKED`, owner, scope.BotID, scope.Organization).
+	err = tx.QueryRow(ctx, "SELECT id FROM shuttle_users WHERE id=$1 AND bot_id=$2 AND zitadel_org=$" +
+"3 FOR UPDATE SKIP LOCKED", owner, scope.BotID, scope.Organization).
 		Scan(&locked)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil

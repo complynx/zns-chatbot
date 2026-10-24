@@ -33,7 +33,9 @@ func TestEmbeddedRegistrationReadPreservesOldProjectionAndOnlyExposesWhitelisted
 	t.Parallel()
 	raw, hash, target := registrationArchive(
 		t,
-		`"old.event":{"state":"paid","type":"solo","role":"leader","paid":false,"bank":"PRIVATE_BANK","proof_file":"PRIVATE_FILE","couple":999,"zitadel_subject":"PRIVATE_IAM"},"old":{"event":{"paid":true}}`,
+		"\"old.event\":{\"state\":\"paid\",\"type\":\"solo\",\"role\":\"leader\",\"paid\":f"+
+			"alse,\"bank\":\"PRIVATE_BANK\",\"proof_file\":\"PRIVATE_FILE\",\"couple\":999,\"zi"+
+			"tadel_subject\":\"PRIVATE_IAM\"},\"old\":{\"event\":{\"paid\":true}}",
 	)
 	original := append([]byte(nil), raw...)
 	result, validation, err := legacyimport.ReadRegistration(

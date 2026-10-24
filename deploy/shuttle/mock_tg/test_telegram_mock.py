@@ -149,6 +149,72 @@ class MockTest(unittest.TestCase):
     def state(self):
         return self.call('/qa/state')[1]
 
+    def test_invalid_keyboard_arrays_are_rejected_without_message_effects(self):
+        self.qa('file', {'file_id': 'keyboard-file', 'name': 'qa.txt', 'mime_type': 'text/plain',
+                         'data_base64': base64.b64encode(b'synthetic keyboard test').decode()})
+        original = self.bot('sendMessage', {'chat_id': 101, 'text': 'Original'})
+        malformed = [{'inline_keyboard': None}, {'keyboard': None}, {'inline_keyboard': {}},
+                     {'inline_keyboard': [1]}, {'keyboard': [1]},
+                     {'inline_keyboard': [['plain text']]}, {'inline_keyboard': [[{'text': 'Missing action'}]]}]
+        for method in ('sendMessage', 'sendDocument', 'editMessageText'):
+            for markup in malformed:
+                with self.subTest(method=method, markup=markup):
+                    before = self.state()['messages']
+                    data = {'chat_id': 101, 'text': 'Rejected', 'reply_markup': markup}
+                    if method == 'sendDocument':
+                        data['document'] = 'keyboard-file'
+                    if method == 'editMessageText':
+                        data['message_id'] = original['message_id']
+                    status, outcome = self.call('/bot' + self.config['token'] + '/' + method, data)
+                    self.assertEqual(status, 400, outcome)
+                    self.assertFalse(outcome['ok'])
+                    self.assertEqual(outcome['error_code'], 400)
+                    self.assertEqual(self.state()['messages'], before)
+
+    def test_empty_arrays_and_markup_edits_match_bot_api(self):
+        for markup in ({}, {'inline_keyboard': []}, {'keyboard': []}, {'inline_keyboard': [None]},
+                       {'inline_keyboard': [[]]}, {'keyboard': [None]}):
+            message = self.bot('sendMessage', {'chat_id': 101, 'text': 'No buttons', 'reply_markup': markup})
+            self.assertNotIn('reply_markup', message)
+        inline = {'inline_keyboard': [[{'text': 'A', 'callback_data': 'a'}]]}
+        message = self.bot('sendMessage', {'chat_id': 101, 'text': 'Original', 'reply_markup': inline})
+        for markup in ({'keyboard': [[{'text': 'Reply'}]]}, {'remove_keyboard': True}, {'force_reply': True}):
+            status, _ = self.call('/bot' + self.config['token'] + '/editMessageText',
+                                  {'chat_id': 101, 'message_id': message['message_id'], 'text': 'Rejected', 'reply_markup': markup})
+            self.assertEqual(status, 400)
+        cleared = self.bot('editMessageReplyMarkup', {'chat_id': 101, 'message_id': message['message_id'],
+                                                     'reply_markup': {'inline_keyboard': []}})
+        self.assertNotIn('reply_markup', cleared)
+        self.assertEqual(cleared['text'], 'Original')
+        before = len(self.webhook.received)
+        status, _ = self.call('/qa/click', {'user': self.user1, 'chat_id': 101,
+                                           'message_id': message['message_id'], 'row': 0, 'column': 0})
+        self.assertEqual(status, 400)
+        self.assertEqual(len(self.webhook.received), before)
+
+    def test_chat_commands_menu_and_typing_are_stateful_without_messages(self):
+        scope = {'type': 'chat', 'chat_id': 101}
+        commands = [{'command': 'qa', 'description': 'QA menu'}]
+        self.assertTrue(self.bot('setMyCommands', {'scope': scope, 'commands': commands}))
+        self.assertTrue(self.bot('setMyCommands', {'scope': scope, 'language_code': 'pt',
+                                                 'commands': [{'command': 'ola', 'description': 'Olá'}]}))
+        self.assertEqual(self.bot('getMyCommands', {'scope': scope}), commands)
+        self.assertEqual(self.bot('getMyCommands', {'scope': {'type': 'chat', 'chat_id': 202}}), [])
+        menu = {'type': 'web_app', 'text': 'QA', 'web_app': {'url': 'https://qa.invalid/app'}}
+        self.assertTrue(self.bot('setChatMenuButton', {'chat_id': 101, 'menu_button': menu}))
+        other = self.start(dict(self.config))
+        path = '/bot' + self.config['token'] + '/getChatMenuButton'
+        self.assertEqual(self.call(path, {'chat_id': 101}, server=other)[1]['result'], menu)
+        self.assertEqual(self.bot('getMyCommands', {'scope': scope}), commands)
+        self.assertTrue(self.bot('deleteMyCommands', {'scope': scope, 'language_code': 'pt'}))
+        self.assertEqual(self.bot('getMyCommands', {'scope': scope, 'language_code': 'pt'}), [])
+        self.assertTrue(self.bot('setChatMenuButton', {'chat_id': 101, 'menu_button': {'type': 'default'}}))
+        self.assertEqual(self.bot('getChatMenuButton', {'chat_id': 101}), {'type': 'default'})
+        self.assertTrue(self.bot('sendChatAction', {'chat_id': 101, 'action': 'typing'}))
+        self.assertEqual(self.call('/bot' + self.config['token'] + '/sendChatAction',
+                                   {'chat_id': 101, 'action': 'unknown'})[0], 400)
+        self.assertEqual(self.state()['messages'], [])
+
     def test_auth_exact_token_unknown_methods_and_independent_stores(self):
         self.assertEqual(self.call('/health', auth=False), (200, {'ok': True}))
         self.assertEqual(self.call('/qa/state', auth=False)[0], 401)
@@ -170,22 +236,18 @@ class MockTest(unittest.TestCase):
         incoming2 = self.qa('message', {'user': self.user2, 'chat': group, 'text': 'reply', 'reply_to_message_id': incoming['message_id']})['update']['message']
         self.assertEqual(incoming2['reply_to_message']['from']['id'], 101)
         sent = self.bot('sendMessage', {'chat_id': group['id'], 'text': 'choose', 'reply_to_message_id': incoming2['message_id'],
-                        'reply_markup': {'inline_keyboard': [[{'text': 'yes', 'callback_data': 'yes'}, {'text': 'launch', 'web_app': {'url': 'https://qa.invalid/app'}}]]}})
+                        'reply_markup': {'inline_keyboard': [[{'text': 'yes', 'callback_data': 'yes'}]]}})
         callback = self.qa('click', {'user': self.user2, 'chat_id': group['id'], 'message_id': sent['message_id'], 'row': 0, 'column': 0})['update']['callback_query']
         self.assertEqual(callback['from']['id'], 202)
         self.assertEqual(callback['message']['chat']['id'], group['id'])
         self.assertEqual(callback['message']['message_id'], sent['message_id'])
         self.assertEqual(callback['data'], 'yes')
         self.assertTrue(self.bot('answerCallbackQuery', {'callback_query_id': callback['id']}))
-        before = len(self.webhook.received)
-        launch = self.qa('click', {'user': self.user2, 'chat_id': group['id'], 'message_id': sent['message_id'], 'row': 0, 'column': 1})
-        self.assertEqual(launch['launch_url'], 'https://qa.invalid/app')
-        self.assertEqual(before, len(self.webhook.received))
-        edited = self.bot('editMessageText', {'chat_id': group['id'], 'message_id': sent['message_id'], 'text': 'changed', 'reply_markup': {'keyboard': [[{'text': 'OK'}]]}})
+        edited = self.bot('editMessageText', {'chat_id': group['id'], 'message_id': sent['message_id'], 'text': 'changed', 'reply_markup': {'inline_keyboard': [[{'text': 'OK', 'callback_data': 'ok'}]]}})
         self.assertEqual(edited['text'], 'changed')
-        reply = self.qa('click', {'user': self.user2, 'chat_id': group['id'], 'message_id': sent['message_id'], 'row': 0, 'column': 0})['update']['message']
-        self.assertEqual(reply['text'], 'OK')
-        self.assertEqual(reply['chat']['id'], group['id'])
+        reply = self.qa('click', {'user': self.user2, 'chat_id': group['id'], 'message_id': sent['message_id'], 'row': 0, 'column': 0})['update']['callback_query']
+        self.assertEqual(reply['data'], 'ok')
+        self.assertEqual(reply['message']['chat']['id'], group['id'])
         old = [event for event in self.state()['journal'] if event['kind'] == 'message_before_edit']
         self.assertEqual(old[-1]['data']['text'], 'choose')
         self.assertTrue(all(secret == 'webhook-secret' for update, secret in self.webhook.received))

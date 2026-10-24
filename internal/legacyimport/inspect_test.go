@@ -58,11 +58,17 @@ func (s *snapshot) inspect(t *testing.T) (legacyimport.Report, error) {
 func TestSnapshotInspectionIsRepeatableReadOnlyAndNotAnImport(t *testing.T) {
 	t.Parallel()
 	s := newSnapshot(t, map[string]string{
-		"users": `{"_id":{"$oid":"1234567890abcdef12345678"},"bot_id":123,"user_id":{"$numberLong":"4503599627370495"},"legal_name":"PRIVATE_NAME","pass_old":{"paid":true,"bank":"PRIVATE_BANK"}}` + "\n",
-		"messages": `{"_id":"message-1","user_id":{"$numberLong":"4503599627370495"},"role":"user","content":"PRIVATE_MESSAGE","date":{"$date":{"$numberLong":"0"}}}` + "\n" +
-			`{"_id":"message-2","user_id":4503599627370495,"role":"assistant","content":"PRIVATE_REPLY","date":{"$date":"2020-01-01T15:01:02+03:00"}}` + "\n",
+		"users": "{\"_id\":{\"$oid\":\"1234567890abcdef12345678\"},\"bot_id\":123,\"user_id\":{\"$nu" +
+			"mberLong\":\"4503599627370495\"},\"legal_name\":\"PRIVATE_NAME\",\"pass_old\":{\"p" +
+			"aid\":true,\"bank\":\"PRIVATE_BANK\"}}" + "\n",
+		"messages": "{\"_id\":\"message-1\",\"user_id\":{\"$numberLong\":\"4503599627370495\"},\"role\"" +
+			":\"user\",\"content\":\"PRIVATE_MESSAGE\",\"date\":{\"$date\":{\"$numberLong\":\"0" +
+			"\"}}}" + "\n" +
+			"{\"_id\":\"message-2\",\"user_id\":4503599627370495,\"role\":\"assistant\",\"conte" +
+			"nt\":\"PRIVATE_REPLY\",\"date\":{\"$date\":\"2020-01-01T15:01:02+03:00\"}}" + "\n",
 		"passes": `{"_id":"pass-1","bot_id":123,"user_id":4503599627370495,"paid":true,"sum":12345}` + "\n",
-		"files":  `{"_id":"file-1","bot_id":123,"user_id":4503599627370495,"tg_file_id":"PRIVATE_TG_FILE","status":"completed_simple"}` + "\n",
+		"files": "{\"_id\":\"file-1\",\"bot_id\":123,\"user_id\":4503599627370495,\"tg_file_id\":\"P" +
+			"RIVATE_TG_FILE\",\"status\":\"completed_simple\"}" + "\n",
 	})
 	first, err := s.inspect(t)
 	require.NoError(t, err)
@@ -93,7 +99,8 @@ func TestSnapshotRejectsUnsafeRecordsWithoutDisclosingTheirContents(t *testing.T
 		{"duplicate", "users", user + "\n" + user, "duplicate_source_id"},
 		{"conflict", "users", user + "\n" + `{"_id":"u","bot_id":123,"user_id":43}`, "conflicting_source_id"},
 		{"identity_conflict", "users", user + "\n" + `{"_id":"u2","bot_id":123,"user_id":42}`, "conflicting_owner_id"},
-		{"duplicate_json", "users", `{"_id":"u","bot_id":124,"bot_id":123,"user_id":42,"name":"PRIVATE_VALUE"}`, "invalid_record_json"},
+		{"duplicate_json", "users", "{\"_id\":\"u\",\"bot_id\":124,\"bot_id\":123,\"user_id\":42,\"name\":\"PRIVATE_VAL" +
+			"UE\"}", "invalid_record_json"},
 		{"fractional_owner", "users", `{"_id":"u","bot_id":123,"user_id":42.5}`, "invalid_owner_id"},
 		{"missing_scope", "passes", `{"_id":"p","user_id":42}`, "missing_bot_id"},
 		{"naive_date", "messages", `{"_id":"m","user_id":42,"date":{"$date":"2020-01-01T12:00:00"}}`, "unsupported_source_date"},

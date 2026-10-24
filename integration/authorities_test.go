@@ -174,7 +174,8 @@ func TestEventAuthorityRejectsStaleChangedAndForeignRequests(t *testing.T) {
 	require.Equal(t, http.StatusConflict, code)
 	foreign := uuid.New()
 	_, err := h.store.Pool().
-		Exec(context.Background(), "INSERT INTO shuttle_users(id,bot_id,tg_user_id,profile,zitadel_subject,zitadel_org) VALUES($1,124,9963,'{}','foreign-authority','org')", foreign)
+		Exec(context.Background(), "INSERT INTO shuttle_users(id,bot_id,tg_user_id,profile,zitadel_subject,z" +
+"itadel_org) VALUES($1,124,9963,'{}','foreign-authority','org')", foreign)
 	require.NoError(t, err)
 	args.UserID = foreign
 	code, _ = adminRequest(
@@ -265,7 +266,8 @@ func TestExpiredAuthorityApprovalHasNoEffectAndActorCannotBorrowProposal(t *test
 	require.Equal(t, http.StatusOK, code, string(data))
 	require.Contains(t, string(data), `"status":"rejected"`)
 	_, err := h.store.Pool().
-		Exec(context.Background(), "UPDATE shuttle_authority_preparations SET expires_at=clock_timestamp()-interval '1 second' WHERE operation_id='expiring-role'")
+		Exec(context.Background(), "UPDATE shuttle_authority_preparations SET expires_at=clock_timestamp()-i" +
+"nterval '1 second' WHERE operation_id='expiring-role'")
 	require.NoError(t, err)
 	code, data = adminRequest(t, h, operator, http.MethodPost, authorityPath, body)
 	require.Equal(t, http.StatusOK, code, string(data))

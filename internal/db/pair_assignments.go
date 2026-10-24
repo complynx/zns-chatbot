@@ -420,7 +420,9 @@ func describePairAssignment(c pairAssignmentCandidate, args PairAssignment) (str
 	rules := c.Event.Document.Registration
 	if rules.Pricing != nil {
 		description := fmt.Sprintf(
-			"Assign both passes atomically for %s (event %s, pair %s). Leader account %s: %s. Follower account %s: %s. Each payment window: %d seconds, capped at %s. No payment is recorded.",
+			"Assign both passes atomically for %s (event %s, pair %s). Leader account" +
+" %s: %s. Follower account %s: %s. Each payment window: %d seconds, cappe" +
+"d at %s. No payment is recorded.",
 			c.Event.Document.Name,
 			args.EventID,
 			args.PairID,
@@ -434,7 +436,9 @@ func describePairAssignment(c pairAssignmentCandidate, args PairAssignment) (str
 		return description, nil
 	}
 	description := fmt.Sprintf(
-		"Assign both passes atomically for %s (event %s, pair %s). Leader account %s; follower account %s. Each price: %s %s. Each payment window: %d seconds, capped at %s. No payment is recorded.",
+		"Assign both passes atomically for %s (event %s, pair %s). Leader account" +
+" %s; follower account %s. Each price: %s %s. Each payment window: %d sec" +
+"onds, capped at %s. No payment is recorded.",
 		c.Event.Document.Name,
 		args.EventID,
 		args.PairID,

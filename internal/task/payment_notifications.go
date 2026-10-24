@@ -259,7 +259,9 @@ func paymentNotificationText(n db.PaymentNotification, language string) (string,
 			status = "Пасс оплачен полностью."
 		}
 		return fmt.Sprintf(
-			"Оплата подтверждена: %s\nПодтверждённая сумма: %s\nРешение: %s (%s)\nОсталось к оплате после этого решения: %s\nСостояние сразу после этого решения: %s\nПричина решения: %s%s",
+			"Оплата подтверждена: %s\nПодтверждённая сумма: %s\nРешение: %s (%s)\nОстало" +
+"сь к оплате после этого решения: %s\nСостояние сразу после этого решения:" +
+" %s\nПричина решения: %s%s",
 			document.EventName,
 			amount,
 			decisionTime,
@@ -271,7 +273,9 @@ func paymentNotificationText(n db.PaymentNotification, language string) (string,
 		), nil
 	}
 	return fmt.Sprintf(
-		"Payment confirmed: %s\nConfirmed amount: %s\nDecision: %s (%s)\nRemaining after this decision: %s\nStatus immediately after this decision: %s\nDecision reason: %s%s",
+		"Payment confirmed: %s\nConfirmed amount: %s\nDecision: %s (%s)\nRemaining a" +
+"fter this decision: %s\nStatus immediately after this decision: %s\nDecisi" +
+"on reason: %s%s",
 		document.EventName,
 		amount,
 		decisionTime,
@@ -294,7 +298,9 @@ func submittedNotificationText(document db.PaymentNotice, language, reference st
 			timely = "получено до дедлайна"
 		}
 		return fmt.Sprintf(
-			"Новое подтверждение для проверки: %s\nЗаявленная сумма: %s\nОтправлено: %s\nДедлайн: %s (%s)\n%s. Оплата ещё не подтверждена.\nПопросите Зинусю показать доказательство по ID и подтвердите только после проверки.%s",
+			"Новое подтверждение для проверки: %s\nЗаявленная сумма: %s\nОтправлено: %s" +
+"\nДедлайн: %s (%s)\n%s. Оплата ещё не подтверждена.\nПопросите Зинусю показ" +
+"ать доказательство по ID и подтвердите только после проверки.%s",
 			document.EventName,
 			amount,
 			sent,
@@ -309,7 +315,9 @@ func submittedNotificationText(document db.PaymentNotice, language, reference st
 		timely = "received before deadline"
 	}
 	return fmt.Sprintf(
-		"Payment evidence to review: %s\nReported amount: %s\nSent: %s\nDeadline: %s (%s)\n%s. Payment is not confirmed.\nAsk Zinusya to show the evidence by ID and confirm only after review.%s",
+		"Payment evidence to review: %s\nReported amount: %s\nSent: %s\nDeadline: %s" +
+" (%s)\n%s. Payment is not confirmed.\nAsk Zinusya to show the evidence by " +
+"ID and confirm only after review.%s",
 		document.EventName,
 		amount,
 		sent,

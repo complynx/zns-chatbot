@@ -169,7 +169,8 @@ func TestPaymentEvidenceNeedsHumanConfirmationAndSupportsTopUp(t *testing.T) {
 	require.ErrorIs(t, err, payments.ErrInvalid)
 	// Event ending does not prevent confirmation of timely evidence.
 	_, err = h.store.Pool().
-		Exec(ctx, "UPDATE shuttle_events SET starts_at=clock_timestamp()-interval '3 days',ends_at=clock_timestamp()-interval '1 day' WHERE id=$1", event.ID)
+		Exec(ctx, "UPDATE shuttle_events SET starts_at=clock_timestamp()-interval '3 days'," +
+"ends_at=clock_timestamp()-interval '1 day' WHERE id=$1", event.ID)
 	require.NoError(t, err)
 	prep, err := h.store.PreparePaymentReview(ctx, ambScope, "confirm-deposit", review)
 	require.NoError(t, err)

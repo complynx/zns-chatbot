@@ -35,7 +35,9 @@ func TestHistoricalAvatarReferenceKeepsTelegramIDsPrivate(t *testing.T) {
 	for _, mime := range []string{"image/jpeg", "image/png"} {
 		t.Run(mime, func(t *testing.T) {
 			t.Parallel()
-			fields := `"tg_file_id":"PRIVATE_FILE_ID","tg_file_unique_id":"PRIVATE_UNIQUE_ID","mime_type":"` + mime + `","status":"completed_simple","cached_file_key":"PRIVATE_PATH","original_file_name":"PRIVATE_NAME","bank":"PRIVATE_BANK"`
+			fields := "\"tg_file_id\":\"PRIVATE_FILE_ID\",\"tg_file_unique_id\":\"PRIVATE_UNIQUE_ID\",\"" +
+				"mime_type\":\"" + mime + "\",\"status\":\"completed_simple\",\"cached_file_key\":\"PRIVATE_PATH\",\"original" +
+				"_file_name\":\"PRIVATE_NAME\",\"bank\":\"PRIVATE_BANK\""
 			raw, hash, target := avatarInputArchive(t, fields)
 			result, validation, err := legacyimport.ReadAvatarInput(t.Context(), bytes.NewReader(raw), hash, target)
 			require.NoError(t, err)

@@ -51,7 +51,8 @@ func TestResponseTimingWaitsForAllFinalChunksAndSurvivesStoreReopen(t *testing.T
 	s := testStore(t)
 	task := responseTask(t, s)
 	_, err := s.Pool().
-		Exec(t.Context(), "UPDATE shuttle_tasks SET response_started_at=clock_timestamp()-interval '2 hours' WHERE id=$1", task.ID)
+		Exec(t.Context(), "UPDATE shuttle_tasks SET response_started_at=clock_timestamp()-interval "+
+			"'2 hours' WHERE id=$1", task.ID)
 	require.NoError(t, err)
 	task = saveResponse(t, s, task, "awaiting_user", "prompt")
 	rows, err := s.ListOutbox(t.Context(), task.ID)

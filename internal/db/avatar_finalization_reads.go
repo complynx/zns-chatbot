@@ -62,7 +62,8 @@ func avatarFinalizationReceipt(
 ) (*AvatarDraftReceipt, error) {
 	var stored, raw []byte
 	var draft pgtype.UUID
-	err := tx.QueryRow(ctx, `SELECT request_hash,receipt,draft_id FROM shuttle_avatars WHERE user_id=$1 AND operation_id=$2`, owner, operation).
+	err := tx.QueryRow(ctx, "SELECT request_hash,receipt,draft_id FROM shuttle_avatars WHERE user_id=" +
+"$1 AND operation_id=$2", owner, operation).
 		Scan(&stored, &raw, &draft)
 	if err != nil {
 		return nil, err
@@ -145,7 +146,8 @@ func (s *Store) GetFinalizedAvatar(
 		return AvatarDraftReceipt{}, nil, err
 	}
 	var raw, jpeg []byte
-	err = tx.QueryRow(ctx, `SELECT receipt,jpeg FROM shuttle_avatars WHERE id=$1 AND user_id=$2 AND draft_id IS NOT NULL`, id, scope.UserID).
+	err = tx.QueryRow(ctx, "SELECT receipt,jpeg FROM shuttle_avatars WHERE id=$1 AND user_id=$2 AND " +
+"draft_id IS NOT NULL", id, scope.UserID).
 		Scan(&raw, &jpeg)
 	if err != nil {
 		return AvatarDraftReceipt{}, nil, err

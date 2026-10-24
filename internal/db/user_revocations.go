@@ -196,13 +196,17 @@ func (s *Store) PrepareUserRevocation(
 		return UserRevocationPreparation{}, err
 	}
 	description := fmt.Sprintf(
-		"Revoke local access for account %s, IAM subject %q, currently revoked=%t. This records an audit even if already revoked. Remote IAM roles are unchanged.",
+		"Revoke local access for account %s, IAM subject %q, currently revoked=%t"+
+			". This records an audit even if already revoked. Remote IAM roles are un"+
+			"changed.",
 		target.ID,
 		target.ZitadelSubject,
 		target.Revoked,
 	)
 	if target.ID == scope.UserID {
-		description += " This is your own account: further local API calls, including receipt recovery, will be denied. Another active global administrator can read the original receipt."
+		description += " This is your own account: further local API calls, including receipt re" +
+			"covery, will be denied. Another active global administrator can read the" +
+			" original receipt."
 	}
 	prep := UserRevocationPreparation{
 		ID:          uuid.New(),

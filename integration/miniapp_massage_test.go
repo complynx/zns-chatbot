@@ -75,7 +75,8 @@ func TestMiniAppMassageBothHandoffsAndReplayUseSingleConnection(t *testing.T) {
 	require.NoError(
 		t,
 		store.Pool().
-			QueryRow(ctx, "SELECT source FROM shuttle_massage_operations WHERE user_id=$1 AND operation_id=$2", owner.UserID, nativeCancelOp).
+			QueryRow(ctx, "SELECT source FROM shuttle_massage_operations WHERE user_id=$1 AND opera" +
+"tion_id=$2", owner.UserID, nativeCancelOp).
 			Scan(&source),
 	)
 	require.Equal(t, "miniapp", source, "Cancellation provenance is independent of original booking source")
@@ -147,7 +148,8 @@ func assertMassageSessionDenied(t *testing.T, kind string) {
 		require.NoError(t, f.H.store.LogoutMiniAppSession(ctx, owner.BotID, session.Bearer, session.Generation))
 	case "expiry":
 		_, err = f.H.store.Pool().
-			Exec(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 second' WHERE bearer_hash=$1", session.Bearer[:])
+			Exec(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interva" +
+"l '1 second' WHERE bearer_hash=$1", session.Bearer[:])
 		require.NoError(t, err)
 	case "generation":
 		session.Generation = sha256.Sum256([]byte("different-miniapp-generation"))
@@ -232,7 +234,9 @@ func assertMassageSessionAfterWait(t *testing.T, kind string) {
 	require.Eventually(t, func() bool {
 		var waiting bool
 		e := f.H.store.Pool().
-			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid)))", blocking.Conn().PgConn().PID()).
+			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
+"ase() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid" +
+")))", blocking.Conn().PgConn().PID()).
 			Scan(&waiting)
 		return e == nil && waiting
 	}, 3*time.Second, 5*time.Millisecond)
@@ -265,8 +269,11 @@ func TestMiniAppMassageReceiptFailureRollsBackBookingAndProposalConsumption(t *t
 	prepared, err := f.H.store.PrepareMiniAppMassageBooking(ctx, deployment, session, operation, args)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(ctx, `CREATE FUNCTION fail_native_massage_receipt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic massage receipt failure'; END $$;
- CREATE TRIGGER fail_native_massage_receipt BEFORE INSERT ON shuttle_massage_operations FOR EACH ROW EXECUTE FUNCTION fail_native_massage_receipt()`)
+		Exec(ctx, "CREATE FUNCTION fail_native_massage_receipt() RETURNS trigger LANGUAGE p" +
+"lpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic massage receipt failure'; " +
+"END $$;\n CREATE TRIGGER fail_native_massage_receipt BEFORE INSERT ON shu" +
+"ttle_massage_operations FOR EACH ROW EXECUTE FUNCTION fail_native_massag" +
+"e_receipt()")
 	require.NoError(t, err)
 	_, err = f.H.store.BookMiniAppMassage(ctx, deployment, session, operation, prepared.ID, args)
 	require.ErrorContains(t, err, "synthetic massage receipt failure")
@@ -293,7 +300,8 @@ func TestMiniAppMassageReceiptFailureRollsBackBookingAndProposalConsumption(t *t
 	)
 	require.False(t, consumed)
 	_, err = f.H.store.Pool().
-		Exec(ctx, "DROP TRIGGER fail_native_massage_receipt ON shuttle_massage_operations; DROP FUNCTION fail_native_massage_receipt()")
+		Exec(ctx, "DROP TRIGGER fail_native_massage_receipt ON shuttle_massage_operations; " +
+"DROP FUNCTION fail_native_massage_receipt()")
 	require.NoError(t, err)
 	_, err = f.H.store.BookMiniAppMassage(ctx, deployment, session, operation, prepared.ID, args)
 	require.NoError(t, err)

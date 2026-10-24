@@ -109,7 +109,8 @@ func TestPaymentReviewWorkspaceConcurrentAliasesAndRestart(t *testing.T) {
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(ctx, `SELECT count(*) FROM shuttle_payment_notifications WHERE evidence_id=$1 AND kind='confirmed'`, review.EvidenceID).
+			QueryRow(ctx, "SELECT count(*) FROM shuttle_payment_notifications WHERE evidence_id=$1 " +
+"AND kind='confirmed'", review.EvidenceID).
 			Scan(&notices),
 	)
 	require.Equal(t, 1, notices)
@@ -119,10 +120,12 @@ func TestPaymentReviewWorkspaceConcurrentAliasesAndRestart(t *testing.T) {
 	require.True(t, status.Completed)
 	require.Equal(t, results[0], *status.Review)
 	_, err = f.H.store.Pool().
-		Exec(ctx, `UPDATE shuttle_payment_preparations SET expires_at=clock_timestamp()-interval '1 hour' WHERE proposal_id=$1`, w.Preparation.ID)
+		Exec(ctx, "UPDATE shuttle_payment_preparations SET expires_at=clock_timestamp()-int" +
+"erval '1 hour' WHERE proposal_id=$1", w.Preparation.ID)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(ctx, `UPDATE shuttle_payment_review_calls SET expires_at=clock_timestamp()-interval '1 hour' WHERE actor_id=$1 AND kind='commit'`, scope.UserID)
+		Exec(ctx, "UPDATE shuttle_payment_review_calls SET expires_at=clock_timestamp()-int" +
+"erval '1 hour' WHERE actor_id=$1 AND kind='commit'", scope.UserID)
 	require.NoError(t, err)
 	replay, err := reopened.CommitPaymentReviewWorkspace(ctx, scope, "loom-call", args, second.ID)
 	require.NoError(t, err)
@@ -254,7 +257,8 @@ func TestPaymentReviewWorkspaceExactParametersAndExpiry(t *testing.T) {
 	_, err = f.H.store.CommitPaymentReviewWorkspace(ctx, scope, "approve", args, uuid.New())
 	require.ErrorIs(t, err, db.ErrConflict)
 	_, err = f.H.store.Pool().
-		Exec(ctx, `UPDATE shuttle_payment_review_calls SET expires_at=clock_timestamp()-interval '1 hour' WHERE actor_id=$1 AND operation_id='approve'`, scope.UserID)
+		Exec(ctx, "UPDATE shuttle_payment_review_calls SET expires_at=clock_timestamp()-int" +
+"erval '1 hour' WHERE actor_id=$1 AND operation_id='approve'", scope.UserID)
 	require.NoError(t, err)
 	_, err = f.H.store.CommitPaymentReviewWorkspace(ctx, scope, "approve", args, prep.ID)
 	require.ErrorIs(t, err, db.ErrConflict)
@@ -323,8 +327,10 @@ func TestPaymentReviewWorkspaceReceiptFailureRollsBackMoneyAndNotice(t *testing.
 	prep, err := f.H.store.PreparePaymentReviewCommit(ctx, scope, "approve", args)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(ctx, `CREATE FUNCTION fail_review_receipt() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'fixture receipt write failure'; END$$;
- CREATE TRIGGER fail_review_receipt BEFORE UPDATE OF result ON shuttle_payment_review_calls FOR EACH ROW EXECUTE FUNCTION fail_review_receipt()`)
+		Exec(ctx, "CREATE FUNCTION fail_review_receipt() RETURNS trigger LANGUAGE plpgsql A" +
+"S $$BEGIN RAISE EXCEPTION 'fixture receipt write failure'; END$$;\n CREAT" +
+"E TRIGGER fail_review_receipt BEFORE UPDATE OF result ON shuttle_payment" +
+"_review_calls FOR EACH ROW EXECUTE FUNCTION fail_review_receipt()")
 	require.NoError(t, err)
 	_, err = f.H.store.CommitPaymentReviewWorkspace(ctx, scope, "approve", args, prep.ID)
 	require.Error(t, err)
@@ -336,7 +342,9 @@ func TestPaymentReviewWorkspaceReceiptFailureRollsBackMoneyAndNotice(t *testing.
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(ctx, `SELECT (SELECT count(*) FROM shuttle_payment_reviews WHERE evidence_id=$1)+(SELECT count(*) FROM shuttle_payment_notifications WHERE evidence_id=$1 AND kind='confirmed')`, review.EvidenceID).
+			QueryRow(ctx, "SELECT (SELECT count(*) FROM shuttle_payment_reviews WHERE evidence_id=$" +
+"1)+(SELECT count(*) FROM shuttle_payment_notifications WHERE evidence_id" +
+"=$1 AND kind='confirmed')", review.EvidenceID).
 			Scan(&effects),
 	)
 	require.Zero(t, effects)
@@ -404,7 +412,8 @@ func TestPaymentReviewWorkspaceDirectDomainCommitPreservesSharedState(t *testing
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(ctx, `SELECT result IS NOT NULL FROM shuttle_payment_review_calls WHERE actor_id=$1 AND operation_id='outer'`, scope.UserID).
+			QueryRow(ctx, "SELECT result IS NOT NULL FROM shuttle_payment_review_calls WHERE actor_" +
+"id=$1 AND operation_id='outer'", scope.UserID).
 			Scan(&stored),
 	)
 	require.False(t, stored, "status must recover the canonical effect without writing an outer receipt")
@@ -418,7 +427,8 @@ func TestPaymentReviewWorkspaceDirectDomainCommitPreservesSharedState(t *testing
 	require.ErrorIs(t, err, db.ErrConflict)
 	// The delayed alias recovers the canonical receipt even after its proposal expiry.
 	_, err = f.H.store.Pool().
-		Exec(ctx, `UPDATE shuttle_payment_review_calls SET expires_at=clock_timestamp()-interval '1 hour' WHERE actor_id=$1 AND operation_id='outer'`, scope.UserID)
+		Exec(ctx, "UPDATE shuttle_payment_review_calls SET expires_at=clock_timestamp()-int" +
+"erval '1 hour' WHERE actor_id=$1 AND operation_id='outer'", scope.UserID)
 	require.NoError(t, err)
 	result, err := f.H.store.CommitPaymentReviewWorkspace(ctx, scope, "outer", args, prep.ID)
 	require.NoError(t, err)

@@ -80,7 +80,8 @@ func TestMiniAppPendingRetryPreservesIdentityAndCreatesNoConversation(t *testing
 		}
 	}
 	_, err = store.Pool().
-		Exec(ctx, `UPDATE shuttle_users SET profile='{"first_name":"New Telegram snapshot"}'::jsonb WHERE id=$1`, first.User.ID)
+		Exec(ctx, "UPDATE shuttle_users SET profile='{\"first_name\":\"New Telegram snapshot\"}" +
+"'::jsonb WHERE id=$1", first.User.ID)
 	require.NoError(t, err)
 	claim.SessionTTL = time.Hour
 	retry, err := store.ClaimMiniAppSession(ctx, claim)
@@ -134,7 +135,8 @@ func TestMiniAppActivationAndReadsRecheckCurrentAuthority(t *testing.T) {
 			activation := miniAppActivation(claim, attempt)
 			if name == "pending expired" {
 				_, err = store.Pool().
-					Exec(ctx, "UPDATE shuttle_miniapp_sessions SET pending_until=clock_timestamp()-interval '1 second' WHERE id=$1", attempt.ID)
+					Exec(ctx, "UPDATE shuttle_miniapp_sessions SET pending_until=clock_timestamp()-inte" +
+"rval '1 second' WHERE id=$1", attempt.ID)
 				require.NoError(t, err)
 				_, err = store.ActivateMiniAppSession(ctx, activation)
 				require.ErrorIs(t, err, db.ErrMiniAppDenied)
@@ -156,7 +158,8 @@ func TestMiniAppActivationAndReadsRecheckCurrentAuthority(t *testing.T) {
 				activation.Generation = claim.Generation
 			case "active expired":
 				_, err = store.Pool().
-					Exec(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1", attempt.ID)
+					Exec(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interva" +
+"l '1 second' WHERE id=$1", attempt.ID)
 			}
 			require.NoError(t, err)
 			_, err = store.MiniAppSession(ctx, claim.BotID, activation.BearerHash, claim.Generation)
@@ -177,7 +180,9 @@ func TestMiniAppPruningRetainsConsumedProofForMaximumFreshness(t *testing.T) {
 	first, err := store.ClaimMiniAppSession(ctx, claim)
 	require.NoError(t, err)
 	_, err = store.Pool().
-		Exec(ctx, "UPDATE shuttle_miniapp_sessions SET pending_until=clock_timestamp()-interval '1 second',expires_at=clock_timestamp()-interval '1 second' WHERE id=$1", first.ID)
+		Exec(ctx, "UPDATE shuttle_miniapp_sessions SET pending_until=clock_timestamp()-inte" +
+"rval '1 second',expires_at=clock_timestamp()-interval '1 second' WHERE i" +
+"d=$1", first.ID)
 	require.NoError(t, err)
 	secondClaim := claim
 	secondClaim.ProofHash = sha256.Sum256([]byte("second proof"))

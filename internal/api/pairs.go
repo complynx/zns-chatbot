@@ -52,7 +52,11 @@ func pairInvitationMethod() map[string]any {
 	instant := map[string]any{manifestType: schemaString, schemaFormat: schemaDateTime}
 	return map[string]any{
 		"id":                "invitation",
-		manifestDescription: "Read pair consent metadata by event_id and invitation_id. Only the inviter or intended target can read it; administrator rights do not override consent privacy. No partner pass, payment or account profile is included. Pending state alone does not mean the invitation is still within expires_at. Display instants in the event timezone.",
+		manifestDescription: "Read pair consent metadata by event_id and invitation_id. Only the invit" +
+"er or intended target can read it; administrator rights do not override " +
+"consent privacy. No partner pass, payment or account profile is included" +
+". Pending state alone does not mean the invitation is still within expir" +
+"es_at. Display instants in the event timezone.",
 		manifestPermissions: []string{},
 		manifestPath:        "/internal/agent/registrations/invitation",
 		manifestEffect:      effectRead,

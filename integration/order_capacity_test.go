@@ -142,7 +142,9 @@ func TestOrderCapacityEmptyAndUnknownRemainDifferentInStoredOrders(t *testing.T)
 			f, scope, _, args := submissionFixture(t)
 			if known {
 				_, err := f.H.store.Pool().
-					Exec(t.Context(), `UPDATE shuttle_orders_catalogs SET document=jsonb_set(document,'{complete_capacity}','{"version":1,"resources":[],"bindings":[]}') WHERE event_id=$1`, args.EventID)
+					Exec(t.Context(), "UPDATE shuttle_orders_catalogs SET document=jsonb_set(document,'{complet" +
+"e_capacity}','{\"version\":1,\"resources\":[],\"bindings\":[]}') WHERE event_i" +
+"d=$1", args.EventID)
 				require.NoError(t, err)
 			}
 			op := uuid.New()
@@ -170,8 +172,11 @@ func TestOrderCapacityCatalogReceiptFailureRollsBackConfiguration(t *testing.T) 
 	op := uuid.New()
 	prepared := prepareCatalog(t, f, op, change)
 	_, err := f.H.store.Pool().
-		Exec(ctx, `CREATE FUNCTION fail_capacity_catalog_receipt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic catalog receipt failure'; END $$;
- CREATE TRIGGER fail_capacity_catalog_receipt BEFORE INSERT ON shuttle_orders_catalog_operations FOR EACH ROW EXECUTE FUNCTION fail_capacity_catalog_receipt()`)
+		Exec(ctx, "CREATE FUNCTION fail_capacity_catalog_receipt() RETURNS trigger LANGUAGE" +
+" plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic catalog receipt failure'" +
+"; END $$;\n CREATE TRIGGER fail_capacity_catalog_receipt BEFORE INSERT ON" +
+" shuttle_orders_catalog_operations FOR EACH ROW EXECUTE FUNCTION fail_ca" +
+"pacity_catalog_receipt()")
 	require.NoError(t, err)
 	code, _ := adminRequest(t, f.H, f.Admin, http.MethodPost, ordersWritePath, map[string]any{
 		"protocol_version": 1,
@@ -188,7 +193,8 @@ func TestOrderCapacityCatalogReceiptFailureRollsBackConfiguration(t *testing.T) 
 	require.Equal(t, int64(2), view.Version)
 	require.Zero(t, view.CompleteCapacity.Resources[0].Ceiling)
 	_, err = f.H.store.Pool().
-		Exec(ctx, "DROP TRIGGER fail_capacity_catalog_receipt ON shuttle_orders_catalog_operations; DROP FUNCTION fail_capacity_catalog_receipt()")
+		Exec(ctx, "DROP TRIGGER fail_capacity_catalog_receipt ON shuttle_orders_catalog_ope" +
+"rations; DROP FUNCTION fail_capacity_catalog_receipt()")
 	require.NoError(t, err)
 	status, result := commitCatalog(t, f, op, prepared)
 	require.Equal(t, "succeeded", status)

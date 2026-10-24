@@ -115,13 +115,11 @@ func orderReviewPrepareDescription(p db.OrderReviewCommitPreparation) string {
 		return p.Description
 	}
 	return fmt.Sprintf(
-		`Review exact saved order payment decision.
-Event: %s
-Evidence: %s
-Workspace: %s
-Revision: %d
-Decision: %s
-The full immutable review, including meal composition, prices, proof timing and reason, is retained by the bot and must be displayed before human approval. This short tool description is not the complete consent presentation.`,
+		"Review exact saved order payment decision.\nEvent: %s\nEvidence: %s\nWorksp" +
+"ace: %s\nRevision: %d\nDecision: %s\nThe full immutable review, including m" +
+"eal composition, prices, proof timing and reason, is retained by the bot" +
+" and must be displayed before human approval. This short tool descriptio" +
+"n is not the complete consent presentation.",
 		p.Arguments.Review.EventID,
 		p.Arguments.Review.EvidenceID,
 		p.Arguments.WorkspaceID,

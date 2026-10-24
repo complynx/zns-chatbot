@@ -107,7 +107,8 @@ func TestOrderWaitlistAndForeignIdentityCannotRecoverOrMutate(t *testing.T) {
 	// Retain the old pass to prove waitlist state alone denies access even if an
 	// incomplete legacy repair left an associated pass row behind.
 	_, err = f.H.store.Pool().
-		Exec(ctx, "UPDATE shuttle_registrations SET state='waitlisted' WHERE event_id=$1 AND user_id=$2", args.EventID, scope.UserID)
+		Exec(ctx, "UPDATE shuttle_registrations SET state='waitlisted' WHERE event_id=$1 AN" +
+"D user_id=$2", args.EventID, scope.UserID)
 	require.NoError(t, err)
 	_, err = f.H.store.SubmitOwnOrder(ctx, scope, operation, args, prepared.ID, db.OrderSourceAgent)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
@@ -170,7 +171,8 @@ func TestOrderConcurrentCancellationAndNewSubmissionTargetExactOrders(t *testing
 	require.Equal(t, cancelled, oldCurrent, "The old order must remain cancelled after both concurrent operations")
 	// Construct a post-cutoff fixture without changing the immutable receipts.
 	_, err = f.H.store.Pool().
-		Exec(ctx, "UPDATE shuttle_orders SET submitted_at=clock_timestamp()-interval '2 minutes',sales_closes_at=clock_timestamp()-interval '1 minute' WHERE id=$1", first.Order.ID)
+		Exec(ctx, "UPDATE shuttle_orders SET submitted_at=clock_timestamp()-interval '2 min" +
+"utes',sales_closes_at=clock_timestamp()-interval '1 minute' WHERE id=$1", first.Order.ID)
 	require.NoError(t, err)
 	replay, err := f.H.store.CancelOwnOrder(ctx, scope, cancelOp, cancellation, db.OrderSourceAgent)
 	require.NoError(t, err)

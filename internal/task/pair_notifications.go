@@ -159,7 +159,9 @@ func pairNotificationText(n db.PairInvitationDelivery, language string) (string,
 		expires := v.Invitation.ExpiresAt.In(zone).Format(time.RFC3339)
 		if language == "ru" {
 			return fmt.Sprintf(
-				"%.200s (%s) приглашает вас в пару, роль: %s.\nСрок: %s (%s).\nЧтобы принять, явно подтвердите приглашение боту. Принятие добавляет в очередь пары; пасс ещё не назначен.%s",
+				"%.200s (%s) приглашает вас в пару, роль: %s.\nСрок: %s (%s).\nЧтобы принят" +
+"ь, явно подтвердите приглашение боту. Принятие добавляет в очередь пары;" +
+" пасс ещё не назначен.%s",
 				v.InviterName,
 				v.InviterUserID,
 				v.RequiredRole,
@@ -169,7 +171,9 @@ func pairNotificationText(n db.PairInvitationDelivery, language string) (string,
 			), nil
 		}
 		return fmt.Sprintf(
-			"%.200s (%s) invites you to pair as %s.\nExpires: %s (%s).\nTo accept, explicitly confirm this invitation to the bot. Acceptance joins the pair waitlist; no pass is assigned yet.%s",
+			"%.200s (%s) invites you to pair as %s.\nExpires: %s (%s).\nTo accept, expl" +
+"icitly confirm this invitation to the bot. Acceptance joins the pair wai" +
+"tlist; no pass is assigned yet.%s",
 			v.InviterName,
 			v.InviterUserID,
 			v.RequiredRole,
@@ -179,7 +183,8 @@ func pairNotificationText(n db.PairInvitationDelivery, language string) (string,
 		), nil
 	}
 	texts := map[string]string{
-		pairNoticeAccepted: "Your invitation was accepted. The pair joined the waitlist; no passes were assigned by acceptance.",
+		pairNoticeAccepted: "Your invitation was accepted. The pair joined the waitlist; no passes we" +
+"re assigned by acceptance.",
 		"declined":         "Your invitation was declined. The invitation's allocation hold has been released.",
 		"revoked":          "The inviter revoked this invitation. It can no longer be accepted.",
 		"expired":          "Your invitation expired. The invitation's allocation hold has been released.",

@@ -426,7 +426,8 @@ func TestPaymentReviewRequiresFreshRoleExactProposalAndExpiry(t *testing.T) {
 	body["arguments"] = args
 	proposal := body["confirmation"].(map[string]any)["preconditions"].(map[string]any)["proposal_id"].(string)
 	_, err := f.H.store.Pool().
-		Exec(context.Background(), "UPDATE shuttle_payment_preparations SET expires_at=clock_timestamp()-interval '1 second' WHERE proposal_id=$1", proposal)
+		Exec(context.Background(), "UPDATE shuttle_payment_preparations SET expires_at=clock_timestamp()-int" +
+"erval '1 second' WHERE proposal_id=$1", proposal)
 	require.NoError(t, err)
 	code, data = adminRequest(t, f.H, f.Ambassador, http.MethodPost, paymentAPI+"review", body)
 	require.Equal(t, http.StatusOK, code, string(data))

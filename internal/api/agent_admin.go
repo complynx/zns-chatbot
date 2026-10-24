@@ -194,7 +194,9 @@ func administrativeMethods() []map[string]any {
 			historyApplyMethod(),
 			administrativeRead(
 				"settings",
-				"Read versioned settings; no secrets are returned. Worker concurrency applies after restart. Local question timeout is reserved; Loom controls current prompt expiry.",
+				"Read versioned settings; no secrets are returned. Worker concurrency app"+
+					"lies after restart. Local question timeout is reserved; Loom controls cu"+
+					"rrent prompt expiry.",
 				map[string]any{},
 				nil,
 				[]string{schemaVersion, "document"},

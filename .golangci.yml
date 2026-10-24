@@ -157,7 +157,7 @@ linters:
     #- gosmopolitan # reports certain i18n/l10n anti-patterns in your Go codebase
     #- grouper # analyzes expression groups
     #- importas # enforces consistent import aliases
-    #- lll # [replaced by golines] reports long lines
+    - lll # enforces the line limit, including string literals
     #- maintidx # measures the maintainability index of each function
     #- misspell # [useless] finds commonly misspelled English words in comments
     #- nlreturn # [too strict and mostly code is not more readable] checks for a new line before return and branch statements to increase code clarity
@@ -167,6 +167,10 @@ linters:
 
   # All settings can be found here https://github.com/golangci/golangci-lint/blob/HEAD/.golangci.reference.yml
   settings:
+    lll:
+      line-length: 120
+      tab-width: 1
+
     cyclop:
       # The maximal code complexity to report.
       # Default: 10

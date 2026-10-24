@@ -92,7 +92,8 @@ func TestMassageBindingContextBoundsCutoffAndActorDeploymentScope(t *testing.T) 
 	require.Empty(t, missing.Pending)
 	require.Empty(t, missing.Actions)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_massage_binding_operations SET expires_at=clock_timestamp()-interval '1 second' WHERE result IS NULL")
+		Exec(t.Context(), "UPDATE shuttle_massage_binding_operations SET expires_at=clock_timestamp" +
+"()-interval '1 second' WHERE result IS NULL")
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
 		Exec(t.Context(), "UPDATE shuttle_events SET modules=array_remove(modules,'massage') WHERE id=$1", args.EventID)

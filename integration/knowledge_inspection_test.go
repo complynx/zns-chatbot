@@ -104,7 +104,9 @@ func TestKnowledgeInspectorPreservesOriginalNativeAndAgentPreparations(t *testin
 			require.NoError(
 				t,
 				f.h.store.Pool().
-					QueryRow(t.Context(), `SELECT (SELECT count(*) FROM shuttle_knowledge_preparations WHERE operation_id=$1),(SELECT count(*) FROM shuttle_knowledge_operations WHERE operation_id=$1)`, op).
+					QueryRow(t.Context(), "SELECT (SELECT count(*) FROM shuttle_knowledge_preparations WHERE operat" +
+"ion_id=$1),(SELECT count(*) FROM shuttle_knowledge_operations WHERE oper" +
+"ation_id=$1)", op).
 					Scan(&preparations, &effects),
 			)
 			require.Equal(t, 1, preparations)
@@ -136,7 +138,9 @@ func TestKnowledgeInspectorDoesNotRenewExpiredOrRelabelLegacyPreparation(t *test
 	require.NoError(
 		t,
 		f.h.store.Pool().
-			QueryRow(t.Context(), `UPDATE shuttle_knowledge_preparations SET created_at=clock_timestamp()-interval '10 seconds',expires_at=clock_timestamp()-interval '1 second' WHERE operation_id=$1 RETURNING expires_at`, op).
+			QueryRow(t.Context(), "UPDATE shuttle_knowledge_preparations SET created_at=clock_timestamp()-i" +
+"nterval '10 seconds',expires_at=clock_timestamp()-interval '1 second' WH" +
+"ERE operation_id=$1 RETURNING expires_at", op).
 			Scan(&expired),
 	)
 	raw := inspectKnowledgeHTTP(t, f, f.ownerScope, op, "suggest", http.StatusOK)
@@ -183,7 +187,8 @@ func TestKnowledgeInspectorRechecksCurrentModeratorAuthority(t *testing.T) {
 	)
 	inspectKnowledgeHTTP(t, f, f.reviewerScope, op, "edit", http.StatusOK)
 	_, err := f.h.store.Pool().
-		Exec(t.Context(), `UPDATE shuttle_knowledge_moderators SET enabled=false,version=version+1 WHERE user_id=$1`, f.reviewerScope.UserID)
+		Exec(t.Context(), "UPDATE shuttle_knowledge_moderators SET enabled=false,version=version+1 " +
+"WHERE user_id=$1", f.reviewerScope.UserID)
 	require.NoError(t, err)
 	raw := inspectKnowledgeHTTP(t, f, f.reviewerScope, op, "edit", http.StatusForbidden)
 	require.NotContains(t, string(raw), knowledgeContent().Body)

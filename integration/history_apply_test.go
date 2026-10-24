@@ -153,7 +153,8 @@ func TestHistoryApplyIsAtomicIdempotentAndSeparateFromLiveBusiness(t *testing.T)
 	require.EqualValues(t, 4, receipt.Inserted)
 	require.Zero(t, receipt.Reused)
 	_, err = h.store.Pool().
-		Exec(ctx, "UPDATE shuttle_legacy_history_preparations SET expires_at=clock_timestamp()-interval '1 hour' WHERE id=$1", r.ProposalID)
+		Exec(ctx, "UPDATE shuttle_legacy_history_preparations SET expires_at=clock_timestam" +
+"p()-interval '1 hour' WHERE id=$1", r.ProposalID)
 	require.NoError(t, err)
 	replay, err := h.store.ApplyHistory(ctx, scope, r, noop)
 	require.NoError(t, err)
@@ -178,10 +179,10 @@ func TestHistoryApplyIsAtomicIdempotentAndSeparateFromLiveBusiness(t *testing.T)
 	require.EqualValues(t, 1, later.Inserted)
 	require.EqualValues(t, 4, later.Reused)
 	var records, memberships, users, tasks, registrations, payments int
-	require.NoError(t, h.store.Pool().QueryRow(ctx, `SELECT
-(SELECT count(*) FROM shuttle_legacy_history_records),(SELECT count(*) FROM shuttle_legacy_history_memberships),
-(SELECT count(*) FROM shuttle_users),(SELECT count(*) FROM shuttle_tasks),
-(SELECT count(*) FROM shuttle_registrations),(SELECT count(*) FROM shuttle_payment_reviews)`).Scan(&records, &memberships, &users, &tasks, &registrations, &payments))
+	require.NoError(t, h.store.Pool().QueryRow(ctx, "SELECT\n(SELECT count(*) FROM shuttle_legacy_history_records),(SELECT cou" +
+"nt(*) FROM shuttle_legacy_history_memberships),\n(SELECT count(*) FROM sh" +
+"uttle_users),(SELECT count(*) FROM shuttle_tasks),\n(SELECT count(*) FROM" +
+" shuttle_registrations),(SELECT count(*) FROM shuttle_payment_reviews)").Scan(&records, &memberships, &users, &tasks, &registrations, &payments))
 	require.Equal(t, 5, records)
 	require.Equal(t, 9, memberships)
 	require.Equal(t, 1, users)

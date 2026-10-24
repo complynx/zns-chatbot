@@ -429,7 +429,9 @@ func TestMiniAppPairAssignmentHTTPRevocationDuringEventWaitPreventsEffects(t *te
 			require.Eventually(t, func() bool {
 				var waiting bool
 				readErr := f.H.store.Pool().
-					QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid)))", blocking.Conn().PgConn().PID()).
+					QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
+"ase() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid" +
+")))", blocking.Conn().PgConn().PID()).
 					Scan(&waiting)
 				return readErr == nil && waiting
 			}, 3*time.Second, 10*time.Millisecond)

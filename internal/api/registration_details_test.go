@@ -26,7 +26,9 @@ func TestRegistrationDetailsValidationDoesNotEchoSensitiveInput(t *testing.T) {
 	})
 	require.NoError(t, err)
 	const marker = "SYNTHETIC-PRIVATE-CANARY"
-	const envelope = `{"protocol_version":1,"operation_id":"11111111-1111-4111-8111-111111111111","idempotency_key":"11111111-1111-4111-8111-111111111111","confirmation":{"mode":"none"},"arguments":{"expected_version":0,`
+	const envelope = "{\"protocol_version\":1,\"operation_id\":\"11111111-1111-4111-8111-1111111111" +
+"11\",\"idempotency_key\":\"11111111-1111-4111-8111-111111111111\",\"confirmati" +
+"on\":{\"mode\":\"none\"},\"arguments\":{\"expected_version\":0,"
 	for _, testcase := range []struct{ name, method, tail string }{
 		{"long passport", "set_passport_number", fmt.Sprintf(`"passport_number":%q}}`, strings.Repeat(marker, 8))},
 		{"long legal name", "set_legal_name", fmt.Sprintf(`"legal_name":%q}}`, strings.Repeat(marker, 16))},

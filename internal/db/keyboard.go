@@ -44,12 +44,11 @@ func (s *Store) DeliveredPromptContext(
 	messageID int64,
 ) (json.RawMessage, error) {
 	var raw json.RawMessage
-	err := s.pool.QueryRow(ctx, `SELECT o.payload->'_loom_context'
- FROM shuttle_tasks input JOIN shuttle_tasks source ON source.conversation_id=input.conversation_id AND source.user_id=input.user_id
- JOIN shuttle_outbox o ON o.task_id=source.id
- WHERE input.id=$1 AND o.state='delivered' AND o.receipt->>'message_id'=$2
- AND o.payload->'_loom_context' IS NOT NULL
- ORDER BY o.id LIMIT 1`, taskID, strconv.FormatInt(messageID, 10)).Scan(&raw)
+	err := s.pool.QueryRow(ctx, "SELECT o.payload->'_loom_context'\n FROM shuttle_tasks input JOIN shuttle" +
+"_tasks source ON source.conversation_id=input.conversation_id AND source" +
+".user_id=input.user_id\n JOIN shuttle_outbox o ON o.task_id=source.id\n WH" +
+"ERE input.id=$1 AND o.state='delivered' AND o.receipt->>'message_id'=$2\n" +
+" AND o.payload->'_loom_context' IS NOT NULL\n ORDER BY o.id LIMIT 1", taskID, strconv.FormatInt(messageID, 10)).Scan(&raw)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

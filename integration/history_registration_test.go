@@ -146,9 +146,13 @@ func TestHistoricalRegistrationRejectsDamagedSourceWithoutReturningClaim(t *test
 		name, sql string
 		status    int
 	}{
-		{"hash", "UPDATE shuttle_legacy_history_records SET canonical_hash=decode(repeat('00',32),'hex') WHERE id=$1", http.StatusConflict},
+		{"hash", "UPDATE shuttle_legacy_history_records SET canonical_hash=decode(repeat('" +
+"00',32),'hex') WHERE id=$1", http.StatusConflict},
 		{"membership", "UPDATE shuttle_legacy_history_memberships SET source_line=2 WHERE record_id=$1", http.StatusNotFound},
-		{"archive", "UPDATE shuttle_legacy_archive_chunks SET content=set_byte(content,octet_length(content)-8,get_byte(content,octet_length(content)-8)#1) WHERE archive_id=(SELECT first_archive_id FROM shuttle_legacy_history_records WHERE id=$1)", http.StatusBadRequest},
+		{"archive", "UPDATE shuttle_legacy_archive_chunks SET content=set_byte(content,octet_" +
+"length(content)-8,get_byte(content,octet_length(content)-8)#1) WHERE arc" +
+"hive_id=(SELECT first_archive_id FROM shuttle_legacy_history_records WHE" +
+"RE id=$1)", http.StatusBadRequest},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

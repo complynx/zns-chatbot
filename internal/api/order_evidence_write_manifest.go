@@ -21,7 +21,21 @@ func orderEvidenceSubmitMethod(id map[string]any) map[string]any {
 	return orderEvidenceMutation(
 		orderEvidenceMethod(
 			"submit",
-			"Bind your accepted file to your own explicit order/version as reported payment evidence after a user request. Required event_id/order_id/expected_order_version/file_id/amount_minor. Read the frozen order and receipt, verify the amount or clarify it, and clarify ambiguous targets. The server chooses orders or meals entitlement from the persisted order kind; callers cannot relabel an order. Arrival time comes from Telegram metadata. Meal proofs sent before the frozen common deadline remain timely if processed or reviewed later; service admission also retains its processing cutoff. Meal quantities are unlimited and hold no resources. Exact timely full-price service claims hold available resources; unsupported amount/deadline/resource cases remain needs_decision without holds, and exhausted requires refund attention. This is not confirmed payment, fulfillment or refund. One non-rejected attempt per order; active source files cannot fund another pass/order. Reconcile the same operation after uncertainty; status not_found is unknown.",
+			"Bind your accepted file to your own explicit order/version as reported p" +
+"ayment evidence after a user request. Required event_id/order_id/expecte" +
+"d_order_version/file_id/amount_minor. Read the frozen order and receipt," +
+" verify the amount or clarify it, and clarify ambiguous targets. The ser" +
+"ver chooses orders or meals entitlement from the persisted order kind; c" +
+"allers cannot relabel an order. Arrival time comes from Telegram metadat" +
+"a. Meal proofs sent before the frozen common deadline remain timely if p" +
+"rocessed or reviewed later; service admission also retains its processin" +
+"g cutoff. Meal quantities are unlimited and hold no resources. Exact tim" +
+"ely full-price service claims hold available resources; unsupported amou" +
+"nt/deadline/resource cases remain needs_decision without holds, and exha" +
+"usted requires refund attention. This is not confirmed payment, fulfillm" +
+"ent or refund. One non-rejected attempt per order; active source files c" +
+"annot fund another pass/order. Reconcile the same operation after uncert" +
+"ainty; status not_found is unknown.",
 			map[string]any{
 				schemaEventID:              id,
 				schemaOrderEvidenceOrderID: id,
@@ -76,14 +90,25 @@ func orderReviewMethods(id map[string]any) []map[string]any {
 	methods := []map[string]any{
 		orderEvidenceMethod(
 			"review_workspace",
-			"Read your current actor-owned order review for event_id/evidence_id before continuing from a form or agent. workspace:null means no saved intent, not a payment result. Fields include id, revision, state, current and the immutable preparation and a bounded description; the bot retains the full consent presentation and displays it before approval. A saved-intent receipt can be historical; reread current workspace/evidence after replay.",
+			"Read your current actor-owned order review for event_id/evidence_id befo" +
+"re continuing from a form or agent. workspace:null means no saved intent" +
+", not a payment result. Fields include id, revision, state, current and " +
+"the immutable preparation and a bounded description; the bot retains the" +
+" full consent presentation and displays it before approval. A saved-inte" +
+"nt receipt can be historical; reread current workspace/evidence after re" +
+"play.",
 			map[string]any{schemaEventID: id, schemaEvidenceID: id},
 			[]string{schemaEventID, schemaEvidenceID},
 			[]string{"workspace"},
 		),
 		orderEvidenceMethod(
 			"review_operation",
-			"Read your original shared review transport operation by operation_id. receipt:null is unknown. A prepared call is not paid. Another approved interface's canonical completion is recovered read-only even after expiry; otherwise unavailable_reason identifies cancelled/superseded/expired/decided intent. Completed save/cancel records intent only, while a commit with review result records the decision. Current authority is rechecked.",
+			"Read your original shared review transport operation by operation_id. re" +
+"ceipt:null is unknown. A prepared call is not paid. Another approved int" +
+"erface's canonical completion is recovered read-only even after expiry; " +
+"otherwise unavailable_reason identifies cancelled/superseded/expired/dec" +
+"ided intent. Completed save/cancel records intent only, while a commit w" +
+"ith review result records the decision. Current authority is rechecked.",
 			map[string]any{detailsOperationID: id},
 			[]string{detailsOperationID},
 			[]string{paymentSchemaReceipt},
@@ -91,7 +116,17 @@ func orderReviewMethods(id map[string]any) []map[string]any {
 	}
 	save := orderEvidenceMethod(
 		"save_review",
-		"Save only an explicit human-requested order review intention, without deciding money. Read current workspace/evidence and inspect the proof. Required full review and expected_revision (0 only if absent); optional language auto/en/ru selects the literal approval summary. Use the user's message language, with bot/Telegram fallback for language-neutral input. An edit or presentation change creates a new immutable revision and invalidates old consent. The summary freezes event/order/quote, local deadline, payer, decision/reason and capacity effects. Exact full admitted payments can be confirmed; unresolved cases can only be rejected here. Complete through review_commit or the same native workspace. Retrying returns the original snapshot, not current state.",
+		"Save only an explicit human-requested order review intention, without de" +
+"ciding money. Read current workspace/evidence and inspect the proof. Req" +
+"uired full review and expected_revision (0 only if absent); optional lan" +
+"guage auto/en/ru selects the literal approval summary. Use the user's me" +
+"ssage language, with bot/Telegram fallback for language-neutral input. A" +
+"n edit or presentation change creates a new immutable revision and inval" +
+"idates old consent. The summary freezes event/order/quote, local deadlin" +
+"e, payer, decision/reason and capacity effects. Exact full admitted paym" +
+"ents can be confirmed; unresolved cases can only be rejected here. Compl" +
+"ete through review_commit or the same native workspace. Retrying returns" +
+" the original snapshot, not current state.",
 		map[string]any{
 			paymentSchemaReview:         review,
 			orderReviewExpectedRevision: map[string]any{manifestType: schemaInteger, schemaMinimum: 0},
@@ -105,14 +140,28 @@ func orderReviewMethods(id map[string]any) []map[string]any {
 	)
 	cancel := orderEvidenceMethod(
 		"cancel_review",
-		"Stop only your current pending review on user cancellation, with workspace_id/revision. This invalidates consent; it does not reject evidence, release its holds, cancel an order or refund money. No text tags are required. Another revision or completed decision cannot be cancelled through the old one.",
+		"Stop only your current pending review on user cancellation, with workspa" +
+"ce_id/revision. This invalidates consent; it does not reject evidence, r" +
+"elease its holds, cancel an order or refund money. No text tags are requ" +
+"ired. Another revision or completed decision cannot be cancelled through" +
+" the old one.",
 		map[string]any{paymentSchemaWorkspaceID: id, paymentSchemaRevision: revision},
 		[]string{paymentSchemaWorkspaceID, paymentSchemaRevision},
 		[]string{"id", paymentSchemaRevision, schemaState},
 	)
 	commit := orderEvidenceMethod(
 		"review_commit",
-		"Execute the shared exact order review only after human exact-parameter approval. Required workspace_id/revision and unchanged full review. Preparation returns the immutable localized description, or a bounded reference summary for large presentations. The bot displays the full saved presentation before approval; retries never renew expiry. Role/current revision/evidence/proposal/expiry are checked again. Native and agent calls share canonical_operation_id and commit decision, capacity changes, notices/workspace/source receipt atomically. Completed canonical results recover after expiry without a second decision. To change parameters save a new revision and obtain new consent. Reconcile this same transport operation after uncertainty; status not_found means unknown.",
+		"Execute the shared exact order review only after human exact-parameter a" +
+"pproval. Required workspace_id/revision and unchanged full review. Prepa" +
+"ration returns the immutable localized description, or a bounded referen" +
+"ce summary for large presentations. The bot displays the full saved pres" +
+"entation before approval; retries never renew expiry. Role/current revis" +
+"ion/evidence/proposal/expiry are checked again. Native and agent calls s" +
+"hare canonical_operation_id and commit decision, capacity changes, notic" +
+"es/workspace/source receipt atomically. Completed canonical results reco" +
+"ver after expiry without a second decision. To change parameters save a " +
+"new revision and obtain new consent. Reconcile this same transport opera" +
+"tion after uncertainty; status not_found means unknown.",
 		map[string]any{paymentSchemaWorkspaceID: id, paymentSchemaRevision: revision, paymentSchemaReview: review},
 		[]string{paymentSchemaWorkspaceID, paymentSchemaRevision, paymentSchemaReview},
 		[]string{"canonical_operation_id", schemaEvidence},

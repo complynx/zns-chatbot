@@ -186,7 +186,8 @@ WHERE relation='shuttle_user_profiles'::regclass AND NOT granted)`).Scan(&waitin
 		return queryErr == nil && waiting
 	}, 3*time.Second, 5*time.Millisecond)
 	_, err = h.store.Pool().
-		Exec(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 second' WHERE user_id=$1", session.UserID)
+		Exec(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interva" +
+"l '1 second' WHERE user_id=$1", session.UserID)
 	require.NoError(t, err)
 	require.NoError(t, blocking.Commit(ctx))
 	select {
@@ -257,8 +258,10 @@ func TestMiniAppProfileJournalFailureRollsBackWrite(t *testing.T) {
 	scope := ownerProfileScope(t, h, session.UserID)
 	operation := uuid.New()
 	_, err := h.store.Pool().
-		Exec(t.Context(), `CREATE FUNCTION reject_manual_action() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected journal failure'; END $$;
-CREATE TRIGGER reject_manual_action BEFORE INSERT ON shuttle_miniapp_profile_actions FOR EACH ROW EXECUTE FUNCTION reject_manual_action()`)
+		Exec(t.Context(), "CREATE FUNCTION reject_manual_action() RETURNS trigger LANGUAGE plpgsql " +
+"AS $$ BEGIN RAISE EXCEPTION 'injected journal failure'; END $$;\nCREATE T" +
+"RIGGER reject_manual_action BEFORE INSERT ON shuttle_miniapp_profile_act" +
+"ions FOR EACH ROW EXECUTE FUNCTION reject_manual_action()")
 	require.NoError(t, err)
 	body := `{"operation_id":"` + operation.String() + `","expected_version":0,"first_name":"Atomic","last_name":"QA"}`
 	code, raw, _ = appCall(t, h, http.MethodPost, "/app/profile/name", body, session.Token, appTestOrigin)
@@ -310,7 +313,8 @@ func TestMiniAppProfileContextIsBoundedAndOwnerScoped(t *testing.T) {
 		h,
 		http.MethodPost,
 		"/app/profile/name",
-		`{"operation_id":"`+foreignOperation.String()+`","expected_version":0,"first_name":"Private other","last_name":"owner"}`,
+		`{"operation_id":"`+foreignOperation.String()+"\",\"expected_version\":0,\"first_name\":\"Private other\",\"last_name\":\"owner\"" +
+"}",
 		other.Token,
 		appTestOrigin,
 	)

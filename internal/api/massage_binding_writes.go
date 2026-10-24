@@ -145,7 +145,9 @@ func (s *Server) massageBindingDescription(
 			action = "Назначить"
 		}
 		return fmt.Sprintf(
-			"%s доступ специалиста: эвент %q, специалист %q, пользователь %q (Telegram %d). Изменяется только доступ к расписанию и собственным клиентам; записи и платежи не меняются.",
+			"%s доступ специалиста: эвент %q, специалист %q, пользователь %q (Telegra"+
+				"m %d). Изменяется только доступ к расписанию и собственным клиентам; зап"+
+				"иси и платежи не меняются.",
 			action,
 			event.Document.Name,
 			a.SpecialistID,
@@ -154,7 +156,9 @@ func (s *Server) massageBindingDescription(
 		), nil
 	}
 	return fmt.Sprintf(
-		"%s specialist access: event %q, specialist %q, account %q (Telegram %d). Changes only access to the timetable and own clients; bookings and payments stay unchanged.",
+		"%s specialist access: event %q, specialist %q, account %q (Telegram %d)."+
+			" Changes only access to the timetable and own clients; bookings and paym"+
+			"ents stay unchanged.",
 		action,
 		event.Document.Name,
 		a.SpecialistID,

@@ -269,8 +269,11 @@ func TestMassageSpecialistWorkerPreservesUnknownWithoutAutomaticResend(t *testin
 				expectedAttempts = 0
 			case "receipt_write":
 				_, err := f.H.store.Pool().
-					Exec(t.Context(), `CREATE FUNCTION reject_specialist_receipt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic specialist receipt failure'; END $$;
- CREATE TRIGGER reject_specialist_receipt BEFORE UPDATE ON shuttle_massage_specialist_notifications FOR EACH ROW WHEN (NEW.state='delivered') EXECUTE FUNCTION reject_specialist_receipt()`)
+					Exec(t.Context(), "CREATE FUNCTION reject_specialist_receipt() RETURNS trigger LANGUAGE plp" +
+"gsql AS $$ BEGIN RAISE EXCEPTION 'synthetic specialist receipt failure';" +
+" END $$;\n CREATE TRIGGER reject_specialist_receipt BEFORE UPDATE ON shut" +
+"tle_massage_specialist_notifications FOR EACH ROW WHEN (NEW.state='deliv" +
+"ered') EXECUTE FUNCTION reject_specialist_receipt()")
 				require.NoError(t, err)
 			}
 			f.H.start(t)

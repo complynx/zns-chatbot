@@ -244,7 +244,8 @@ func TestMiniAppOrderReviewHTTPHandoffsRecoverSameCanonicalDecision(t *testing.T
 			require.NoError(t, err)
 			require.Equal(t, first, *recovered.Review)
 			_, err = f.H.store.Pool().
-				Exec(t.Context(), "UPDATE shuttle_order_evidence_preparations SET expires_at=clock_timestamp()-interval '1 hour' WHERE id=$1", w.Preparation.ID)
+				Exec(t.Context(), "UPDATE shuttle_order_evidence_preparations SET expires_at=clock_timestam" +
+"p()-interval '1 hour' WHERE id=$1", w.Preparation.ID)
 			require.NoError(t, err)
 			code, raw = orderReviewFormCall(t, f, session, "confirmations", orderReviewConfirmBody(nativeOp, w))
 			require.Equal(t, http.StatusOK, code, string(raw))
@@ -257,7 +258,9 @@ func TestMiniAppOrderReviewHTTPHandoffsRecoverSameCanonicalDecision(t *testing.T
 			require.NoError(
 				t,
 				f.H.store.Pool().
-					QueryRow(t.Context(), "SELECT (SELECT count(*) FROM shuttle_order_evidence_reviews WHERE evidence_id=$1),(SELECT count(*) FROM shuttle_order_evidence_operations WHERE operation_id=$2 AND kind='review')", review.EvidenceID, w.ID).
+					QueryRow(t.Context(), "SELECT (SELECT count(*) FROM shuttle_order_evidence_reviews WHERE eviden" +
+"ce_id=$1),(SELECT count(*) FROM shuttle_order_evidence_operations WHERE " +
+"operation_id=$2 AND kind='review')", review.EvidenceID, w.ID).
 					Scan(&reviews, &canonical),
 			)
 			require.Equal(t, 1, reviews)
@@ -438,7 +441,9 @@ func TestMiniAppOrderReviewHTTPRevocationDuringConfirmationWaitPreventsEffects(t
 			require.Eventually(t, func() bool {
 				var waiting bool
 				readErr := f.H.store.Pool().
-					QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid)))", blocking.Conn().PgConn().PID()).
+					QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
+"ase() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid" +
+")))", blocking.Conn().PgConn().PID()).
 					Scan(&waiting)
 				return readErr == nil && waiting
 			}, 3*time.Second, 10*time.Millisecond)
@@ -472,7 +477,8 @@ func TestMiniAppOrderReviewHTTPRevocationDuringConfirmationWaitPreventsEffects(t
 			require.NoError(
 				t,
 				f.H.store.Pool().
-					QueryRow(ctx, "SELECT (SELECT count(*) FROM shuttle_order_evidence_reviews),(SELECT count(*) FROM shuttle_order_review_calls WHERE operation_id=$1)", operation).
+					QueryRow(ctx, "SELECT (SELECT count(*) FROM shuttle_order_evidence_reviews),(SELECT cou" +
+"nt(*) FROM shuttle_order_review_calls WHERE operation_id=$1)", operation).
 					Scan(&reviews, &calls),
 			)
 			require.Zero(t, reviews)

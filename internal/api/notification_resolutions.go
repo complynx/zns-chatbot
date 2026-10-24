@@ -172,12 +172,25 @@ func notificationResolutionMethod() map[string]any {
 	uuidField := map[string]any{manifestType: schemaString, schemaFormat: schemaUUID}
 	method := administrativeRead(
 		"resolve_notification",
-		"Retry or dismiss an uncertain, failed or blocked notification with current global administrator authority. Inspect its receipt and chat first: an unknown send may already be delivered, so retry can duplicate the message and is a last resort. Dismiss closes delivery only and does not prove receipt. Exact proposal includes recipient, event, state/version and reason. Never replay the payment or booking to resend a message. Same operation ID returns the original resolution receipt; reconcile before any new operation. Retry rechecks recipient permissions and increments the delivery generation.",
+		"Retry or dismiss an uncertain, failed or blocked notification with curre" +
+"nt global administrator authority. Inspect its receipt and chat first: a" +
+"n unknown send may already be delivered, so retry can duplicate the mess" +
+"age and is a last resort. Dismiss closes delivery only and does not prov" +
+"e receipt. Exact proposal includes recipient, event, state/version and r" +
+"eason. Never replay the payment or booking to resend a message. Same ope" +
+"ration ID returns the original resolution receipt; reconcile before any " +
+"new operation. Retry rechecks recipient permissions and increments the d" +
+"elivery generation.",
 		map[string]any{
 			"notification_kind": map[string]any{
 				manifestType:        schemaString,
 				schemaEnum:          []string{"payment", "pair", "order", "massage", "massage_specialist", "knowledge"},
-				manifestDescription: "Defaults to payment for compatibility. Use pair for invitation notifications, order for order payment evidence notices, massage for owner booking reminders, massage_specialist for specialist booking/cancellation notices, or knowledge for knowledge suggestion notices. For knowledge only, omit event_id for general/history suggestions without event origin; event-origin suggestions require their original event_id.",
+				manifestDescription: "Defaults to payment for compatibility. Use pair for invitation notificat" +
+"ions, order for order payment evidence notices, massage for owner bookin" +
+"g reminders, massage_specialist for specialist booking/cancellation noti" +
+"ces, or knowledge for knowledge suggestion notices. For knowledge only, " +
+"omit event_id for general/history suggestions without event origin; even" +
+"t-origin suggestions require their original event_id.",
 			},
 			schemaEventID: map[string]any{
 				manifestType:        schemaString,

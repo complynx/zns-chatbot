@@ -277,7 +277,9 @@ func authoritySchema() map[string]any {
 func authorityModule() map[string]any {
 	method := administrativeRead(
 		"me",
-		"Read your own event authority by event_id. An assigned pass is not an ambassador role. none means no event authority. This grants no general access to other users' files.",
+		"Read your own event authority by event_id. An assigned pass is not an am"+
+			"bassador role. none means no event authority. This grants no general acc"+
+			"ess to other users' files.",
 		map[string]any{schemaEventID: map[string]any{manifestType: schemaString, schemaFormat: schemaUUID}},
 		[]string{schemaEventID},
 		nil,
@@ -296,7 +298,9 @@ func authorityMethods() []map[string]any {
 	uuidField := map[string]any{manifestType: schemaString, schemaFormat: schemaUUID}
 	read := administrativeRead(
 		"authorities",
-		"List event-local roles in user UUID order, including revoked roles (none). Only active local accounts are listed. Follow next as after; default/maximum limit 20.",
+		"List event-local roles in user UUID order, including revoked roles (none"+
+			"). Only active local accounts are listed. Follow next as after; default/"+
+			"maximum limit 20.",
 		map[string]any{
 			schemaEventID: uuidField,
 			schemaAfter:   uuidField,
@@ -310,8 +314,14 @@ func authorityMethods() []map[string]any {
 		[]string{"authorities"},
 	)
 	write := map[string]any{
-		"id":                "authority",
-		manifestDescription: "Grant or revoke a local event authority only on a global administrator request with exact-parameter approval. Required event_id, local user_id, role (none/ambassador/administrator), expected_version (0 before first assignment). Get current versions from authorities. No global IAM role is granted. Preparation reserves nothing and expires in five minutes. An event ambassador cannot grant roles. Reconcile the same operation after uncertainty; missing status is unknown.",
+		"id": "authority",
+		manifestDescription: "Grant or revoke a local event authority only on a global administrator r" +
+			"equest with exact-parameter approval. Required event_id, local user_id, " +
+			"role (none/ambassador/administrator), expected_version (0 before first a" +
+			"ssignment). Get current versions from authorities. No global IAM role is" +
+			" granted. Preparation reserves nothing and expires in five minutes. An e" +
+			"vent ambassador cannot grant roles. Reconcile the same operation after u" +
+			"ncertainty; missing status is unknown.",
 		manifestPermissions: []string{},
 		manifestPath:        "/internal/agent/administration/authority",
 		manifestEffect:      effectWrite,

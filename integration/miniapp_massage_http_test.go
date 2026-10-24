@@ -145,10 +145,12 @@ func TestMiniAppMassageHTTPBothHandoffsKeepHistoryAfterPassAndModuleLoss(t *test
 	recovered := massageAppCall[db.MassageBooking](t, f, session, http.MethodPost, path+"/book", nativeBody)
 	require.Equal(t, booking, recovered)
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_events SET modules=array_remove(modules,'massage'),version=version+1 WHERE id=$1", f.Event.ID)
+		Exec(t.Context(), "UPDATE shuttle_events SET modules=array_remove(modules,'massage'),versio" +
+"n=version+1 WHERE id=$1", f.Event.ID)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_registrations SET state='waitlisted' WHERE event_id=$1 AND user_id=$2", f.Event.ID, owner.UserID)
+		Exec(t.Context(), "UPDATE shuttle_registrations SET state='waitlisted' WHERE event_id=$1 AN" +
+"D user_id=$2", f.Event.ID, owner.UserID)
 	require.NoError(t, err)
 	cancelArgs := db.MassageCancellationArguments{
 		EventID:         f.Event.ID,

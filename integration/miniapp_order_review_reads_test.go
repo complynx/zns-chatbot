@@ -243,7 +243,9 @@ func TestMiniAppOrderReviewReadDeniesLogoutAfterEventLockWait(t *testing.T) {
 	require.Eventually(t, func() bool {
 		var wait bool
 		readErr := f.H.store.Pool().
-			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid)))", blocking.Conn().PgConn().PID()).
+			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
+"ase() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid" +
+")))", blocking.Conn().PgConn().PID()).
 			Scan(&wait)
 		return readErr == nil && wait
 	}, 3*time.Second, 10*time.Millisecond)

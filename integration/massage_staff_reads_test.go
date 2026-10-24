@@ -56,7 +56,8 @@ func TestMassageStaffWithoutPassSharesEventTimetableAndPrivateOwnClients(t *test
 	)
 	require.Zero(t, passes)
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), `UPDATE shuttle_users SET profile='{"first_name":"Alex","last_name":"Client","secret":"not for staff"}' WHERE id=$1`, owner.UserID)
+		Exec(t.Context(), "UPDATE shuttle_users SET profile='{\"first_name\":\"Alex\",\"last_name\":\"Clie" +
+"nt\",\"secret\":\"not for staff\"}' WHERE id=$1", owner.UserID)
 	require.NoError(t, err)
 	first, _ := bookMassage(t, f, owner, massageBookingArgs(f, schedule, 0))
 	args := massageBookingArgs(f, schedule, 0)
@@ -119,7 +120,8 @@ func TestMassageStaffReadSurvivesModuleDisableButNotAccessRevocation(t *testing.
 	f, staff, schedule, binding := staffFixture(t)
 	query := staffQuery(f, schedule)
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_events SET modules=array_remove(modules,'massage'),version=version+1 WHERE id=$1", f.Event.ID)
+		Exec(t.Context(), "UPDATE shuttle_events SET modules=array_remove(modules,'massage'),versio" +
+"n=version+1 WHERE id=$1", f.Event.ID)
 	require.NoError(t, err)
 	_, err = f.H.store.MassageStaffSchedule(t.Context(), staff, f.Event.ID)
 	require.NoError(t, err)
@@ -195,7 +197,8 @@ func TestMiniAppMassageStaffSharesReadsOnOneConnectionAndRejectsExpiredSession(t
 	_, err = store.MiniAppMassageStaffEvents(ctx, foreign, session, uuid.Nil, 20)
 	require.ErrorIs(t, err, db.ErrMiniAppDenied)
 	_, err = f.H.store.Pool().
-		Exec(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 second' WHERE user_id=$1", staff.UserID)
+		Exec(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interva" +
+"l '1 second' WHERE user_id=$1", staff.UserID)
 	require.NoError(t, err)
 	_, err = store.MiniAppMassageStaffEvents(ctx, deployment, session, uuid.Nil, 20)
 	require.ErrorIs(t, err, db.ErrMiniAppDenied)
@@ -239,7 +242,9 @@ func TestMassageStaffRechecksGrantAndSessionAfterEventLockWait(t *testing.T) {
 			require.Eventually(t, func() bool {
 				var waiting bool
 				e := f.H.store.Pool().
-					QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid)))", blocker.Conn().PgConn().PID()).
+					QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
+"ase() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid" +
+")))", blocker.Conn().PgConn().PID()).
 					Scan(&waiting)
 				return e == nil && waiting
 			}, 3*time.Second, 5*time.Millisecond)
@@ -351,7 +356,8 @@ func TestMassageStaffRetainsPastBookedClientsAndFrozenTerms(t *testing.T) {
 	raw, err := json.Marshal(booking.Snapshot)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_massage_bookings SET starts_at=$2,treatment_ends_at=$3,occupancy_ends_at=$4,snapshot=$5 WHERE id=$1", booking.ID, terms.StartsAt, terms.TreatmentEndsAt, terms.OccupancyEndsAt, raw)
+		Exec(t.Context(), "UPDATE shuttle_massage_bookings SET starts_at=$2,treatment_ends_at=$3,oc" +
+"cupancy_ends_at=$4,snapshot=$5 WHERE id=$1", booking.ID, terms.StartsAt, terms.TreatmentEndsAt, terms.OccupancyEndsAt, raw)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
 		Exec(t.Context(), "UPDATE shuttle_events SET starts_at=$2,ends_at=$3 WHERE id=$1", f.Event.ID, terms.WindowStartsAt, terms.WindowEndsAt)
@@ -432,12 +438,20 @@ func TestMassageStaffPageByteBoundContinuesWithoutDroppingRows(t *testing.T) {
 	for range 19 {
 		prep, id := uuid.New(), uuid.New()
 		_, err = f.H.store.Pool().
-			Exec(t.Context(), `INSERT INTO shuttle_massage_preparations(id,event_id,user_id,operation_id,kind,source,request_hash,arguments,snapshot,expires_at)
-   SELECT $2,event_id,user_id,$2,kind,source,request_hash,arguments,snapshot,expires_at FROM shuttle_massage_preparations WHERE id=(SELECT preparation_id FROM shuttle_massage_bookings WHERE id=$1)`, booking.ID, prep)
+			Exec(t.Context(), "INSERT INTO shuttle_massage_preparations(id,event_id,user_id,operation_i" +
+"d,kind,source,request_hash,arguments,snapshot,expires_at)\n   SELECT $2,e" +
+"vent_id,user_id,$2,kind,source,request_hash,arguments,snapshot,expires_a" +
+"t FROM shuttle_massage_preparations WHERE id=(SELECT preparation_id FROM" +
+" shuttle_massage_bookings WHERE id=$1)", booking.ID, prep)
 		require.NoError(t, err)
 		_, err = f.H.store.Pool().
-			Exec(t.Context(), `INSERT INTO shuttle_massage_bookings(id,event_id,user_id,preparation_id,window_id,specialist_id,service_id,starts_at,treatment_ends_at,occupancy_ends_at,requires_table,currency,currency_scale,price_minor,snapshot,source)
-   SELECT $2,event_id,user_id,$3,window_id,specialist_id,service_id,starts_at,treatment_ends_at,occupancy_ends_at,requires_table,currency,currency_scale,price_minor,snapshot,source FROM shuttle_massage_bookings WHERE id=$1`, booking.ID, id, prep)
+			Exec(t.Context(), "INSERT INTO shuttle_massage_bookings(id,event_id,user_id,preparation_id," +
+"window_id,specialist_id,service_id,starts_at,treatment_ends_at,occupancy" +
+"_ends_at,requires_table,currency,currency_scale,price_minor,snapshot,sou" +
+"rce)\n   SELECT $2,event_id,user_id,$3,window_id,specialist_id,service_id" +
+",starts_at,treatment_ends_at,occupancy_ends_at,requires_table,currency,c" +
+"urrency_scale,price_minor,snapshot,source FROM shuttle_massage_bookings " +
+"WHERE id=$1", booking.ID, id, prep)
 		require.NoError(t, err)
 	}
 	query := staffQuery(f, schedule)

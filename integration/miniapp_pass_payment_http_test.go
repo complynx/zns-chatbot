@@ -335,7 +335,9 @@ func TestNativePassPaymentHTTPSessionLogoutWhileEventLockedPreventsWrite(t *test
 	require.Eventually(t, func() bool {
 		var waiting bool
 		readErr := f.H.store.Pool().
-			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid)))", blocker.Conn().PgConn().PID()).
+			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
+"ase() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid" +
+")))", blocker.Conn().PgConn().PID()).
 			Scan(&waiting)
 		return readErr == nil && waiting
 	}, 3*time.Second, 10*time.Millisecond)
@@ -380,7 +382,8 @@ func TestNativePassPaymentHTTPSessionExpiryWhileSourceLockedRollsBack(t *testing
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()+interval '2 seconds' WHERE user_id=$1 AND state='active' RETURNING expires_at", owner.UserID).
+			QueryRow(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()+interva" +
+"l '2 seconds' WHERE user_id=$1 AND state='active' RETURNING expires_at", owner.UserID).
 			Scan(&expires),
 	)
 	type response struct {
@@ -404,7 +407,9 @@ func TestNativePassPaymentHTTPSessionExpiryWhileSourceLockedRollsBack(t *testing
 	require.Eventually(t, func() bool {
 		var waiting bool
 		readErr := f.H.store.Pool().
-			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid)))", blocker.Conn().PgConn().PID()).
+			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
+"ase() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid" +
+")))", blocker.Conn().PgConn().PID()).
 			Scan(&waiting)
 		return readErr == nil && waiting
 	}, time.Second, 10*time.Millisecond, "submission must pass initial session authorization and wait on the source lock")
@@ -424,11 +429,12 @@ func TestNativePassPaymentHTTPSessionExpiryWhileSourceLockedRollsBack(t *testing
 		t.Fatal("source-blocked submission did not finish")
 	}
 	var evidence, receipts, actions, notices int
-	require.NoError(t, f.H.store.Pool().QueryRow(ctx, `SELECT
- (SELECT count(*) FROM shuttle_payment_evidence WHERE file_id=$1),
- (SELECT count(*) FROM shuttle_payment_operations WHERE actor=$2 AND operation_id=$3),
- (SELECT count(*) FROM shuttle_native_payment_evidence_actions WHERE actor=$2 AND operation_id=$3),
- (SELECT count(*) FROM shuttle_payment_notifications n JOIN shuttle_payment_evidence e ON e.id=n.evidence_id WHERE e.file_id=$1)`, file, paymentScope(t, f.H, f.OwnerID, false).Subject, operation).Scan(&evidence, &receipts, &actions, &notices))
+	require.NoError(t, f.H.store.Pool().QueryRow(ctx, "SELECT\n (SELECT count(*) FROM shuttle_payment_evidence WHERE file_id=$1)" +
+",\n (SELECT count(*) FROM shuttle_payment_operations WHERE actor=$2 AND o" +
+"peration_id=$3),\n (SELECT count(*) FROM shuttle_native_payment_evidence_" +
+"actions WHERE actor=$2 AND operation_id=$3),\n (SELECT count(*) FROM shut" +
+"tle_payment_notifications n JOIN shuttle_payment_evidence e ON e.id=n.ev" +
+"idence_id WHERE e.file_id=$1)", file, paymentScope(t, f.H, f.OwnerID, false).Subject, operation).Scan(&evidence, &receipts, &actions, &notices))
 	require.Zero(t, evidence, "expired session must not submit evidence")
 	require.Zero(t, receipts, "expired submission must not save a receipt")
 	require.Zero(t, actions, "expired submission must not save native history")

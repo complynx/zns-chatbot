@@ -187,7 +187,8 @@ func assignmentSessionFailure(t *testing.T, f miniAppAssignmentFixture, failure 
 		)
 	case "expired":
 		_, e := f.h.store.Pool().
-			Exec(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 second' WHERE bearer_hash=$1", session.Bearer[:])
+			Exec(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interva" +
+"l '1 second' WHERE bearer_hash=$1", session.Bearer[:])
 		require.NoError(t, e)
 	case "revoked_actor":
 		require.NoError(t, f.h.store.RevokeUser(ctx, session.UserID, true))
@@ -354,7 +355,8 @@ func TestMiniAppAssignmentRechecksAuthorityAfterRecipientLockWait(t *testing.T) 
 			var deadline time.Time
 			if failure == "expired_session" {
 				err = f.h.store.Pool().
-					QueryRow(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()+interval '1 second' WHERE bearer_hash=$1 RETURNING expires_at", f.session.Bearer[:]).
+					QueryRow(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()+interva" +
+"l '1 second' WHERE bearer_hash=$1 RETURNING expires_at", f.session.Bearer[:]).
 					Scan(&deadline)
 				require.NoError(t, err)
 			}
@@ -379,7 +381,8 @@ func TestMiniAppAssignmentRechecksAuthorityAfterRecipientLockWait(t *testing.T) 
 			require.Eventually(t, func() bool {
 				var waiting bool
 				e := f.h.store.Pool().
-					QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND $1::integer=ANY(pg_blocking_pids(pid)))", blocker.Conn().PgConn().PID()).
+					QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
+"ase() AND $1::integer=ANY(pg_blocking_pids(pid)))", blocker.Conn().PgConn().PID()).
 					Scan(&waiting)
 				return e == nil && waiting
 			}, 3*time.Second, 10*time.Millisecond)
