@@ -38,6 +38,8 @@ func (p *descriptorPeers) serve(w http.ResponseWriter, r *http.Request) {
 	defer p.mu.Unlock()
 	var value any
 	switch {
+	case r.Method == http.MethodGet && r.URL.Path == "/v1/capabilities":
+		value = map[string]any{"execution_profiles": []string{loom.NativeFilesProfile}}
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/chats":
 		p.chats++
 		value = map[string]any{"id": uuid.NewString()}

@@ -75,11 +75,19 @@ start a replacement run or hold other entries. A stale process lock after a cras
 also needs reconciliation before restarting. Catalog eviction leaves journals
 intact and cannot make an old result overwrite a new generation.
 
-Native file-only service isolation is a required dependency. The current native
-descriptor pauses during unrelated module discovery; see
-[Loom issue 44](https://github.com/complynx/loom/issues/44). Until that contract is
-accepted, do not enable the worker as a production description service or grant
-it business/admin authority to bypass discovery.
+The procedure requires authenticated capability negotiation for Loom's
+`native_files` execution profile and persists that profile in its creation
+request. Missing support stops before chat creation or uploads. Legacy journals
+with unrestricted requests require reconciliation; their requests are never
+rewritten or replayed as restricted runs. See
+[Loom PR 45](https://github.com/complynx/loom/pull/45) for the isolation contract.
+
+Use `-actor-token-file` alone for a configured own-subject service account. Its
+effective rights intersect verified IAM roles with the configured permission
+ceiling. Existing delegation may instead supply `-subject-token-file`. Neither
+mode grants business/admin authority to bypass discovery. The native profile
+excludes business discovery and calls, personal memory, external source refetch
+and paid transcription. Upgrade all Loom execution workers together before use.
 
 The procedure retrieves actual Telegram media, not the fallback Unicode symbol.
 Targets retain their original bytes, including WebM, TGS/Lottie and animated

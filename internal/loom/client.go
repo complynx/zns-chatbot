@@ -59,6 +59,7 @@ type OutputPolicy struct {
 
 // CreateRunRequest contains semantic arguments; the session is sent in an authorization header.
 type CreateRunRequest struct {
+	ExecutionProfile string        `json:"execution_profile,omitempty"`
 	ChatID           string        `json:"chat_id,omitempty"`
 	PreviousRunID    string        `json:"previous_run_id,omitempty"`
 	Input            Input         `json:"input"`

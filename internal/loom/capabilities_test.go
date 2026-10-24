@@ -48,3 +48,27 @@ func TestOutputValidationRequiresExactAdvertisedCapability(t *testing.T) {
 		})
 	}
 }
+
+func TestNativeFilesRequiresAdvertisedCapability(t *testing.T) {
+	t.Parallel()
+	for _, body := range []string{`{"execution_profiles":["native_files"]}`, `{}`, `{"execution_profiles":["all"]}`} {
+		t.Run(body, func(t *testing.T) {
+			t.Parallel()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "/v1/capabilities", r.URL.Path)
+				assert.Equal(t, "Bearer descriptor", r.Header.Get("Authorization"))
+				assert.Empty(t, r.Header.Get("X-Subject-Token"))
+				_, _ = fmt.Fprint(w, body)
+			}))
+			defer server.Close()
+			client, err := loom.New(server.URL, server.Client())
+			require.NoError(t, err)
+			err = client.RequireNativeFiles(t.Context(), loom.Auth{ServiceToken: "descriptor"})
+			if body == `{"execution_profiles":["native_files"]}` {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
+		})
+	}
+}

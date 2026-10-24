@@ -4,7 +4,24 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 )
+
+const NativeFilesProfile = "native_files"
+
+// RequireNativeFiles fails closed before a descriptor creates any owned resources.
+func (c *Client) RequireNativeFiles(ctx context.Context, auth Auth) error {
+	var result struct {
+		Profiles []string `json:"execution_profiles"`
+	}
+	if err := c.call(ctx, http.MethodGet, "/capabilities", auth, "", nil, &result, false, false); err != nil {
+		return err
+	}
+	if !slices.Contains(result.Profiles, NativeFilesProfile) {
+		return &Error{Code: "native_files_unsupported", Outcome: NotStarted}
+	}
+	return nil
+}
 
 // RequireOutputValidation checks the authenticated consumer contract before a restricted run starts.
 // Do not infer enforcement from successful creation on an older executor.

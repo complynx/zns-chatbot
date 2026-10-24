@@ -52,8 +52,8 @@ func parse() arguments {
 	flag.StringVar(&a.kind, "kind", "", "sticker or emoji")
 	flag.StringVar(&a.id, "id", "", "Unique sticker ID or numeric custom emoji ID")
 	flag.StringVar(&a.journal, "journal", "", "Private procedure directory; reuse to observe original work")
-	flag.StringVar(&a.actorToken, "actor-token-file", "", "Protected current Loom service token file")
-	flag.StringVar(&a.subjectToken, "subject-token-file", "", "Protected dedicated descriptor account token file")
+	flag.StringVar(&a.actorToken, "actor-token-file", "", "Protected Loom service-account or delegation actor token")
+	flag.StringVar(&a.subjectToken, "subject-token-file", "", "Optional protected delegated descriptor token")
 	flag.BoolVar(&a.watch, "watch", false, "Process retained cache misses serially; journal is a private root directory")
 	flag.Parse()
 	return a
@@ -69,9 +69,12 @@ func connect(ctx context.Context, a arguments) (dependencies, error) {
 	if err != nil {
 		return d, err
 	}
-	subject, err := token(a.subjectToken)
-	if err != nil {
-		return d, err
+	var subject string
+	if a.subjectToken != "" {
+		subject, err = token(a.subjectToken)
+		if err != nil {
+			return d, err
+		}
 	}
 	tg, err := telegram.New(c.Telegram.BaseURL, c.Telegram.Token, nil)
 	if err != nil {

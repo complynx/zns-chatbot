@@ -39,7 +39,10 @@ type fakeLoom struct {
 	request                        loom.CreateRunRequest
 	status                         string
 	result                         string
+	capabilityError                error
 }
+
+func (f *fakeLoom) RequireNativeFiles(context.Context, loom.Auth) error { return f.capabilityError }
 
 func (f *fakeLoom) CreateChat(context.Context, loom.Auth) (string, error) {
 	f.chats++
@@ -78,6 +81,7 @@ func TestDescriptionFlowIsolatedSetContextAndResume(t *testing.T) {
 	require.NoError(t, f.Step(t.Context(), loom.Auth{ServiceToken: "actor", SessionID: "descriptor"}, s, save))
 	require.Equal(t, "running", s.Phase)
 	require.Equal(t, "isolated-chat", lc.request.ChatID)
+	require.Equal(t, loom.NativeFilesProfile, lc.request.ExecutionProfile)
 	require.Empty(t, lc.request.Input.ArtifactIDs)
 	for _, id := range s.ArtifactIDs {
 		require.Contains(t, lc.request.Input.Text, id)
@@ -107,6 +111,29 @@ func TestDescriptionUnknownUploadNeverReplays(t *testing.T) {
 	require.Error(t, f.Step(t.Context(), loom.Auth{}, s, save))
 	require.Equal(t, 1, lc.chats)
 	require.Equal(t, 1, lc.uploads)
+	require.Zero(t, lc.creates)
+}
+
+func TestDescriptionRequiresNativeProfileBeforeEffects(t *testing.T) {
+	t.Parallel()
+	f, lc, s := fixture(t)
+	lc.capabilityError = errors.New("unsupported profile")
+	require.ErrorContains(t, f.Step(t.Context(), loom.Auth{}, s, func(symboldescribe.State) error {
+		t.Fatal("capability failure must not save a changed journal")
+		return nil
+	}), "unsupported profile")
+	require.Zero(t, lc.chats)
+	require.Zero(t, lc.uploads)
+	require.Zero(t, lc.creates)
+
+	lc.capabilityError = nil
+	s.Phase = "create_run"
+	s.Request = &loom.CreateRunRequest{ChatID: "original-unrestricted"}
+	require.ErrorContains(t, f.Step(t.Context(), loom.Auth{}, s, func(symboldescribe.State) error {
+		t.Fatal("legacy request must retain its original bytes")
+		return nil
+	}), "legacy unrestricted")
+	require.Empty(t, s.Request.ExecutionProfile)
 	require.Zero(t, lc.creates)
 }
 

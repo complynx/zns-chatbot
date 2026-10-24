@@ -45,6 +45,7 @@ type State struct {
 }
 
 type Loom interface {
+	RequireNativeFiles(context.Context, loom.Auth) error
 	CreateChat(context.Context, loom.Auth) (string, error)
 	UploadArtifact(context.Context, loom.Auth, string, []byte) (string, error)
 	CreateRun(context.Context, loom.Auth, string, loom.CreateRunRequest) (loom.Run, error)
@@ -90,6 +91,12 @@ func (f Flow) Step(ctx context.Context, auth loom.Auth, s *State, save func(Stat
 	}
 	if s.Phase == phaseDone {
 		return nil
+	}
+	if s.Request != nil && s.Request.ExecutionProfile != loom.NativeFilesProfile {
+		return errors.New("legacy unrestricted descriptor; reconcile original journal before new work")
+	}
+	if err := f.Loom.RequireNativeFiles(ctx, auth); err != nil {
+		return err
 	}
 	if err := f.prepare(ctx, s, save); err != nil {
 		return err
@@ -196,6 +203,7 @@ func (f Flow) upload(ctx context.Context, auth loom.Auth, s *State, save func(St
 		s.Manifest.TargetPosition, sheetColumns, s.ArtifactIDs,
 	})
 	s.Request = &loom.CreateRunRequest{
+		ExecutionProfile: loom.NativeFilesProfile,
 		ChatID:           s.ChatID,
 		Input:            loom.Input{Text: instructions + "\n" + string(position)},
 		Interaction:      loom.Interaction{ReplyMode: loom.ReplyModeProtocol, Questions: "none"},
