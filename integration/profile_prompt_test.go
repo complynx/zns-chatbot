@@ -180,7 +180,7 @@ func TestProfileContextStorageFailureWaitsWithoutDispatchingIncompletePrompt(t *
 			t.Logf("profile storage failure task state=%s route=%s read_error=%v", current.State, current.Route, readErr)
 		}
 	}()
-	h.await(t, accepted, "running")
+	h.await(t, accepted, "awaiting_service")
 	require.Never(t, func() bool {
 		p.mu.Lock()
 		defer p.mu.Unlock()
