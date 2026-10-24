@@ -75,6 +75,25 @@ test("native Finish and Back remain visible through parent loading and busy upda
   await ui.start(); assert.equal(ui.visible(), true); assert.equal(ui.enabled(), true);
 });
 
+test("normal open, crop save and finalization never expose recovery actions", async () => {
+  const mutations = [];
+  const ui = browser({ hook(path, method, body, base) {
+    if (method === "POST") {
+      mutations.push({ path, recoverHidden: ui.get("crop-recover").hidden, retryHidden: ui.get("crop-retry").hidden });
+    }
+    return base(path, method, body);
+  } });
+  await ui.start();
+  ui.event("crop-canvas", "wheel", { clientX: 200, clientY: 400, deltaY: -1 });
+  await ui.finish();
+  assert.equal(mutations.length, 3);
+  assert.equal(ui.closed(), 1);
+  for (const mutation of mutations) {
+    assert.equal(mutation.recoverHidden, true, mutation.path);
+    assert.equal(mutation.retryHidden, true, mutation.path);
+  }
+});
+
 test("uncertain crop-open audit retries the same passive operation and never generates", async () => {
   const storage = new Map(); let original;
   const first = browser({ storage, hook(path, method, body, base) {
@@ -163,6 +182,8 @@ test("a lost finalization response retains its original operation and recovers w
   } });
   await first.start(); await first.finish();
   assert.equal(first.closed(), 0);
+  assert.equal(first.get("crop-recover").hidden, false);
+  assert.equal(first.get("crop-retry").hidden, false);
   assert.equal(JSON.parse(storage.get("zinusya-avatar-pending-v1:" + owner)).operation_id, originalOperation);
   const reopened = browser({ storage, hook(path, method, body, base) { if (path.endsWith("/operations/" + originalOperation)) return receipt; return base(path, method, body); } });
   await reopened.start(); assert.equal(reopened.posts().length, 0); assert.equal(storage.size, 0); assert.equal(reopened.enabled(), false);

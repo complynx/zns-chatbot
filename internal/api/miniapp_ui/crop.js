@@ -33,8 +33,10 @@ window.createZinusyaAvatarCrop = function (env) {
     if (enabled) app?.MainButton?.enable(); else app?.MainButton?.disable();
     // As in the original cropper, keep native actions visible after loading and busy updates.
     if (owner) { app?.MainButton?.show(); app?.BackButton?.show(); }
-    el["crop-recover"].hidden = !pending && !openPending;
-    el["crop-retry"].hidden = !pending;
+    // A persisted in-flight request needs recovery controls only after a failure.
+    const recovery = !working && !locked && !["loading", "ready", "edited", "saving", "rendering", "queued"].includes(phase);
+    el["crop-recover"].hidden = !recovery || (!pending && !openPending);
+    el["crop-retry"].hidden = !recovery || !pending;
     el["crop-recover"].disabled = working || locked || blocked;
     el["crop-retry"].disabled = working || locked || blocked || !["save", "finalize"].includes(pending?.kind);
   }
