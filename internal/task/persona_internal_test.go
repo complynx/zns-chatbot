@@ -21,8 +21,26 @@ func TestPersonaPromptSelectsOneLocaleAndFallsBackToEnglish(t *testing.T) {
 	require.Equal(t, en, personaPrompt("de"))
 	for _, text := range []string{ru, en} {
 		require.Contains(t, text, "Zouk Non Stop")
-		require.Less(t, len([]rune(text)), 1800, "Keep the shared identity compact")
+		require.Contains(t, text, "ЗНС/ZNS")
+		require.LessOrEqual(t, len([]rune(text)), 3000, "Keep identity and four voice examples compact")
 	}
+}
+
+func TestPersonaExamplesTeachVoiceWithoutCommandWorkflows(t *testing.T) {
+	t.Parallel()
+	for _, sample := range []struct {
+		text, user, assistant string
+	}{
+		{personaExamplesRU, "Пользователь:", "ЗиНуСя:"},
+		{personaExamplesEN, "User:", "Zinusya:"},
+	} {
+		require.Equal(t, 4, strings.Count(sample.text, sample.user))
+		require.Equal(t, 4, strings.Count(sample.text, sample.assistant))
+		require.NotContains(t, sample.text, "/", "Voice examples must not teach command spelling or routing")
+		require.NotContains(t, sample.text, "zinusya_", "Voice examples must not imply tool calls")
+	}
+	require.Contains(t, personaExamplesRU, "Язык выбирай по живому диалогу")
+	require.Contains(t, personaExamplesEN, "Choose the language from the live conversation")
 }
 
 func TestProfileContextKeepsUntrustedHintsSeparateFromServiceIdentity(t *testing.T) {
