@@ -1517,7 +1517,10 @@ func (p *peers) delayInput(r *http.Request) bool {
 }
 
 func (p *peers) waitGet(r *http.Request) bool {
-	if r.Method == http.MethodGet && p.getRelease != nil {
+	// This barrier observes one run, not capability discovery or chat history.
+	runPath, runRead := strings.CutPrefix(r.URL.Path, "/v1/runs/")
+	if r.Method == http.MethodGet && runRead && runPath != "" && !strings.Contains(runPath, "/") &&
+		p.getRelease != nil {
 		select {
 		case p.getEntered <- struct{}{}:
 		default:
