@@ -34,8 +34,8 @@ The document's Crop button opens `#avatar-crop?draft=ID` directly on its owned
 shared draft. This full-screen canvas carries the interaction style of the
 original Python application's frame editor. It uses Telegram theme colors,
 stable viewport height and safe-area variables, with browser fallbacks. Native
-Telegram MainButton and BackButton controls are used when available. Page buttons
-also stay available because an SDK object does not confirm host rendering.
+Telegram MainButton and BackButton provide Finish and Back. The crop page does
+not duplicate these native controls. Recovery controls appear only when needed.
 
 Drag to move the photo. Two fingers move, zoom and rotate it together. With a
 mouse, scroll zooms, Shift-scroll gives finer zoom, and Shift-drag rotates. The

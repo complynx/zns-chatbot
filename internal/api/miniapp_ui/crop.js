@@ -3,7 +3,7 @@
 // Canvas rendering and mouse/touch gestures are transferred from static/fit_frame.mjs.
 // The adapter saves the transform; authenticated Go endpoints render and queue the JPEG.
 window.createZinusyaAvatarCrop = function (env) {
-  const el = Object.fromEntries(["avatar-crop", "crop-canvas", "crop-help", "crop-status", "crop-finish", "crop-back", "crop-recover", "crop-retry"].map(id => [id, document.getElementById(id)]));
+  const el = Object.fromEntries(["avatar-crop", "crop-canvas", "crop-help", "crop-status", "crop-recover", "crop-retry"].map(id => [id, document.getElementById(id)]));
   const canvas = el["crop-canvas"], ctx = canvas.getContext("2d"), app = window.Telegram?.WebApp;
   const uuid = v => typeof v === "string" && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(v) && !/^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(v);
   const digest = v => typeof v === "string" && /^[0-9a-f]{64}$/.test(v);
@@ -23,13 +23,13 @@ window.createZinusyaAvatarCrop = function (env) {
   function status(value) { phase = value; el["crop-status"].textContent = w()[value]; }
   function labels() {
     el["crop-help"].textContent = w().help;
-    for (const name of ["finish", "back", "recover", "retry"]) el["crop-" + name].textContent = w()[name];
+    for (const name of ["recover", "retry"]) el["crop-" + name].textContent = w()[name];
     canvas.setAttribute("aria-label", locale === "ru" ? "Кадрирование аватарки" : "Avatar crop");
     app?.MainButton?.setText(w().finish); status(phase);
   }
   const editable = () => !!owner && !!original && !!frame && !!draft && !pending && !openPending && !blocked && !conflict && !working && !locked && !completed;
   function controls() {
-    const enabled = editable(); el["crop-finish"].disabled = !enabled;
+    const enabled = editable();
     if (enabled) app?.MainButton?.enable(); else app?.MainButton?.disable();
     // As in the original cropper, keep native actions visible after loading and busy updates.
     if (owner) { app?.MainButton?.show(); app?.BackButton?.show(); }
@@ -228,7 +228,6 @@ window.createZinusyaAvatarCrop = function (env) {
   function changed() { const t = toTransform(); return Object.keys(t).some(k => t[k] !== draft.transform[k]); }
   const finishClick = () => run(finish);
   const back = () => { app?.close?.(); };
-  el["crop-finish"].addEventListener("click", finishClick); el["crop-back"].addEventListener("click", back);
   el["crop-recover"].addEventListener("click", () => run(e => pending ? recover(e) : recordOpen(e))); el["crop-retry"].addEventListener("click", () => run(dispatch));
   return { clear, setBusy(value) { locked = value; controls(); },
     async start(id, language) {

@@ -55,4 +55,3 @@ body.avatar-crop-active > main { display: none; }
   padding: 10px 16px;
 }
 #avatar-crop button:disabled { opacity: .5; }
-/* SDK presence does not confirm that the host rendered its native buttons. */
