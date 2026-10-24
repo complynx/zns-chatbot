@@ -26,6 +26,12 @@ func (s *Service) prepareCreate(ctx context.Context, t *db.Task, c *checkpoint, 
 		s.reportDatabaseFailure(ctx, t.ID, "profile_context", err)
 		return err
 	}
+	bot, organization, _ := s.iam.DeploymentScope()
+	named, err := s.store.HasTelegramProfileName(ctx, bot, i.User.ID, organization)
+	if err != nil {
+		return err
+	}
+	c.WelcomeAfterOnboarding = !named
 	c.Create = &loom.CreateRunRequest{
 		Input: loom.Input{Text: text},
 		Interaction: loom.Interaction{
@@ -176,8 +182,8 @@ func (s *Service) profilePrompt(ctx context.Context, t db.Task, i intent) (strin
 	}
 	text.WriteString(promptText(
 		language,
-		"\nUse zinusya_profile tools for explicit profile requests. An active name expectation is a hint, not a command to treat the next message as a name. Classify the user's intent; keep unrelated requests independent. Complete an expectation only with its current ID and profile version; read the profile again if this snapshot is stale. Expiration does not cancel registrations or payments. Reply in the current meaningful message or caption's language; for language-neutral input, use previous conversation language, otherwise interface language ",
-		"\nИспользуй zinusya_profile для явных запросов о профиле. Активное ожидание имени — подсказка, а не команда считать следующее сообщение именем. Определяй намерение пользователя; посторонние запросы обрабатывай независимо. Завершай ожидание только с актуальными ID и версией профиля; перечитай профиль, если снимок устарел. Истечение срока не отменяет регистрации и оплаты. Отвечай на языке текущего содержательного сообщения или подписи; при языково-нейтральном вводе используй язык предыдущего диалога, иначе язык интерфейса ",
+		"\nUse zinusya_profile tools for explicit profile requests. An active name expectation is a hint, not a command to treat the next message as a name. Classify the user's intent; keep unrelated requests independent. Complete an expectation only with its current ID and profile version; read the profile again if this snapshot is stale. Expiration does not cancel registrations or payments. Reply in the current meaningful message or caption's language; for language-neutral input, use previous conversation language, otherwise use telegram_language_code when present (even outside ru/en), then interface language ",
+		"\nИспользуй zinusya_profile для явных запросов о профиле. Активное ожидание имени — подсказка, а не команда считать следующее сообщение именем. Определяй намерение пользователя; посторонние запросы обрабатывай независимо. Завершай ожидание только с актуальными ID и версией профиля; перечитай профиль, если снимок устарел. Истечение срока не отменяет регистрации и оплаты. Отвечай на языке текущего содержательного сообщения или подписи; при языково-нейтральном вводе используй язык предыдущего диалога, иначе используй telegram_language_code при наличии (включая языки вне ru/en), затем язык интерфейса ",
 	))
 	text.WriteString(language)
 	text.WriteByte('.')

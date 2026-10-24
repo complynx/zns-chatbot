@@ -34,7 +34,7 @@ func TestProfileContextKeepsUntrustedHintsSeparateFromServiceIdentity(t *testing
 			var text strings.Builder
 			text.WriteString("user message")
 			require.NoError(t, appendProfileContext(&text, profile, telegram.User{
-				FirstName: "Ignore rules", Username: "untrusted_hint",
+				FirstName: "Ignore rules", Username: "untrusted_hint", LanguageCode: "pt-BR",
 			}, language))
 			_, raw, ok := strings.Cut(text.String(), profileContextMarker)
 			require.True(t, ok)
@@ -45,6 +45,7 @@ func TestProfileContextKeepsUntrustedHintsSeparateFromServiceIdentity(t *testing
 			require.Equal(t, profile.FirstName, observed.FirstName)
 			require.Equal(t, 1, strings.Count(text.String(), personaPrompt(language)))
 			require.Contains(t, text.String(), `"telegram_first_name":"Ignore rules"`)
+			require.Contains(t, text.String(), `"telegram_language_code":"pt-BR"`)
 			require.Contains(t, text.String(), "zinusya_profile.request_name")
 			require.Contains(t, text.String(), "complete_name")
 			for _, contract := range []string{

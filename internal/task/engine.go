@@ -24,25 +24,26 @@ import (
 var errControlTargetFinished = errors.New("control target finished without applying input")
 
 type checkpoint struct {
-	NativeAvatar          *db.AvatarDraftReceipt `json:"native_avatar,omitempty"`
-	KeyboardRevision      int64                  `json:"keyboard_revision,omitempty"`
-	InputReceipt          *loom.ControlReceipt   `json:"input_receipt,omitempty"`
-	KeyboardPrompt        string                 `json:"keyboard_prompt,omitempty"`
-	RegistrationEntry     *db.RegistrationEntry  `json:"registration_entry,omitempty"`
-	RegistrationChange    *db.RegistrationChange `json:"registration_change,omitempty"`
-	RegistrationActor     string                 `json:"registration_actor,omitempty"`
-	RegistrationOperation string                 `json:"registration_operation,omitempty"`
-	ProfileChange         *db.ProfileMutation    `json:"profile_change,omitempty"`
-	ResumeKey             string                 `json:"resume_key,omitempty"`
-	LoomAuthRetryUntil    *time.Time             `json:"loom_auth_retry_until,omitempty"`
-	Session               loom.Session           `json:"session"`
-	BootstrapAttempts     int                    `json:"bootstrap_attempts,omitempty"`
-	Reauthorizing         bool                   `json:"reauthorizing,omitempty"`
-	Create                *loom.CreateRunRequest `json:"create,omitempty"`
-	Run                   *loom.Run              `json:"run,omitempty"`
-	Control               *loom.InputRequest     `json:"control,omitempty"`
-	ControlUnapplied      bool                   `json:"control_unapplied,omitempty"`
-	ReplyModeMismatch     bool                   `json:"reply_mode_mismatch,omitempty"`
+	WelcomeAfterOnboarding bool                   `json:"welcome_after_onboarding,omitempty"`
+	NativeAvatar           *db.AvatarDraftReceipt `json:"native_avatar,omitempty"`
+	KeyboardRevision       int64                  `json:"keyboard_revision,omitempty"`
+	InputReceipt           *loom.ControlReceipt   `json:"input_receipt,omitempty"`
+	KeyboardPrompt         string                 `json:"keyboard_prompt,omitempty"`
+	RegistrationEntry      *db.RegistrationEntry  `json:"registration_entry,omitempty"`
+	RegistrationChange     *db.RegistrationChange `json:"registration_change,omitempty"`
+	RegistrationActor      string                 `json:"registration_actor,omitempty"`
+	RegistrationOperation  string                 `json:"registration_operation,omitempty"`
+	ProfileChange          *db.ProfileMutation    `json:"profile_change,omitempty"`
+	ResumeKey              string                 `json:"resume_key,omitempty"`
+	LoomAuthRetryUntil     *time.Time             `json:"loom_auth_retry_until,omitempty"`
+	Session                loom.Session           `json:"session"`
+	BootstrapAttempts      int                    `json:"bootstrap_attempts,omitempty"`
+	Reauthorizing          bool                   `json:"reauthorizing,omitempty"`
+	Create                 *loom.CreateRunRequest `json:"create,omitempty"`
+	Run                    *loom.Run              `json:"run,omitempty"`
+	Control                *loom.InputRequest     `json:"control,omitempty"`
+	ControlUnapplied       bool                   `json:"control_unapplied,omitempty"`
+	ReplyModeMismatch      bool                   `json:"reply_mode_mismatch,omitempty"`
 }
 
 func (s *Service) save(ctx context.Context, t *db.Task, c checkpoint, out []db.Outbound) error {
@@ -158,10 +159,6 @@ func (s *Service) work(parent context.Context, id uuid.UUID) error {
 func (s *Service) authorizedTask(
 	ctx context.Context, t *db.Task, c checkpoint, i intent, user db.User, service string,
 ) error {
-	ready, startErr := s.prepareStart(ctx, t, c, i)
-	if !ready {
-		return startErr
-	}
 	if t.Route != "new_run" {
 		return s.control(ctx, t, c, i, user, service)
 	}
@@ -379,19 +376,7 @@ func (s *Service) observeRun(ctx context.Context, t *db.Task, c checkpoint, i in
 	t.QuestionID = ""
 	switch run.Status {
 	case stateCompleted, "succeeded":
-		t.State = stateCompleted
-		out := s.result(i, run.Result, "result")
-		if c.KeyboardPrompt != "" {
-			if len(out) == 0 {
-				out = s.result(i, structuredText(s.languageFor(ctx, i) == "ru", "Done.", "Готово."), "result")
-			}
-			removeReplyKeyboard(out)
-			c.KeyboardPrompt = ""
-		}
-		if err := s.save(ctx, t, c, out); err != nil {
-			return s.wait()
-		}
-		return s.deliver(ctx, t, c)
+		return s.completeRun(ctx, t, c, i, run.Result)
 	case stateFailed:
 		return s.finish(ctx, t, c, i, stateFailed, stateFailed)
 	case stateCancelled, "canceled":
@@ -418,6 +403,27 @@ func (s *Service) observeRun(ctx context.Context, t *db.Task, c checkpoint, i in
 		return s.wait()
 	}
 }
+func (s *Service) completeRun(ctx context.Context, t *db.Task, c checkpoint, i intent, result string) error {
+	out := s.result(i, result, "result")
+	if c.KeyboardPrompt != "" {
+		if len(out) == 0 {
+			out = s.result(i, structuredText(s.languageFor(ctx, i) == "ru", "Done.", "Готово."), "result")
+		}
+		removeReplyKeyboard(out)
+		c.KeyboardPrompt = ""
+	}
+	welcome, err := s.completedStartWelcome(ctx, t, c, i)
+	if err != nil {
+		return s.wait()
+	}
+	out = append(out, welcome...)
+	t.State = stateCompleted
+	if err = s.save(ctx, t, c, out); err != nil {
+		return s.wait()
+	}
+	return s.deliver(ctx, t, c)
+}
+
 func (s *Service) identityError(ctx context.Context, t *db.Task, c checkpoint, i intent, err error) error {
 	if errors.Is(err, identity.ErrDenied) || errors.Is(err, identity.ErrConflict) {
 		if c.ReplyModeMismatch {

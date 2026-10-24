@@ -45,69 +45,38 @@ func (s *Service) refreshStartMenu(ctx context.Context, chatID int64) error {
 	return s.tg.SetChatMenuCommands(ctx, chatID)
 }
 
-// prepareStart presents native guidance before the existing missing-name agent
-// dialogue. The outbox receipt, not a local flag, proves that guidance was sent.
-func (s *Service) prepareStart(ctx context.Context, t *db.Task, c checkpoint, i intent) (bool, error) {
-	if i.Kind != kindMessage || strings.TrimSpace(i.Text) != startCommand || t.RunID != "" || c.Create != nil {
-		return true, nil
+// completedStartWelcome defers first-start guidance until the confirmed name is saved.
+// Its outbox entries are committed with the completed run result across restart.
+func (s *Service) completedStartWelcome(
+	ctx context.Context,
+	t *db.Task,
+	c checkpoint,
+	i intent,
+) ([]db.Outbound, error) {
+	if i.Kind != kindMessage || (!c.WelcomeAfterOnboarding && strings.TrimSpace(i.Text) != startCommand) {
+		return nil, nil
+	}
+	bot, organization, _ := s.iam.DeploymentScope()
+	named, err := s.store.HasTelegramProfileName(ctx, bot, i.User.ID, organization)
+	if err != nil || !named {
+		return nil, err
 	}
 	rows, err := s.store.ListOutbox(ctx, t.ID)
 	if err != nil {
-		return false, s.wait()
+		return nil, err
 	}
 	prefix := t.ID.String() + ":start:welcome:"
-	exists := false
 	for _, row := range rows {
 		if strings.HasPrefix(row.DedupKey, prefix) {
-			exists = true
+			return nil, nil
 		}
 	}
-	if !exists {
-		if err = s.queueStartWelcome(ctx, t, c, i); err != nil {
-			return false, s.wait()
-		}
+	// Chat settings are deterministic and can be reapplied if the following save fails.
+	if err = s.refreshStartMenu(ctx, i.ChatID); err != nil {
+		return nil, err
 	}
-	if err = s.deliver(ctx, t, c); err != nil {
-		return false, err
-	}
-	return s.startWelcomeReady(ctx, t, c, prefix)
+	return s.startWelcomeOutput(ctx, i)
 }
-
-func (s *Service) startWelcomeReady(ctx context.Context, t *db.Task, c checkpoint, prefix string) (bool, error) {
-	rows, err := s.store.ListOutbox(ctx, t.ID)
-	if err != nil {
-		return false, s.wait()
-	}
-	for _, row := range rows {
-		if !strings.HasPrefix(row.DedupKey, prefix) || row.State == deliveryDelivered {
-			continue
-		}
-		if t.RunID != "" || (row.State != stateDeliveryUnknown && row.State != stateDeliveryFailed) {
-			return false, s.wait()
-		}
-		// No agent run exists yet. Fence this start task rather than signal
-		// processing while its greeting needs manual reconciliation.
-		t.State = row.State
-		if err = s.save(ctx, t, c, nil); err != nil {
-			return false, s.wait()
-		}
-		return false, nil
-	}
-	return true, nil
-}
-
-func (s *Service) queueStartWelcome(ctx context.Context, t *db.Task, c checkpoint, i intent) error {
-	// These deterministic chat settings can be reapplied after an unknown response.
-	if err := s.refreshStartMenu(ctx, i.ChatID); err != nil {
-		return err
-	}
-	out, err := s.startWelcomeOutput(ctx, i)
-	if err != nil {
-		return err
-	}
-	return s.save(ctx, t, c, out)
-}
-
 func (s *Service) startWelcomeOutput(ctx context.Context, i intent) ([]db.Outbound, error) {
 	ru := s.languageFor(ctx, i) == "ru"
 	text, _, err := s.structuredView(ctx, db.ProfileScope{}, startCommand, ru)
@@ -115,8 +84,8 @@ func (s *Service) startWelcomeOutput(ctx context.Context, i intent) ([]db.Outbou
 		return nil, err
 	}
 	text += structuredText(ru,
-		"\n\nWrite what you need, or choose a command from /menu. I’ll ask for your name if needed.",
-		"\n\nНапиши, что тебе нужно, или выбери команду из /menu. Если понадобится, я попрошу назвать имя и фамилию.")
+		"\n\nWrite what you need, or choose a command from /menu.",
+		"\n\nНапиши, что тебе нужно, или выбери команду из /menu.")
 	out := structuredOutput(i, text, nil, ru, "")
 	for n := range out {
 		out[n].DedupKey = "start:welcome:" + strconv.Itoa(n)

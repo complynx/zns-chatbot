@@ -1,10 +1,12 @@
 # Native start and avatar entry
 
-Bare `/start` provides native guidance and menu access. If a profile still needs
-first/last names, that guidance is delivered before the agent name dialogue; a
-filled linked profile keeps native navigation even while Loom is unavailable.
-The guidance includes a Mini App entry when available. An unknown or failed
-greeting is held for reconciliation before a new agent run starts.
+Bare `/start` provides native guidance and menu access for a filled linked
+profile, even while Loom is unavailable. A profile missing first/last names
+first enters the agent name dialogue. After the confirmed name is saved and
+that run completes, its result and native guidance are queued together in order;
+the menu is refreshed at that point. Cancellation or completion without a name
+does not present the welcome. The guidance includes a Mini App entry when
+available. Unknown delivery is held for reconciliation without a fresh send.
 `/menu` remains native navigation. `/start partner_...` keeps
 its existing agent route and authenticated sender. Exact command recognition
 also preserves ordinary text and media routing.
@@ -16,8 +18,8 @@ a native unavailable response and does not fall back to an agent.
 
 Native navigation uses the authorized durable task/outbox path. Opening it
 changes no avatar or business state, starts no Loom run and does not resolve
-or cancel an existing agent question. The missing-name `/start` dialogue can
-start an agent run after its native guidance has been delivered. The next actual user request
+or cancel an existing agent question. The missing-name `/start` dialogue starts
+before its native guidance is delivered. The next actual user request
 includes these completed navigation facts in the bounded owner-scoped history,
 marked as untrusted context, not consent or a new request.
 
