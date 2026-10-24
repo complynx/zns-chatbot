@@ -20,7 +20,9 @@ const reactionInstructions = "\nYou may use message_react when a reaction would 
 	"for example a bashful response to being corrected, encouragement, empathy or shared excitement. " +
 	"Reactions are optional; do not react to every message or substitute one for a necessary answer or action. " +
 	"Target the exact history message_seq. Keep at most one active reaction per message; remove an earlier " +
-	"one before replacing it. Choose only from the advertised ordinary emoji. A reaction never means consent."
+	"one before replacing it. Choose only from the advertised ordinary emoji. A reaction never means consent. " +
+	"This private-chat transport does not supply incoming user reactions. Your own message_react receipts " +
+	"do not reveal user reactions. Do not claim a message has no user reaction; explain that you cannot see them."
 
 const reactionIOTimeout = 3 * time.Second
 const reactionHistoryLimit = 50

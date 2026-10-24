@@ -156,6 +156,12 @@ outbound correction are separate acceptance from controlled transport tests.
 
 ## Optional message reactions
 
+This private-chat transport does not receive user reaction updates. Outgoing bot
+reaction receipts do not establish whether a user reacted to a message. The agent
+must state that it cannot see those reactions rather than report their absence.
+Telegram's [Bot API update contract](https://core.telegram.org/bots/api#update)
+requires chat administrator status and explicit subscription for reaction updates.
+
 New conversational runs advertise a bounded ordinary-emoji repertoire through
 Loom's `interaction.reactions.emoji`. The agent may use `message_react` when a
 human response would fit: encouragement, empathy, shared excitement or a bashful
