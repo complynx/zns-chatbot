@@ -1,0 +1,139 @@
+# All resources belong to --project-name from stand.py; no external network/volume.
+x-common: &common
+  labels: {zinusya.qa.owner: "${QA_OWNER:?Use stand.py}", zinusya.qa.kind: mock-tg}
+  restart: "no"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  stop_grace_period: 5s
+  memswap_limit: 256m
+  mem_limit: 256m
+  cpus: 1
+  pids_limit: 64
+services:
+  postgres:
+    <<: *common
+    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    read_only: false
+    cap_drop: []
+    environment: {POSTGRES_PASSWORD: "${QA_DB_PASSWORD}"}
+    volumes: ["pgdata:/var/lib/postgresql/data", "${QA_SOURCE}/deploy/shuttle/test/init.sql:/docker-entrypoint-initdb.d/10-test.sql:ro"]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    mem_limit: 512m
+    memswap_limit: 512m
+  zitadel:
+    <<: *common
+    image: "${QA_ZITADEL_IMAGE:-ghcr.io/zitadel/zitadel@sha256:f3738fd984131d3f02e386d37fa480d1a30e42b7d4202e2b322f12f7cf556b64}"
+    command: [start-from-init, --masterkey, "${QA_MASTERKEY}", --tlsMode, enabled]
+    ports: ["127.0.0.1:${QA_IAM_PORT}:8080"]
+    environment:
+      ZITADEL_TLS_CERTPATH: /tls/tls.crt
+      ZITADEL_TLS_KEYPATH: /tls/tls.key
+      ZITADEL_EXTERNALDOMAIN: "iam-${QA_NAME}.zinusya.localhost"
+      ZITADEL_EXTERNALPORT: "8080"
+      ZITADEL_EXTERNALSECURE: "true"
+      ZITADEL_DATABASE_POSTGRES_HOST: postgres
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: "${QA_DB_PASSWORD}"
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: postgres
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: "${QA_DB_PASSWORD}"
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: mock-admin
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: Mock QA Administrator
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2027-01-01T00:00:00Z"
+      ZITADEL_FIRSTINSTANCE_PATPATH: /data/admin.pat
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: "${QA_HUMAN_PASSWORD}"
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "false"
+    volumes: ["${QA_STATE}/data:/data", "${QA_STATE}/tls.crt:/tls/tls.crt:ro", "${QA_STATE}/tls.key:/tls/tls.key:ro"]
+    depends_on: {postgres: {condition: service_healthy}}
+    networks:
+      default: {aliases: ["iam-${QA_NAME}.zinusya.localhost"]}
+    mem_limit: 1g
+    memswap_limit: 1g
+    pids_limit: 128
+  telegram:
+    <<: *common
+    user: "1000:1000"
+    image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+    command: [python, -u, /mock/telegram_mock.py, --config, /state/mock.json]
+    ports: ["127.0.0.1:${QA_MOCK_PORT}:8080", "127.0.0.1:${QA_APP_PORT}:8443"]
+    volumes: ["${QA_SOURCE}/deploy/shuttle/mock_tg/telegram_mock.py:/mock/telegram_mock.py:ro", "${QA_STATE}/telegram:/state", "${QA_STATE}/tls.crt:/tls/tls.crt:ro", "${QA_STATE}/tls.key:/tls/tls.key:ro"]
+    networks:
+      default: {aliases: [telegram.zinusya.localhost]}
+    mem_limit: 128m
+    memswap_limit: 128m
+  provider:
+    <<: *common
+    user: "1000:1000"
+    image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+    command: [python, -u, /fixture/provider_main.py, --mailbox, /mailbox, --listen, "0.0.0.0", --port, "18089", --tls-cert, /tls/tls.crt, --tls-key, /tls/tls.key]
+    environment: {ZINUSYA_SYNTHETIC_COUNTED_QA: "1", ZINUSYA_COUNTED_QA_KEY: "${QA_PROVIDER_KEY}"}
+    volumes: ["${QA_SOURCE}/deploy/shuttle/test/counted_provider.py:/fixture/counted_provider.py:ro", "${QA_SOURCE}/deploy/shuttle/mock_tg/provider_main.py:/fixture/provider_main.py:ro", "${QA_STATE}/mailbox:/mailbox", "${QA_STATE}/tls.crt:/tls/tls.crt:ro", "${QA_STATE}/tls.key:/tls/tls.key:ro"]
+    networks:
+      default:
+        aliases: [provider.zinusya.localhost]
+    mem_limit: 128m
+    memswap_limit: 128m
+  docker-api-proxy:
+    <<: *common
+    image: "${QA_LOOM_IMAGE}"
+    user: "0:0"
+    command: [docker-proxy, --listen, ":2375", --socket, /var/run/docker.sock]
+    volumes: ["/var/run/docker.sock:/var/run/docker.sock:ro"]
+    mem_limit: 64m
+    memswap_limit: 64m
+  sandbox:
+    <<: *common
+    image: "${QA_LOOM_IMAGE}"
+    command: [sandbox-supervisor, --socket, /run/clx-sandbox/sandbox.sock, --max-workers, "2", --worker-executable, /usr/local/bin/loom, --cleanup-timeout, 100ms]
+    network_mode: none
+    volumes: ["sandbox:/run/clx-sandbox"]
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
+    mem_limit: 128m
+    memswap_limit: 128m
+    pids_limit: 128
+  file-worker:
+    <<: *common
+    image: "${QA_FILE_WORKER_IMAGE}"
+    user: "10001:10001"
+    network_mode: none
+    volumes: ["file-socket:/run/loom-files"]
+    tmpfs: ["/tmp:size=134217728,mode=1777,noexec,nosuid,nodev"]
+    mem_limit: 512m
+    memswap_limit: 512m
+    pids_limit: 128
+  loom:
+    <<: *common
+    image: "${QA_LOOM_IMAGE}"
+    command: [serve]
+    environment: {CLX_CONFIG: /etc/loom/config.yaml, CLX_DATABASE_DSN: "postgres://postgres:${QA_DB_PASSWORD}@postgres:5432/loom?sslmode=disable", SSL_CERT_FILE: /tls/ca-bundle.pem}
+    ports: ["127.0.0.1:${QA_LOOM_PORT}:8080"]
+    volumes: ["${QA_STATE}/loom.yaml:/etc/loom/config.yaml:ro", "${QA_STATE}/ca-bundle.pem:/tls/ca-bundle.pem:ro", "${QA_STATE}/auth.key:/run/secrets/auth.key:ro", "${QA_STATE}/mailbox:/mailbox", "sandbox:/run/clx-sandbox:ro", "artifacts:/data/artifacts", "file-socket:/run/loom-files:ro"]
+    depends_on: [postgres, zitadel, sandbox, docker-api-proxy, file-worker, provider]
+    mem_limit: 512m
+    memswap_limit: 512m
+    pids_limit: 128
+  shuttle:
+    <<: *common
+    image: "${QA_BOT_IMAGE}"
+    labels: {zinusya.qa.owner: "${QA_OWNER}", zinusya.qa.kind: mock-tg, clx.harness.service: "http://shuttle:9090/internal/agent/manifest"}
+    environment: {SSL_CERT_FILE: /tls/ca-bundle.pem}
+    ports: ["127.0.0.1:${QA_BOT_PORT}:8080", "127.0.0.1:${QA_INTERNAL_PORT}:9090"]
+    volumes: ["${QA_STATE}/shuttle.yaml:/etc/shuttle/config.yaml:ro", "${QA_STATE}/ca-bundle.pem:/tls/ca-bundle.pem:ro"]
+    depends_on: [postgres, zitadel, telegram]
+volumes:
+  pgdata: {labels: {zinusya.qa.owner: "${QA_OWNER}"}}
+  sandbox: {labels: {zinusya.qa.owner: "${QA_OWNER}"}}
+  artifacts: {labels: {zinusya.qa.owner: "${QA_OWNER}"}}
+  file-socket: {labels: {zinusya.qa.owner: "${QA_OWNER}"}}
+networks:
+  default: {labels: {zinusya.qa.owner: "${QA_OWNER}"}}
+
+# Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot developer
+# on behalf of Daniel Drizhuk

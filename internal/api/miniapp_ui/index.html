@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Зинуся</title>
+  <link rel="stylesheet" href="./app.css">
+  <link rel="stylesheet" href="./crop.css">
+  <script src="https://telegram.org/js/telegram-web-app.js?63" defer></script>
+  <script src="./pass-payments.js" defer></script>
+  <script src="./order-proof.js" defer></script>
+  <script src="./orders.js" defer></script>
+  <script src="./meals.js" defer></script>
+  <script src="./pairs.js" defer></script>
+  <script src="./avatars.js" defer></script>
+  <script src="./crop.js" defer></script>
+  <script src="./avatar-admin.js" defer></script>
+  <script src="./payment-reviews.js" defer></script>
+  <script src="./order-reviews.js" defer></script>
+  <script src="./massage.js" defer></script>
+  <script src="./massage-staff.js" defer></script>
+  <script src="./massage-admin.js" defer></script>
+  <script src="./assignments.js" defer></script>
+  <script src="./pair-assignments.js" defer></script>
+  <script src="./knowledge.js" defer></script>
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header>Зинуся</header>
+    <p id="status" role="status" aria-live="polite">Connecting…</p>
+    <p id="name" hidden></p>
+    <div class="actions">
+      <button id="retry" type="button" hidden>Retry</button>
+      <button id="logout" type="button" hidden>Sign out</button>
+    </div>
+    <section id="profile" hidden aria-labelledby="profile-title">
+      <h1 id="profile-title">My profile</h1>
+      <p id="profile-status" role="status" aria-live="polite"></p>
+      <form id="profile-form">
+        <label id="profile-first-name-label" for="profile-first-name">First name</label>
+        <input id="profile-first-name" name="first_name" autocomplete="given-name" maxlength="200" required>
+        <label id="profile-last-name-label" for="profile-last-name">Last name</label>
+        <input id="profile-last-name" name="last_name" autocomplete="family-name" maxlength="200" required>
+        <button id="profile-save-name" type="submit">Save name</button>
+      </form>
+      <label id="profile-language-label" for="profile-language">Bot language</label>
+      <select id="profile-language">
+        <option value="auto">Automatic</option><option value="en">English</option><option value="ru">Русский</option>
+      </select>
+      <div class="actions">
+        <button id="profile-save-language" type="button">Save language</button>
+        <button id="profile-refresh" type="button">Refresh profile</button>
+      </div>
+    </section>
+    <section id="details" hidden aria-labelledby="details-title">
+      <h1 id="details-title">Registration details</h1>
+      <p id="details-note">Saved values are hidden. Filling these fields does not register you for an event.</p>
+      <p id="details-status" role="status" aria-live="polite"></p>
+      <form id="details-name-form" autocomplete="off">
+        <label id="details-name-label" for="details-name">Legal full name</label>
+        <p id="details-name-presence"></p>
+        <input id="details-name" name="legal_name" aria-describedby="details-name-presence details-note" autocomplete="off" spellcheck="false" autocapitalize="off" maxlength="256" required>
+        <button id="details-save-name" type="submit">Save legal name</button>
+      </form>
+      <form id="details-passport-form" autocomplete="off">
+        <label id="details-passport-label" for="details-passport">Passport number</label>
+        <p id="details-passport-presence"></p>
+        <input id="details-passport" name="passport_number" aria-describedby="details-passport-presence details-note" autocomplete="off" spellcheck="false" autocapitalize="off" maxlength="128" required>
+        <button id="details-save-passport" type="submit">Save passport number</button>
+      </form>
+      <div class="actions">
+        <button id="details-refresh" type="button">Check saved status</button>
+      </div>
+    </section>
+    <section id="account" hidden aria-labelledby="account-title">
+      <h1 id="account-title">My registrations</h1>
+      <p id="account-status" role="status" aria-live="polite"></p>
+      <div id="account-events"></div>
+      <div class="actions">
+        <button id="account-retry" type="button">Refresh</button>
+        <button id="account-first" type="button" hidden>First page</button>
+        <button id="account-next" type="button" hidden>Next page</button>
+      </div>
+    </section>
+    <section id="pairs" hidden aria-labelledby="pairs-title">
+      <h1 id="pairs-title">Pair invitations</h1>
+      <p id="pairs-note"></p>
+      <p id="pairs-status" role="status" aria-live="polite"></p>
+      <p id="pairs-receipt"></p>
+      <p id="pairs-code-label"></p><p id="pairs-code"></p>
+      <h2 id="pairs-owned-title">Current pairs</h2>
+      <p id="pairs-owned-note">Leaving a pair does not cancel passes or change payments.</p>
+      <div id="pairs-owned-list"></div>
+      <div class="actions"><button id="pairs-owned-first" type="button">Refresh current pairs</button><button id="pairs-owned-next" type="button" hidden>Next pairs</button></div>
+      <label id="pairs-event-label" for="pairs-event">Event</label>
+      <select id="pairs-event"></select>
+      <div class="actions"><button id="pairs-events-first" type="button">First events</button><button id="pairs-events-next" type="button" hidden>More events</button></div>
+      <p id="pairs-context"></p>
+      <label id="pairs-target-label" for="pairs-target">Partner code</label>
+      <input id="pairs-target" autocomplete="off" spellcheck="false" maxlength="36">
+      <button id="pairs-invite" type="button">Send invitation</button>
+      <div class="actions"><button id="pairs-recover" type="button" hidden>Check earlier request</button><button id="pairs-retry" type="button" hidden>Retry the same request</button><button id="pairs-discard" type="button" hidden>Close rejected request</button></div>
+      <select id="pairs-direction" aria-label="Invitation direction"><option id="pairs-incoming" value="incoming">Received</option><option id="pairs-outgoing" value="outgoing">Sent</option></select>
+      <button id="pairs-refresh" type="button">Refresh invitations</button>
+      <div id="pairs-list"></div>
+      <div class="actions"><button id="pairs-first" type="button">First invitations</button><button id="pairs-next" type="button" hidden>Next invitations</button></div>
+    </section>
+    <section id="avatars" hidden aria-labelledby="avatars-title">
+      <h1 id="avatars-title">Avatar</h1>
+      <p id="avatars-note">Edit a shared draft. Saving does not send an avatar.</p>
+      <p id="avatars-status" role="status" aria-live="polite"></p>
+      <label id="avatars-file-label" for="avatars-file">JPEG or PNG, up to 20 MiB</label>
+      <input id="avatars-file" type="file" accept="image/jpeg,image/png">
+      <button id="avatars-upload" type="button">Upload a new original</button>
+      <p id="avatars-history-note">Imported attachments are checked when selected. Some may be unavailable or unsupported.</p>
+      <button id="avatars-history-list" type="button">Find imported attachments</button>
+      <label id="avatars-history-label" for="avatars-history">Imported attachment</label>
+      <select id="avatars-history"></select>
+      <img id="avatars-history-image" hidden alt="Imported photo preview" width="1024" height="1024">
+      <div class="actions">
+        <button id="avatars-history-preview" type="button">Preview photo</button>
+        <button id="avatars-history-import" type="button">Use this photo</button>
+        <button id="avatars-history-next" type="button" hidden>Next attachments</button>
+      </div>
+      <label id="avatars-draft-label" for="avatars-draft">Saved draft</label>
+      <select id="avatars-draft"></select>
+      <div id="avatars-editor" hidden>
+        <p id="avatars-local">Local approximation — drag the photo or use the fields.</p>
+        <canvas id="avatars-canvas" width="1024" height="1024" role="img" aria-label="Local avatar preview"></canvas>
+        <form id="avatars-form">
+          <label id="avatars-x-label" for="avatars-x">Horizontal offset (%)</label>
+          <input id="avatars-x" type="number" min="-6553600" max="6553600" step="0.0001" value="0" required>
+          <label id="avatars-y-label" for="avatars-y">Vertical offset (%)</label>
+          <input id="avatars-y" type="number" min="-6553600" max="6553600" step="0.0001" value="0" required>
+          <label id="avatars-zoom-label" for="avatars-zoom">Scale (%)</label>
+          <input id="avatars-zoom" type="number" min="25" max="800" step="0.0001" value="100" required>
+          <label id="avatars-angle-label" for="avatars-angle">Clockwise rotation (degrees)</label>
+          <input id="avatars-angle" type="number" min="-180" max="180" step="0.001" value="0" required>
+          <div class="actions">
+            <button id="avatars-reset" type="button">Reset crop</button>
+            <button id="avatars-save" type="submit">Save edits</button>
+          </div>
+        </form>
+        <button id="avatars-preview" type="button">Preview saved version</button>
+        <button id="avatars-generate" type="button">Generate and send</button>
+        <img id="avatars-saved-preview" hidden alt="Saved avatar preview" width="1024" height="1024">
+      </div>
+      <div class="actions">
+        <button id="avatars-reload" type="button">Reload saved state</button>
+        <button id="avatars-recover" type="button" hidden>Check earlier request</button>
+        <button id="avatars-retry" type="button" hidden>Retry the same request</button>
+      </div>
+      <label id="avatars-documents-label" for="avatars-documents">Created documents</label>
+      <select id="avatars-documents"></select>
+      <p id="avatars-document-status" role="status" aria-live="polite"></p>
+      <div class="actions">
+        <button id="avatars-refresh-documents" type="button">Refresh delivery status</button>
+        <button id="avatars-download" type="button">Download JPEG</button>
+      </div>
+    </section>
+    <section id="avatar-admin" hidden aria-labelledby="aa-title">
+      <h1 id="aa-title">Avatar delivery repair</h1>
+      <p id="aa-note"></p>
+      <p id="aa-status" role="status" aria-live="polite"></p>
+      <label id="aa-delivery-label" for="aa-delivery">Delivery UUID</label>
+      <input id="aa-delivery" type="text" maxlength="36" autocomplete="off" spellcheck="false">
+      <button id="aa-inspect" type="button">Read current delivery</button>
+      <div id="aa-current"></div>
+      <label id="aa-action-label" for="aa-action">Action</label><select id="aa-action"></select>
+      <label id="aa-reason-label" for="aa-reason">Reason</label>
+      <textarea id="aa-reason" maxlength="1024" rows="3"></textarea>
+      <button id="aa-prepare" type="button">Review exact change</button>
+      <div id="aa-preview"></div>
+      <div class="actions">
+        <button id="aa-confirm" type="button" hidden>Confirm this exact change</button>
+        <button id="aa-recover" type="button" hidden>Check earlier request</button>
+        <button id="aa-close" type="button" hidden>Close local preview</button>
+      </div>
+      <div id="aa-receipt"></div>
+      <h2 id="aa-pending-title">Unfinished proposals</h2><div id="aa-pending"></div>
+      <div class="actions">
+        <button id="aa-reload" type="button">Reload unfinished proposals</button>
+        <button id="aa-first" type="button" hidden>First page</button>
+        <button id="aa-next" type="button" hidden>Next page</button>
+      </div>
+    </section>
+    <section id="meals" hidden aria-labelledby="meals-title">
+      <h1 id="meals-title">Meals</h1>
+      <p id="meals-note">Saving a draft does not order food or confirm payment.</p>
+      <p id="meals-status" role="status" aria-live="polite"></p>
+      <label id="meals-event-label" for="meals-event">Event</label><select id="meals-event"></select>
+      <div class="actions"><button id="meals-first" type="button" hidden>First page</button><button id="meals-next" type="button" hidden>Next page</button></div>
+      <div id="meals-saved"></div>
+      <button id="meals-latest" type="button" hidden>Start a new draft with the current menu</button>
+      <form id="meals-form"><div id="meals-items"></div><div class="actions"><button id="meals-save" type="submit">Save meal draft</button><button id="meals-clear" type="button">Clear saved meal draft</button></div></form>
+      <div class="actions"><button id="meals-reload" type="button">Reload saved draft</button><button id="meals-recover" type="button" hidden>Check earlier save</button><button id="meals-retry" type="button" hidden>Retry the same save</button></div>
+      <button id="meals-prepare" type="button">Review order</button>
+      <div id="meals-preview"></div>
+      <button id="meals-confirm" type="button">Confirm this order</button>
+      <p id="meals-order-status" role="status" aria-live="polite"></p>
+      <div class="actions"><button id="meals-order-recover" type="button" hidden>Check earlier order request</button><button id="meals-order-retry" type="button" hidden>Retry same order request</button></div>
+      <h2 id="meals-submitted-title">My orders</h2>
+      <p id="meals-submitted-note">Submission does not confirm payment.</p>
+      <div class="actions"><button id="meals-submitted-reload" type="button">Reload orders</button><button id="meals-submitted-first" type="button" hidden>First orders</button><button id="meals-submitted-next" type="button" hidden>Next orders</button></div>
+      <div id="meals-submitted"></div>
+    </section>
+    <section id="orders" hidden aria-labelledby="orders-title">
+      <h1 id="orders-title">Saved selection</h1>
+      <p id="orders-note">This is a draft. Saving does not place an order or reserve items.</p>
+      <p id="orders-status" role="status" aria-live="polite"></p>
+      <label id="orders-event-label" for="orders-event">Event</label>
+      <select id="orders-event"></select>
+      <div class="actions">
+        <button id="orders-first" type="button" hidden>First page</button>
+        <button id="orders-next" type="button" hidden>Next page</button>
+      </div>
+      <p id="orders-receipt"></p>
+      <div id="orders-saved"></div>
+      <form id="orders-form">
+        <div id="orders-items"></div>
+        <p id="orders-quote" aria-live="polite"></p>
+        <div class="actions">
+          <button id="orders-calculate" type="button">Calculate current price</button>
+          <button id="orders-save" type="submit">Save selection</button>
+          <button id="orders-clear" type="button">Clear saved selection</button>
+        </div>
+      </form>
+      <div class="actions">
+        <button id="orders-reload" type="button">Reload saved selection</button>
+        <button id="orders-recover" type="button" hidden>Check earlier save</button>
+        <button id="orders-retry" type="button" hidden>Retry same save</button>
+      </div>
+      <div class="actions">
+        <button id="orders-prepare" type="button">Review order</button>
+      </div>
+      <div id="orders-preview" aria-live="polite"></div>
+      <button id="orders-confirm" type="button" disabled>Confirm this order</button>
+      <p id="orders-order-status" role="status" aria-live="polite"></p>
+      <div class="actions">
+        <button id="orders-order-recover" type="button" hidden>Check earlier order request</button>
+        <button id="orders-order-retry" type="button" hidden>Retry same order request</button>
+      </div>
+      <h2 id="orders-submitted-title">My orders</h2>
+      <p id="orders-submitted-note">Order submission alone does not confirm payment or reserve items. Check payment proofs for the current status.</p>
+      <div id="orders-submitted"></div>
+      <div class="actions">
+        <button id="orders-submitted-reload" type="button">Reload orders</button>
+        <button id="orders-submitted-first" type="button" hidden>First orders</button>
+        <button id="orders-submitted-next" type="button" hidden>Next orders</button>
+      </div>
+    </section>
+    <section id="pass-payments" hidden aria-labelledby="pp-title">
+      <h1 id="pp-title">Pass payment evidence</h1>
+      <p id="pp-note"></p><p id="pp-status" role="status" aria-live="polite"></p>
+      <label for="pp-targets">Pass</label><select id="pp-targets"></select>
+      <div class="actions"><button id="pp-targets-first" type="button" hidden>First passes</button><button id="pp-targets-next" type="button" hidden>Next passes</button><button id="pp-recent" type="button">Recent form submissions</button></div>
+      <div id="pp-recent-list"></div><div id="pp-target"></div><div id="pp-receipt" aria-live="polite"></div>
+      <div id="pp-history"></div><button id="pp-history-next" type="button" hidden>More evidence</button>
+      <p id="pp-preview-info" role="status" aria-live="polite"></p>
+      <form id="pp-form">
+        <label id="pp-file-label" for="pp-file">Accepted Telegram file</label><select id="pp-file"></select>
+        <div class="actions"><button id="pp-files-first" type="button" hidden>First files</button><button id="pp-files-next" type="button" hidden>Next files</button><button id="pp-preview" type="button">Load selected file</button><a id="pp-download" download hidden>Download loaded file</a></div>
+        <label id="pp-amount-label" for="pp-amount">Reported amount</label><input id="pp-amount" type="text" inputmode="decimal" maxlength="24" autocomplete="off">
+        <label id="pp-purpose-label" for="pp-purpose">Purpose</label><select id="pp-purpose"><option value="">Choose…</option><option id="pp-initial" value="initial">Initial payment / deposit</option><option id="pp-top_up" value="top_up">Top-up</option></select>
+        <button id="pp-submit" type="submit">Share evidence for review</button>
+      </form>
+      <div class="actions"><button id="pp-reload" type="button">Reload pass and evidence</button><button id="pp-recover" type="button" hidden>Check earlier request</button><button id="pp-retry" type="button" hidden>Retry the exact same request</button></div>
+    </section>
+    <section id="order-proof" hidden aria-labelledby="op-title">
+      <h1 id="op-title">Order payment proof</h1>
+      <p id="op-note">Send the file to this Telegram bot first, then select it here. Only an ambassador can confirm payment.</p>
+      <p id="op-status" role="status" aria-live="polite"></p>
+      <div id="op-target"></div>
+      <div id="op-receipt" aria-live="polite"></div>
+      <div id="op-history"></div>
+      <button id="op-history-next" type="button" hidden>More proofs</button>
+      <p id="op-preview-info" role="status" aria-live="polite"></p>
+      <form id="op-form">
+        <label id="op-file-label" for="op-file">Accepted file</label>
+        <select id="op-file"></select>
+        <div class="actions">
+          <button id="op-files-first" type="button" hidden>First files</button>
+          <button id="op-files-next" type="button" hidden>Next files</button>
+          <button id="op-preview" type="button">Load selected file</button>
+          <a id="op-download" download hidden>Download selected file</a>
+        </div>
+        <label id="op-amount-label" for="op-amount">Reported amount</label>
+        <input id="op-amount" type="text" inputmode="decimal" maxlength="24" autocomplete="off">
+        <button id="op-submit" type="submit">Send proof for review</button>
+      </form>
+      <div class="actions">
+        <button id="op-reload" type="button">Reload order and proofs</button>
+        <button id="op-recover" type="button" hidden>Check earlier request</button>
+        <button id="op-retry" type="button" hidden>Retry the same request</button>
+      </div>
+    </section>
+    <section id="order-review" hidden aria-labelledby="or-title">
+      <h1 id="or-title">Order payment reviews</h1>
+      <p id="or-note">Inspect the proof and the full saved decision before confirming.</p>
+      <p id="or-status" role="status" aria-live="polite"></p>
+      <label id="or-event-label" for="or-event">Event</label>
+      <select id="or-event"></select>
+      <div class="actions">
+        <button id="or-event-first" type="button" hidden>First events</button>
+        <button id="or-event-next" type="button" hidden>Next events</button>
+      </div>
+      <label id="or-evidence-label" for="or-evidence">Payment proof</label>
+      <select id="or-evidence"></select>
+      <div class="actions">
+        <button id="or-evidence-first" type="button" hidden>First proofs</button>
+        <button id="or-evidence-next" type="button" hidden>Next proofs</button>
+      </div>
+      <div id="or-detail"></div>
+      <button id="or-proof" type="button" disabled>Load proof</button>
+      <a id="or-download" hidden download>Download loaded proof</a>
+      <form id="or-form" hidden>
+        <label id="or-decision-label" for="or-decision">Decision</label>
+        <select id="or-decision"><option value="confirmed">Confirm payment</option><option value="rejected">Reject proof</option></select>
+        <label id="or-reason-label" for="or-reason">Reason</label>
+        <textarea id="or-reason" maxlength="512" rows="3" required></textarea>
+        <button id="or-save" type="submit">Prepare decision</button>
+      </form>
+      <div id="or-preview"></div>
+      <div id="or-receipt" aria-live="polite"></div>
+      <div class="actions">
+        <button id="or-confirm" type="button" disabled>Confirm saved decision</button>
+        <button id="or-cancel" type="button" disabled>Cancel saved decision</button>
+        <button id="or-reload" type="button">Reload current state</button>
+        <button id="or-recover" type="button" hidden>Check earlier request</button>
+        <button id="or-retry" type="button" hidden>Retry same request</button>
+      </div>
+    </section>
+    <section id="payment-review" hidden aria-labelledby="pr-title">
+      <h1 id="pr-title">Payment reviews</h1>
+      <p id="pr-note">Preparing a decision does not confirm money. Confirm only after inspecting the proof.</p>
+      <p id="pr-status" role="status" aria-live="polite"></p>
+      <label id="pr-event-label" for="pr-event">Event</label>
+      <select id="pr-event"></select>
+      <div class="actions">
+        <button id="pr-first" type="button" hidden>First events</button>
+        <button id="pr-next" type="button" hidden>Next events</button>
+      </div>
+      <label id="pr-evidence-label" for="pr-evidence">Payment proof</label>
+      <select id="pr-evidence"></select>
+      <div class="actions">
+        <button id="pr-evidence-first" type="button" hidden>First proofs</button>
+        <button id="pr-evidence-next" type="button" hidden>Next proofs</button>
+      </div>
+      <div id="pr-detail"></div>
+      <button id="pr-proof" type="button" disabled>Load proof</button>
+      <a id="pr-download" hidden download="payment-proof">Download proof</a>
+      <form id="pr-form" hidden>
+        <label id="pr-decision-label" for="pr-decision">Decision</label>
+        <select id="pr-decision"><option value="confirmed">Confirm payment</option><option value="rejected">Reject proof</option></select>
+        <label id="pr-amount-label" for="pr-amount">Amount to credit</label>
+        <input id="pr-amount" inputmode="decimal" autocomplete="off">
+        <label id="pr-reason-label" for="pr-reason">Reason</label>
+        <textarea id="pr-reason" maxlength="512" rows="3"></textarea>
+        <button id="pr-save" type="submit">Prepare decision</button>
+      </form>
+      <div id="pr-preview"></div>
+      <p id="pr-receipt" aria-live="polite"></p>
+      <div class="actions">
+        <button id="pr-confirm" type="button" disabled>Confirm saved decision</button>
+        <button id="pr-cancel" type="button" disabled>Cancel saved decision</button>
+        <button id="pr-reload" type="button">Reload current state</button>
+        <button id="pr-recover" type="button" hidden>Check earlier request</button>
+        <button id="pr-retry" type="button" hidden>Retry same request</button>
+      </div>
+    </section>
+    <section id="massage" hidden aria-labelledby="massage-title">
+      <h1 id="massage-title">Massage</h1>
+      <p id="massage-note"></p>
+      <p id="massage-status" role="status" aria-live="polite"></p>
+      <label id="massage-event-label" for="massage-event">Event</label>
+      <select id="massage-event"></select>
+      <div class="actions"><button id="massage-events-first" type="button" hidden>First events</button><button id="massage-events-next" type="button" hidden>Next events</button></div>
+      <div id="massage-choices"></div>
+      <div class="actions"><button id="massage-choices-first" type="button" hidden>First choices</button><button id="massage-choices-next" type="button" hidden>Next choices</button></div>
+      <div id="massage-selection">
+      <label id="massage-window-label" for="massage-window">Party</label><select id="massage-window"></select>
+      <label id="massage-specialist-label" for="massage-specialist">Specialist</label><select id="massage-specialist"></select>
+      <label id="massage-service-label" for="massage-service">Service</label><select id="massage-service"></select>
+      <p id="massage-range"></p>
+      <div class="actions"><button id="massage-range-prev" type="button" hidden>Earlier times</button><button id="massage-range-next" type="button" hidden>Later times</button></div>
+      <div id="massage-slots"></div>
+      <div class="actions"><button id="massage-slots-first" type="button" hidden>First slots</button><button id="massage-slots-next" type="button" hidden>Next slots</button></div>
+      </div>
+      <div id="massage-preview"></div>
+      <p id="massage-receipt" role="status" aria-live="polite"></p>
+      <div class="actions">
+        <button id="massage-confirm" type="button" hidden>Confirm this action</button><button id="massage-discard" type="button" hidden>Discard preview</button>
+        <button id="massage-recover" type="button" hidden>Check earlier request</button><button id="massage-retry" type="button" hidden>Retry the same request</button>
+        <button id="massage-reload" type="button">Reload current state</button>
+      </div>
+      <div id="massage-history"></div>
+      <div class="actions"><button id="massage-history-first" type="button" hidden>First bookings</button><button id="massage-history-next" type="button" hidden>Next bookings</button></div>
+    </section>
+    <noscript>JavaScript is required to sign in through Telegram.</noscript>
+    <section id="massage-staff" hidden aria-labelledby="ms-title">
+      <h1 id="ms-title">Specialist timetable</h1>
+      <p id="ms-status" role="status" aria-live="polite"></p>
+      <label id="ms-event-label" for="ms-event">Event</label><select id="ms-event"></select>
+      <div class="actions"><button id="ms-events-first" type="button" hidden>First events</button><button id="ms-events-next" type="button" hidden>Next events</button></div>
+      <label id="ms-window-label" for="ms-window">Party</label><select id="ms-window"></select>
+      <div class="actions"><button id="ms-windows-first" type="button" hidden>First parties</button><button id="ms-windows-next" type="button" hidden>Next parties</button></div>
+      <label id="ms-filter-label" for="ms-filter">Show</label><select id="ms-filter"></select>
+      <p id="ms-range"></p>
+      <div class="actions"><button id="ms-range-prev" type="button" hidden>Earlier times</button><button id="ms-range-next" type="button" hidden>Later times</button></div>
+      <div id="ms-rows"></div>
+      <div class="actions"><button id="ms-rows-first" type="button" hidden>First bookings</button><button id="ms-rows-next" type="button" hidden>Next bookings</button></div>
+      <div id="ms-detail"></div>
+      <h2 id="ms-instant-title">My specialist time</h2><p id="ms-instant-note"></p>
+      <label id="ms-instant-specialist-label" for="ms-instant-specialist">Specialist</label><select id="ms-instant-specialist"></select>
+      <label id="ms-instant-service-label" for="ms-instant-service">Service</label><select id="ms-instant-service"></select>
+      <div class="actions"><button id="ms-instant-prepare" type="button">Review my time reservation</button><button id="ms-own-bookings" type="button">My bookings and unfinished choices</button></div>
+      <p id="ms-preference-note"></p>
+      <label><input id="ms-notify" type="checkbox"><span id="ms-notify-label">Notify me about bookings and cancellations</span></label>
+      <label><input id="ms-notify-next" type="checkbox"><span id="ms-notify-next-label">Remind me about upcoming sessions</span></label>
+      <p id="ms-preference-status" role="status" aria-live="polite"></p>
+      <div class="actions"><button id="ms-preference-save" type="button">Save notifications</button><button id="ms-preference-reload" type="button">Reload notification setting</button><button id="ms-preference-recover" type="button" hidden>Check earlier save</button><button id="ms-preference-retry" type="button" hidden>Retry the same save</button></div>
+      <div class="actions"><button id="ms-reload" type="button">Reload specialist access</button></div>
+    </section>
+    <section id="massage-admin" hidden aria-labelledby="ma-title">
+      <h1 id="ma-title">Massage specialist access</h1><p id="ma-note"></p><p id="ma-status" role="status" aria-live="polite"></p>
+      <label id="ma-event-label" for="ma-event">Event</label><select id="ma-event"></select>
+      <div class="actions"><button id="ma-events-first" type="button" hidden>First events</button><button id="ma-events-next" type="button" hidden>Next events</button></div>
+      <label id="ma-alias-label" for="ma-alias">Specialist</label><select id="ma-alias"></select>
+      <div class="actions"><button id="ma-bindings-first" type="button" hidden>First bindings</button><button id="ma-bindings-next" type="button" hidden>Next bindings</button></div>
+      <p id="ma-current"></p><label id="ma-lookup-label" for="ma-lookup">Known account UUID or Telegram user ID</label><input id="ma-lookup" type="text" autocomplete="off" maxlength="36">
+      <button id="ma-lookup-button" type="button">Find this account</button><p id="ma-target"></p>
+      <label id="ma-action-label" for="ma-action">Action</label><select id="ma-action"></select>
+      <button id="ma-prepare" type="button">Review access change</button><div id="ma-preview"></div>
+      <div class="actions"><button id="ma-confirm" type="button" hidden>Confirm this exact change</button><button id="ma-close" type="button" hidden>Close local preview</button><button id="ma-recover" type="button" hidden>Check earlier request</button><button id="ma-retry" type="button" hidden>Retry the same request</button></div>
+      <div id="ma-receipt" aria-live="polite"></div><div id="ma-choices"></div>
+      <div class="actions"><button id="ma-choices-first" type="button" hidden>First unfinished choices</button><button id="ma-choices-next" type="button" hidden>Next unfinished choices</button></div>
+      <button id="ma-reload" type="button">Reload current state</button>
+    </section>
+    <section id="pass-assignments" hidden aria-labelledby="pa-title">
+      <h1 id="pa-title">Assign a solo pass</h1><p id="pa-note"></p><p id="pa-status" role="status" aria-live="polite"></p>
+      <label id="pa-event-label" for="pa-event">Event</label><select id="pa-event"></select>
+      <div class="actions"><button id="pa-events-first" type="button" hidden>First events</button><button id="pa-events-next" type="button" hidden>Next events</button></div>
+      <label id="pa-target-label" for="pa-target">Participant</label><select id="pa-target"></select>
+      <div class="actions"><button id="pa-targets-first" type="button">Refresh participants</button><button id="pa-targets-next" type="button" hidden>Next participants</button></div>
+      <button id="pa-prepare" type="button">Review pass assignment</button><div id="pa-preview"></div>
+      <label><input id="pa-consent" type="checkbox" hidden><span id="pa-consent-label" hidden>I approve this exact pass assignment and its terms</span></label>
+      <div class="actions"><button id="pa-confirm" type="button" hidden>Assign this pass</button><button id="pa-close" type="button" hidden>Close local preview</button><button id="pa-recover" type="button" hidden>Check earlier request</button><button id="pa-retry" type="button" hidden>Retry the same preparation</button></div>
+      <div id="pa-receipt" aria-live="polite"></div><h2 id="pa-pending-title">Unfinished assignments</h2><div id="pa-pending"></div>
+      <div class="actions"><button id="pa-reload" type="button">Reload unfinished assignments</button><button id="pa-recent" type="button">Recent form operations</button><button id="pa-first" type="button" hidden>First proposals</button><button id="pa-next" type="button" hidden>Next proposals</button></div>
+    </section>
+    <section id="pair-assignments" hidden aria-labelledby="ppa-title">
+      <h1 id="ppa-title">Assign passes to a pair</h1><p id="ppa-note"></p><p id="ppa-status" role="status" aria-live="polite"></p>
+      <label id="ppa-event-label" for="ppa-event">Event</label><select id="ppa-event"></select>
+      <div class="actions"><button id="ppa-events-first" type="button">Refresh events</button><button id="ppa-events-next" type="button" hidden>Next events</button></div>
+      <label id="ppa-target-label" for="ppa-target">Pair</label><select id="ppa-target"></select>
+      <div class="actions"><button id="ppa-targets-first" type="button">Refresh pairs</button><button id="ppa-targets-next" type="button" hidden>Next pairs</button></div>
+      <button id="ppa-prepare" type="button">Review pair assignment</button><div id="ppa-preview"></div>
+      <label><input id="ppa-consent" type="checkbox" hidden><span id="ppa-consent-label" hidden>I approve this exact pair assignment and its terms</span></label>
+      <div class="actions"><button id="ppa-confirm" type="button" hidden>Assign both passes</button><button id="ppa-close" type="button" hidden>Close local preview</button><button id="ppa-recover" type="button" hidden>Check earlier request</button><button id="ppa-retry" type="button" hidden>Retry the same preparation</button></div>
+      <div id="ppa-receipt" aria-live="polite"></div><h2 id="ppa-pending-title">Unfinished assignments</h2><div id="ppa-pending"></div>
+      <div class="actions"><button id="ppa-reload" type="button">Reload unfinished assignments</button><button id="ppa-recent" type="button">Recent form operations</button><button id="ppa-first" type="button" hidden>First proposals</button><button id="ppa-next" type="button" hidden>Next proposals</button></div>
+    </section>
+  <section id="knowledge" hidden aria-labelledby="kb-heading">
+  <h1 id="kb-heading">Knowledge</h1><p id="kb-status" role="status" aria-live="polite"></p>
+  <label id="kb-collection-label" for="kb-collection">Collection</label><select id="kb-collection"></select>
+  <label id="kb-query-label" for="kb-query">Search</label><input id="kb-query" type="search" maxlength="256">
+  <div class="actions"><button id="kb-search" type="button">Search / browse</button><button id="kb-next" type="button" hidden>Next page</button><button id="kb-new" type="button">Suggest a new article</button><button id="kb-new-edit" type="button" hidden>Create an article</button></div>
+  <button id="kb-events-next" type="button" hidden>More events</button><p id="kb-discovery-note"></p><button id="kb-recent" type="button">Recent requests</button><div id="kb-recent-list"></div><div id="kb-results"></div>
+  <article id="kb-article" hidden><h2 id="kb-title"></h2><p id="kb-provenance"></p><pre id="kb-body"></pre><div id="kb-sources"></div>
+    <div class="actions"><button id="kb-current" type="button">Current revision</button><button id="kb-history" type="button">Revision history</button><button id="kb-history-next" type="button" hidden>Older revisions</button><button id="kb-correct" type="button">Suggest a correction</button><button id="kb-edit" type="button" hidden>Edit article</button></div><div id="kb-revisions"></div>
+  </article>
+  <div id="kb-editor" hidden>
+    <h2 id="kb-editor-title">Article change</h2>
+    <label id="kb-slug-label" for="kb-slug">Short name</label><input id="kb-slug" maxlength="100" autocomplete="off">
+    <label id="kb-name-label" for="kb-name">Title</label><input id="kb-name" maxlength="200">
+    <label id="kb-language-label" for="kb-language">Article language</label><select id="kb-language"><option value="en">English</option><option value="ru">Русский</option></select>
+    <label id="kb-topics-label" for="kb-topics">Topics, one per line</label><textarea id="kb-topics" rows="3"></textarea>
+    <label id="kb-text-label" for="kb-text">Article text (Markdown)</label><textarea id="kb-text" rows="14"></textarea>
+    <h2 id="kb-sources-heading">Sources</h2><div id="kb-source-inputs"></div><button id="kb-source-add" type="button">Add source</button>
+    <label id="kb-reason-label" for="kb-reason">Reason for change</label><textarea id="kb-reason" rows="3" maxlength="1000"></textarea>
+    <div class="actions"><button id="kb-prepare" type="button">Review this change</button><button id="kb-editor-close" type="button">Close editor</button></div>
+  </div>
+  <h2 id="kb-suggestions-heading">Suggested changes</h2>
+  <div class="actions"><button id="kb-mine" type="button">My suggestions and decisions</button><button id="kb-pending" type="button" hidden>Review pending suggestions</button><button id="kb-suggestions-next" type="button" hidden>Next suggestions</button></div>
+  <div id="kb-suggestions"></div><article id="kb-suggestion" hidden></article>
+  <div id="kb-review" hidden><label id="kb-review-reason-label" for="kb-review-reason">Decision reason</label><textarea id="kb-review-reason" rows="3" maxlength="1000"></textarea><div class="actions"><button id="kb-approve" type="button">Review approval</button><button id="kb-reject" type="button">Review rejection</button></div></div>
+  <section id="kb-moderators" hidden aria-labelledby="kb-moderators-heading">
+    <h2 id="kb-moderators-heading">Knowledge moderators</h2><p id="kb-moderators-note"></p>
+    <div class="actions"><button id="kb-moderators-reload" type="button">Load assignments</button><button id="kb-moderators-next" type="button" hidden>More assignments</button><button id="kb-moderator-new" type="button">New assignment</button></div>
+    <div id="kb-moderators-list"></div>
+    <label id="kb-moderator-user-label" for="kb-moderator-user">User code</label><input id="kb-moderator-user" maxlength="36" autocomplete="off"><p id="kb-moderator-version"></p>
+    <label><input id="kb-moderator-enabled" type="checkbox"><span id="kb-moderator-enabled-label">Allow knowledge moderation</span></label>
+    <label id="kb-moderator-reason-label" for="kb-moderator-reason">Reason for access change</label><textarea id="kb-moderator-reason" rows="3" maxlength="1000"></textarea>
+    <button id="kb-moderator-prepare" type="button">Review access change</button>
+  </section>
+  <div id="kb-preview"></div>
+  <label id="kb-consent-wrap" hidden><input id="kb-consent" type="checkbox"><span id="kb-consent-label">I confirm this exact change</span></label>
+  <div class="actions"><button id="kb-confirm" type="button" hidden>Confirm this change</button><button id="kb-recover" type="button" hidden>Check earlier request</button><button id="kb-retry" type="button" hidden>Retry the same preparation</button><button id="kb-close-expired" type="button" hidden>Close the expired request</button></div><div id="kb-receipt" aria-live="polite"></div>
+</section>
+
+  </main>
+  <section id="avatar-crop" hidden aria-label="Avatar crop">
+    <canvas id="crop-canvas"></canvas>
+    <div class="crop-help"><p id="crop-help"></p><p id="crop-status" role="status" aria-live="polite"></p></div>
+    <div class="crop-actions">
+      <button id="crop-recover" type="button" hidden>Check earlier request</button>
+      <button id="crop-retry" type="button" hidden>Retry the same request</button>
+    </div>
+  </section>
+</body>
+</html>
+

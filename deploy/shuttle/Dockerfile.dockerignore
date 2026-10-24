@@ -1,0 +1,9 @@
+**
+!go.mod
+!go.sum
+!cmd/**
+!internal/**
+!migrations/**
+!LICENSE
+!deploy/shuttle/licenses/dependencies/**
+!deploy/shuttle/licenses/avatars/**

@@ -1,0 +1,35 @@
+# Owned test runtime. Web Login credentials are distinct from the Bot API token.
+listen: ":8080"
+log_level: info
+public_url: "https://host.docker.internal:18443/tg"
+issuer: "https://host.docker.internal:18443/tg"
+email_domain: telegram.invalid
+synthetic_email_verified: true
+state_ttl: 10m
+zitadel:
+  jwt_endpoint: "https://host.docker.internal:18443/ui/login/login/jwt/authorize"
+  jwt_header: x-telegram-idp-jwt
+  user_agent_cookie: __Host-zitadel.useragent
+  redirect_origins: ["https://app.zinusya.localhost:18444"]
+  allow_any_redirect_origin: false
+jwt:
+  ttl: 2m
+  key_id: zinusya-owned-test-1
+  private_key_file: /data/zitadeltg-rsa.pem
+telegram:
+  issuer: "https://oauth.telegram.org"
+  jwks_url: "https://oauth.telegram.org/.well-known/jwks.json"
+  jwks_cache_ttl: 1h
+  clock_skew: 30s
+proxy:
+  trusted_cidrs: ["172.29.253.2/32"]
+  secure_cookies: true
+rate_limit:
+  login: {requests: 60, window: 1m}
+  auth: {requests: 20, window: 1m}
+bots:
+  - token: "${ZITADELTG_WEB_LOGIN_TOKEN}"
+    name: complynx_test_bot
+    write: false
+    phone: false
+    lang: en

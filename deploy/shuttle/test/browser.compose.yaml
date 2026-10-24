@@ -1,0 +1,38 @@
+# Opt-in owned browser ingress. See browser.md before moving the IAM port.
+services:
+  browser-gateway:
+    profiles: [browser]
+    image: traefik:v3.6.25@sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d
+    user: "1000:1000"
+    command: [--configFile=/etc/traefik/browser.yaml]
+    ports:
+      - "127.0.0.1:${TEST_BROWSER_IAM_PORT:-18443}:18443"
+      - "127.0.0.1:18444:18444"
+    volumes:
+      - ./browser.yaml:/etc/traefik/browser.yaml:ro
+      - ./browser-routes.yaml:/etc/traefik/browser-routes.yaml:ro
+      - ../../../.cache/shuttle-live-test/tls.crt:/tls/tls.crt:ro
+      - ../../../.cache/shuttle-live-test/tls.key:/tls/tls.key:ro
+      - ../../../.cache/shuttle-live-test/ca-bundle.pem:/tls/ca-bundle.pem:ro
+    networks:
+      default: {}
+      browser:
+        ipv4_address: 172.29.253.2
+        aliases: [host.docker.internal, identity.zinusya.localhost]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    memswap_limit: 128m
+    cpus: 1
+    pids_limit: 64
+    environment: {GOMEMLIMIT: 96MiB, GOMAXPROCS: "2"}
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
+    stop_grace_period: 5s
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "2"}
+networks:
+  browser:
+    ipam:
+      config: [{subnet: 172.29.253.0/28}]
