@@ -24,6 +24,7 @@ import (
 var errControlTargetFinished = errors.New("control target finished without applying input")
 
 type checkpoint struct {
+	ReactionChatID         string                 `json:"reaction_chat_id,omitempty"`
 	WelcomeAfterOnboarding bool                   `json:"welcome_after_onboarding,omitempty"`
 	NativeAvatar           *db.AvatarDraftReceipt `json:"native_avatar,omitempty"`
 	KeyboardRevision       int64                  `json:"keyboard_revision,omitempty"`
@@ -335,10 +336,7 @@ func (s *Service) advanceRun(ctx context.Context, t *db.Task, c checkpoint, i in
 	var run loom.Run
 	var err error
 	if t.RunID == "" {
-		if err = s.prepareCreate(ctx, t, &c, i); err != nil {
-			return s.wait()
-		}
-		run, err = s.loom.CreateRun(ctx, auth, t.ID.String(), *c.Create)
+		run, err = s.createLoomRun(ctx, t, &c, i, auth)
 	} else {
 		run, err = s.loom.GetRun(ctx, auth, t.RunID)
 	}
@@ -347,6 +345,9 @@ func (s *Service) advanceRun(ctx context.Context, t *db.Task, c checkpoint, i in
 	}
 	if run.AuthSessionID != "" && run.AuthSessionID != t.AuthSessionID {
 		return s.finish(ctx, t, c, i, stateFailed, "denied")
+	}
+	if err = s.registerRunReactions(ctx, t, &c, run); err != nil {
+		return s.wait()
 	}
 	if run.Status == "paused" && run.Reason == "shutdown" {
 		return s.resumeShutdown(ctx, t, c, i, auth, run)

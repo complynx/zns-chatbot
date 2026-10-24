@@ -1,10 +1,12 @@
 # Shuttle roadmap
 
-Shuttle is the standalone Go implementation of zns-chatbot / Зинуся. The [specification](shuttle-spec.md) defines the target behavior; the [architecture](shuttle-architecture.md) defines ownership. The application uses the consolidated [schema74 baseline](shuttle-schema.md).
+Shuttle is the standalone Go implementation of zns-chatbot / Зинуся. The [specification](shuttle-spec.md) defines the target behavior; the [architecture](shuttle-architecture.md) defines ownership. The application uses the consolidated [schema76 baseline](shuttle-schema.md).
 
 ## Current scope
 
 The source includes identity and profile entry, durable task routing and recovery, registration and pair/pass workflows, payment evidence and human review, service orders, meals, massage, avatars, knowledge and historical account import. These features use shared native and agent business operations. Bounded acceptance exists for these paths; it does not establish every role, contention window or external-service failure combination.
+
+[Sticker and custom emoji descriptions](shuttle-symbols.md) add active reaction input, a bounded popularity catalog and a separate serial visual-description worker. Optional bot reactions use exact message receipts and independent delivery recovery. New conversational runs require the Loom output-policy capability for same-run custom emoji rejection and correction. Native descriptor isolation remains blocked by Loom issue 44; full animation-description acceptance is incomplete. Controlled consumer tests do not replace actual-model acceptance.
 
 Controlled orchestration and actual-model, browser, Telegram and provider observations retain separate scopes. A successful local path does not itself authorize release or establish production readiness. Detailed run evidence and installation configuration are maintained outside tracked product documentation.
 

@@ -10,8 +10,10 @@ credentials or Telegram file IDs.
 Supported primary message forms are photo, document, audio, voice, video,
 video note and animation. Photos select the largest area variant, independent of
 array order. Telegram's animation/document compatibility alias creates one
-reference. Unsupported stickers and other unsupported message forms keep the
-existing error path. Custom emoji keep their ordinary Unicode text fallback.
+reference. Stickers and custom emoji use the separate
+[visual-description catalog](shuttle-symbols.md), not the photo/avatar path or
+their unrelated Unicode fallback. Other unsupported message forms keep the
+existing error path.
 The agent decides whether content is payment evidence, avatar or casual media;
 no business classification is inferred from a menu or old waiting context.
 

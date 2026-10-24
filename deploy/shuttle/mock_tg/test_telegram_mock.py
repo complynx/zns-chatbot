@@ -149,6 +149,43 @@ class MockTest(unittest.TestCase):
     def state(self):
         return self.call('/qa/state')[1]
 
+    def test_symbol_reads_return_exact_registered_originals_and_ordered_set(self):
+        items = []
+        for index, (animated, video) in enumerate(((False, False), (True, False), (False, True)), 1):
+            file_id = 'original-' + str(index)
+            self.qa('file', {'file_id': file_id, 'name': file_id, 'data_base64': 'c3ludGhldGlj'})
+            items.append({'file_id': file_id, 'file_unique_id': 'unique-' + str(index),
+                          'type': 'custom_emoji', 'set_name': 'Composition_set', 'custom_emoji_id': str(index),
+                          'width': 100, 'height': 100, 'is_animated': animated, 'is_video': video})
+        value = {'name': 'Composition_set', 'title': 'Composed symbol fixtures',
+                 'sticker_type': 'custom_emoji', 'stickers': items}
+        self.qa('sticker_set', value)
+        self.assertEqual(self.bot('getStickerSet', {'name': 'Composition_set'}), value)
+        self.assertEqual(self.bot('getCustomEmojiStickers', {'custom_emoji_ids': ['3', '1']}), [items[2], items[0]])
+        self.assertEqual(self.bot('getCustomEmojiStickers', {'custom_emoji_ids': '["2"]'}), [items[1]])
+        status, _ = self.call('/bot' + self.config['token'] + '/getStickerSet', {'name': 'missing'})
+        self.assertEqual(status, 400)
+        for bad in ([], [1], ['invalid'], ['1'] * 201):
+            status, _ = self.call('/bot' + self.config['token'] + '/getCustomEmojiStickers',
+                                  {'custom_emoji_ids': bad})
+            self.assertEqual(status, 400)
+
+    def test_reactions_replace_remove_and_reject_invalid_without_mutating_message(self):
+        message = self.bot('sendMessage', {'chat_id': 101, 'text': 'Reaction target'})
+        target = {'chat_id': 101, 'message_id': message['message_id']}
+        for emoji in ('👍', '🙈'):
+            self.assertTrue(self.bot('setMessageReaction', dict(target,
+                reaction=[{'type': 'emoji', 'emoji': emoji}])))
+        self.assertTrue(self.bot('setMessageReaction', dict(target, reaction=[])))
+        for reactions in (None, {}, [{'type': 'paid'}], [{'type': 'custom_emoji', 'custom_emoji_id': '1'}],
+                          [{'type': 'emoji', 'emoji': 'not-emoji'}],
+                          [{'type': 'emoji', 'emoji': '👍'}, {'type': 'emoji', 'emoji': '🙈'}]):
+            status, _ = self.call('/bot' + self.config['token'] + '/setMessageReaction',
+                                  dict(target, reaction=reactions))
+            self.assertEqual(status, 400)
+        self.assertEqual(self.state()['messages'], [message])
+        self.assertEqual(len([e for e in self.state()['journal'] if e['kind'] == 'message_reaction']), 3)
+
     def test_invalid_keyboard_arrays_are_rejected_without_message_effects(self):
         self.qa('file', {'file_id': 'keyboard-file', 'name': 'qa.txt', 'mime_type': 'text/plain',
                          'data_base64': base64.b64encode(b'synthetic keyboard test').decode()})

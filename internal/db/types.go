@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/complynx/zns-chatbot/internal/files"
+	"github.com/complynx/zns-chatbot/internal/symbols"
 )
 
 var (
@@ -17,6 +18,7 @@ var (
 )
 
 type IntakeRequest struct {
+	Symbols                                 []symbols.Occurrence
 	Attachments                             []files.Incoming
 	BotID, UpdateID, TelegramUserID, ChatID int64
 	Profile, Payload                        json.RawMessage
@@ -61,6 +63,14 @@ type DeliveryReceipt struct {
 	ResponseElapsedSeconds *float64
 }
 type Settings struct {
+	// Zero selects 5000 entries per catalog, a 30-day sparse-data fallback and
+	// median multiplier 1 bounded to one hour through 180 days.
+	StickerCatalogLimit      int     `json:"sticker_catalog_limit,omitempty"`
+	EmojiCatalogLimit        int     `json:"emoji_catalog_limit,omitempty"`
+	SymbolHalfLifeSeconds    int     `json:"symbol_half_life_seconds,omitempty"`
+	SymbolMedianMultiplier   float64 `json:"symbol_median_multiplier,omitempty"`
+	SymbolMinHalfLifeSeconds int     `json:"symbol_min_half_life_seconds,omitempty"`
+	SymbolMaxHalfLifeSeconds int     `json:"symbol_max_half_life_seconds,omitempty"`
 	// Global browser avatar original budget in bytes; zero uses 10000000000 (10 GB). Range 1 to 10000000000.
 	// Lowering stops admission without evicting unexpired originals.
 	AvatarBrowserStorageLimitBytes int64 `json:"avatar_browser_storage_limit_bytes,omitempty"`

@@ -158,6 +158,9 @@ func (s *Store) Intake(
 	if e = insertAttachments(ctx, q, u.ID, t.ID, r.Attachments); e != nil {
 		return Task{}, false, e
 	}
+	if e = touchSymbols(ctx, tx, r.BotID, t.ID, r.Symbols); e != nil {
+		return Task{}, false, e
+	}
 	if e = q.InsertInbox(
 		ctx,
 		sqlc.InsertInboxParams{BotID: r.BotID, UpdateID: r.UpdateID, TaskID: t.ID, Payload: r.Payload},

@@ -82,7 +82,8 @@ class GuardHandler(BaseHTTPRequestHandler):
             self.reject(403)
             return
         method = self.path[len(self.server.bot_prefix):]
-        if method not in ("sendMessage", "sendDocument", "sendChatAction", "getMe", "getFile", "answerCallbackQuery", "setMyCommands", "setChatMenuButton"):
+        if method not in ("sendMessage", "sendDocument", "sendChatAction", "setMessageReaction", "getMe", "getFile",
+                "getStickerSet", "getCustomEmojiStickers", "answerCallbackQuery", "setMyCommands", "setChatMenuButton"):
             self.reject(403)
             return
         try:
@@ -109,6 +110,9 @@ class GuardHandler(BaseHTTPRequestHandler):
             if not self.allowed_menu(method, data):
                 self.reject(403)
                 return
+        if method in ("getStickerSet", "getCustomEmojiStickers") and not self.allowed_symbol_read(method, data):
+            self.reject(403)
+            return
         if method == "sendChatAction" and not (
                 set(data) == {"chat_id", "action"} and type(data["chat_id"]) is int
                 and data["chat_id"] in self.server.recipients and data["action"] == "typing"):
@@ -121,7 +125,29 @@ class GuardHandler(BaseHTTPRequestHandler):
                     or reply.get("chat_id", recipient) != recipient or "business_connection_id" in data:
                 self.reject(403)
                 return
+        if method == "setMessageReaction" and not self.allowed_reaction(data):
+            self.reject(403)
+            return
         self.forward(raw, MAX_REQUEST)
+
+    def allowed_reaction(self, data):
+        if set(data) != {"chat_id", "message_id", "reaction"} or type(data['chat_id']) is not int \
+                or data['chat_id'] not in self.server.recipients or type(data['message_id']) is not int \
+                or data['message_id'] <= 0 or not isinstance(data['reaction'], list) or len(data['reaction']) > 1:
+            return False
+        supported = {"❤", "👍", "🥰", "👏", "😁", "🤔", "🤯", "😱", "😢", "🎉", "🤩", "🙏", "👌",
+                     "😍", "💯", "🤣", "💔", "🤨", "🙈", "😇", "🤝", "🤗", "🫡"}
+        return all(isinstance(value, dict) and set(value) == {"type", "emoji"}
+                   and value['type'] == 'emoji' and value['emoji'] in supported for value in data['reaction'])
+
+    def allowed_symbol_read(self, method, data):
+        if method == "getStickerSet":
+            return (set(data) == {"name"} and isinstance(data["name"], str)
+                and re.fullmatch(r"[A-Za-z0-9_]{1,64}", data["name"]) is not None)
+        return (set(data) == {"custom_emoji_ids"} and isinstance(data["custom_emoji_ids"], list)
+            and 0 < len(data["custom_emoji_ids"]) <= 200
+            and all(isinstance(value, str) and re.fullmatch(r"[0-9]{1,32}", value) is not None
+                for value in data["custom_emoji_ids"]))
 
     def allowed_menu(self, method, data):
         if method == "setChatMenuButton":

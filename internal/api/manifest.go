@@ -94,7 +94,7 @@ const (
 	manifestType               = "type"
 )
 
-const agentContractRevision = "mvp-93"
+const agentContractRevision = "mvp-94"
 
 func (s *Server) manifest(w http.ResponseWriter, _ *http.Request) {
 	revision := agentContractRevision

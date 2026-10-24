@@ -53,7 +53,13 @@ func TestSettingsSchemaDescriptionsDoNotChangeFieldContracts(t *testing.T) {
 			described++
 		}
 	}
-	require.Equal(t, 11, described)
+	require.Equal(t, 17, described)
+	for _, name := range []string{
+		"sticker_catalog_limit", "emoji_catalog_limit", "symbol_half_life_seconds",
+		"symbol_median_multiplier", "symbol_min_half_life_seconds", "symbol_max_half_life_seconds",
+	} {
+		require.NotEmpty(t, schema.Properties[name].Description, name)
+	}
 	require.Equal(t, "Worker concurrency; changes apply after application restart.",
 		schema.Properties["max_parallel_tasks"].Description)
 	require.Equal(t, "Telegram login proof maximum age; zero uses 300 seconds. Range 30 to 900.",

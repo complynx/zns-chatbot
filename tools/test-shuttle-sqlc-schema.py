@@ -12,7 +12,7 @@ SPEC.loader.exec_module(PREPARE)
 
 class SchemaExtractionTest(unittest.TestCase):
     def test_real_single_migration_has_full_catalog_and_extension(self):
-        source = (ROOT / "migrations/00074_schema.sql").read_text(encoding="utf-8")
+        source = (ROOT / "migrations/00076_schema.sql").read_text(encoding="utf-8")
         schema = PREPARE.extract_schema(source)
         self.assertEqual(schema.count("CREATE TABLE shuttle_user_profiles ("), 1)
         self.assertEqual(schema.count("ADD COLUMN first_name_latin text"), 1)
@@ -23,7 +23,7 @@ class SchemaExtractionTest(unittest.TestCase):
         self.assertEqual(schema, PREPARE.extract_schema(source))
 
     def test_missing_duplicate_reordered_and_empty_sections_fail_closed(self):
-        source = (ROOT / "migrations/00074_schema.sql").read_text(encoding="utf-8")
+        source = (ROOT / "migrations/00076_schema.sql").read_text(encoding="utf-8")
         marker = "-- BEGIN COMMON VERSION 74 DDL\n"
         end = "-- END COMMON VERSION 74 DDL\n"
         empty = source[:source.index(marker) + len(marker)] + source[source.index(end):]

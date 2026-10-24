@@ -63,6 +63,7 @@ type Service struct {
 	watchCancel                   context.CancelFunc
 	watchDone                     chan struct{}
 	typingDone                    chan struct{}
+	reactionDone                  chan struct{}
 	failures                      chan error
 	diagnosticMu                  sync.Mutex
 	nextDatabaseDiagnostic        time.Time
@@ -261,6 +262,10 @@ func (s *Service) Start(ctx context.Context) error {
 		s.releaseLock(ctx)
 		return err
 	}
+	if err = s.store.RecoverUnknownReactions(ctx); err != nil {
+		s.releaseLock(ctx)
+		return err
+	}
 	if err = s.recoverBusinessNotifications(ctx); err != nil {
 		s.releaseLock(ctx)
 		return err
@@ -273,8 +278,10 @@ func (s *Service) Start(ctx context.Context) error {
 	s.watchCancel = watchCancel
 	s.watchDone = make(chan struct{})
 	s.typingDone = make(chan struct{})
+	s.reactionDone = make(chan struct{})
 	go s.watchLock(watchCtx, conn, s.watchDone)
 	go s.watchTyping(watchCtx, s.typingDone)
+	go s.watchReactions(watchCtx, s.reactionDone)
 	return nil
 }
 func (s *Service) releaseLock(parent context.Context) {
@@ -360,6 +367,11 @@ func (s *Service) Stop(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		}
+		select {
+		case <-s.reactionDone:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 	if err := s.queue.StopAndCancel(ctx); err != nil {
 		return err
@@ -390,6 +402,7 @@ func (s *Service) accept(ctx context.Context, update telegram.Update, raw json.R
 	return s.store.Intake(
 		ctx,
 		db.IntakeRequest{
+			Symbols:        request.Symbols,
 			Attachments:    request.Attachments,
 			BotID:          s.options.BotID,
 			UpdateID:       update.ID,

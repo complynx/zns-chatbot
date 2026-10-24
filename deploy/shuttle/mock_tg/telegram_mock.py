@@ -25,6 +25,9 @@ from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_ope
 MAX_BODY = 8 * 1024 * 1024
 MAX_FILE = 4 * 1024 * 1024
 STATE_LIMIT = 200
+REACTION_EMOJI = frozenset(('❤ 👍 👎 🔥 🥰 👏 😁 🤔 🤯 😱 🤬 😢 🎉 🤩 🤮 💩 🙏 👌 🕊 🤡 🥱 🥴 😍 🐳 '
+    '❤‍🔥 🌚 🌭 💯 🤣 ⚡ 🍌 🏆 💔 🤨 😐 🍓 🍾 💋 🖕 😈 😴 😭 🤓 👻 👨‍💻 👀 🎃 🙈 😇 😨 🤝 ✍ 🤗 🫡 '
+    '🎅 🎄 ☃ 💅 🤪 🗿 🆒 💘 🙉 🦄 😘 💊 🙊 😎 👾 🤷‍♂ 🤷 🤷‍♀ 😡').split())
 MAX_RECORDS = 10000
 MAX_EVENT = 64 * 1024
 STATE_BYTES = 4 * 1024 * 1024
@@ -112,6 +115,8 @@ class Store:
         CREATE TABLE IF NOT EXISTS attempts(id INTEGER PRIMARY KEY AUTOINCREMENT, method TEXT, request TEXT, outcome TEXT);
         CREATE TABLE IF NOT EXISTS updates(id INTEGER PRIMARY KEY AUTOINCREMENT, update_id INTEGER, data TEXT, outcome TEXT);
         CREATE TABLE IF NOT EXISTS files(id TEXT PRIMARY KEY, name TEXT, mime TEXT, body BLOB);
+        CREATE TABLE IF NOT EXISTS sticker_sets(name TEXT PRIMARY KEY, data TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS custom_emoji(id TEXT PRIMARY KEY, data TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS holds(attempt_id INTEGER PRIMARY KEY, released INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS faults(id INTEGER PRIMARY KEY AUTOINCREMENT, method TEXT, kind TEXT, remaining INTEGER, retry_after INTEGER);
         CREATE TABLE IF NOT EXISTS counters(name TEXT PRIMARY KEY, value INTEGER);
@@ -119,6 +124,8 @@ class Store:
         CREATE TABLE IF NOT EXISTS message_keyboards(chat_id INTEGER, message_id INTEGER, data TEXT,
             PRIMARY KEY(chat_id,message_id));
         CREATE TABLE IF NOT EXISTS bot_settings(name TEXT PRIMARY KEY, data TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS bot_reactions(chat_id INTEGER, message_id INTEGER, reaction TEXT NOT NULL,
+            PRIMARY KEY(chat_id,message_id));
         ''')
         self.db.commit()
         prefix = config['token'].split(':', 1)[0]
@@ -290,8 +297,34 @@ class Store:
         row = self.db.execute('SELECT data FROM bot_settings WHERE name=?', (key,)).fetchone()
         return json.loads(row[0]) if row else default
 
+    def set_reaction(self, data):
+        chat, message = data.get('chat_id'), data.get('message_id')
+        if type(chat) is not int or type(message) is not int or message <= 0:
+            raise APIError('Bad Request: invalid reaction target')
+        self.message(chat, message)
+        values = data.get('reaction', [])
+        if isinstance(values, str):
+            try:
+                values = json.loads(values)
+            except ValueError as error:
+                raise APIError('Bad Request: invalid reaction JSON') from error
+        if not isinstance(values, list) or len(values) > 1 or type(data.get('is_big', False)) is not bool:
+            raise APIError('Bad Request: REACTION_INVALID')
+        for value in values:
+            if not isinstance(value, dict) or value.get('type') != 'emoji' or value.get('emoji') not in REACTION_EMOJI:
+                raise APIError('Bad Request: REACTION_INVALID')
+        if values:
+            self.db.execute('INSERT OR REPLACE INTO bot_reactions VALUES(?,?,?)',
+                            (chat, message, packed(values)))
+        else:
+            self.db.execute('DELETE FROM bot_reactions WHERE chat_id=? AND message_id=?', (chat, message))
+        self.journal('message_reaction', {'chat_id': chat, 'message_id': message, 'reaction': values})
+        return True
+
     def effect(self, method, data, uploads):
         data = dict(data)
+        if method == 'setMessageReaction':
+            return self.set_reaction(data)
         if method in ('sendMessage', 'sendDocument', 'editMessageText', 'editMessageReplyMarkup') and 'reply_markup' in data:
             markup = reply_markup(data['reply_markup'], inline_only=method.startswith('editMessage'))
             if markup is None:
@@ -319,6 +352,27 @@ class Store:
             name, mime, body = self.file(file_id)
             return {'file_id': file_id, 'file_unique_id': hashlib.sha256(file_id.encode()).hexdigest()[:24],
                     'file_size': len(body), 'file_path': 'fixtures/' + file_id}
+        if method == 'getStickerSet':
+            row = self.db.execute('SELECT data FROM sticker_sets WHERE name=?', (data.get('name'),)).fetchone()
+            if not row:
+                raise APIError('Bad Request: STICKERSET_INVALID')
+            return json.loads(row[0])
+        if method == 'getCustomEmojiStickers':
+            ids = data.get('custom_emoji_ids')
+            if isinstance(ids, str):
+                try:
+                    ids = json.loads(ids)
+                except ValueError:
+                    raise APIError('Bad Request: cannot parse custom emoji identifiers') from None
+            if not isinstance(ids, list) or not 1 <= len(ids) <= 200 or any(
+                    not isinstance(item, str) or not re.fullmatch(r'[0-9]{1,32}', item) for item in ids):
+                raise APIError('Bad Request: invalid custom emoji identifiers')
+            result = []
+            for item in dict.fromkeys(ids):
+                row = self.db.execute('SELECT data FROM custom_emoji WHERE id=?', (item,)).fetchone()
+                if row:
+                    result.append(json.loads(row[0]))
+            return result
         if method in ('editMessageText', 'editMessageReplyMarkup'):
             old = self.message(data['chat_id'], data['message_id'])
             keyboard = self.db.execute(
@@ -436,9 +490,46 @@ class Store:
             self.journal('update_outcome', {'delivery_id': row_id, 'update_id': update['update_id'], 'outcome': outcome})
         return {'update': update, 'delivery_id': row_id, 'outcome': outcome}
 
+    def register_sticker_set(self, data):
+        """QA-only fixture registration; Bot API reads never fabricate media or set membership."""
+        name, items = data.get('name'), data.get('stickers')
+        if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9_]{1,64}', name) or \
+                not isinstance(items, list) or not 1 <= len(items) <= 200 or \
+                data.get('sticker_type') not in ('regular', 'mask', 'custom_emoji') or \
+                not isinstance(data.get('title'), str):
+            raise APIError('invalid sticker set fixture')
+        if len(packed(data).encode()) > MAX_EVENT - 512:
+            raise APIError('sticker set fixture too large', 413)
+        for item in items:
+            if not isinstance(item, dict) or item.get('set_name') != name or \
+                    item.get('type') != data['sticker_type'] or not item.get('file_unique_id') or \
+                    type(item.get('width')) is not int or type(item.get('height')) is not int or \
+                    item['width'] <= 0 or item['height'] <= 0 or \
+                    type(item.get('is_animated')) is not bool or type(item.get('is_video')) is not bool:
+                raise APIError('invalid sticker fixture metadata')
+            self.file(item.get('file_id'))
+            if item.get('thumbnail'):
+                self.file(item['thumbnail'].get('file_id'))
+            if data['sticker_type'] == 'custom_emoji' and not re.fullmatch(
+                    r'[0-9]{1,32}', item.get('custom_emoji_id', '')):
+                raise APIError('invalid custom emoji fixture identifier')
+        # Bound synthetic metadata independently of the file budget.
+        if self.db.execute('SELECT COUNT(*) FROM sticker_sets').fetchone()[0] >= STATE_LIMIT:
+            raise APIError('sticker set fixture capacity reached', 507)
+        self.db.execute('INSERT OR REPLACE INTO sticker_sets VALUES(?,?)', (name, packed(data)))
+        self.db.execute("DELETE FROM custom_emoji WHERE json_extract(data,'$.set_name')=?", (name,))
+        for item in items:
+            if data['sticker_type'] == 'custom_emoji':
+                self.db.execute('INSERT OR REPLACE INTO custom_emoji VALUES(?,?)',
+                                (item['custom_emoji_id'], packed(item)))
+        self.journal('sticker_set_registered', {'name': name, 'count': len(items)})
+        return {'name': name, 'count': len(items)}
+
     def qa(self, action, data):
         conflicts = []
         with self.lock, self.db:
+            if action == 'sticker_set':
+                return self.register_sticker_set(data)
             if action == 'file':
                 body = base64.b64decode(data['data_base64'], validate=True)
                 result = self.put_file(data.get('file_id') or 'fixture_' + secrets.token_hex(12), data['name'], data.get('mime_type', 'application/octet-stream'), body)

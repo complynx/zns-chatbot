@@ -174,6 +174,12 @@ func TestProfileContextStorageFailureWaitsWithoutDispatchingIncompletePrompt(t *
 			Exec(context.Background(), "ALTER TABLE IF EXISTS unavailable_profiles RENAME TO shuttle_user_profiles")
 	})
 	accepted := h.submit(t, 8820)
+	defer func() {
+		if t.Failed() {
+			current, readErr := h.store.GetTask(context.Background(), accepted)
+			t.Logf("profile storage failure task state=%s route=%s read_error=%v", current.State, current.Route, readErr)
+		}
+	}()
 	h.await(t, accepted, "running")
 	require.Never(t, func() bool {
 		p.mu.Lock()

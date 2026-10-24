@@ -282,6 +282,42 @@ class GuardTests(unittest.TestCase):
         error.exception.close()
         self.assertEqual(len(self.forwarded), 1)
 
+    def test_symbol_reads_are_bounded_and_cannot_add_actions(self):
+        for method, body in (("getStickerSet", {"name": "Known_set"}),
+                             ("getCustomEmojiStickers", {"custom_emoji_ids": ["42", "43"]})):
+            with self.request("/bot999:fake/" + method, body) as response:
+                self.assertTrue(json.load(response)["ok"])
+        self.assertEqual(len(self.forwarded), 2)
+        self.forwarded.clear()
+        for method, body in (("getStickerSet", {"name": "../secret"}),
+                             ("getStickerSet", {"name": "Known_set", "chat_id": 43}),
+                             ("getCustomEmojiStickers", {"custom_emoji_ids": []}),
+                             ("getCustomEmojiStickers", {"custom_emoji_ids": [42]}),
+                             ("getCustomEmojiStickers", {"custom_emoji_ids": ["42"] * 201})):
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                self.request("/bot999:fake/" + method, body)
+            self.assertEqual(error.exception.code, 403)
+            error.exception.close()
+        self.assertEqual(self.forwarded, [])
+
+    def test_reactions_keep_recipient_and_ordinary_single_selection_boundary(self):
+        for values in ([{'type': 'emoji', 'emoji': '🙈'}], []):
+            with self.request('/bot999:fake/setMessageReaction',
+                              {'chat_id': 42, 'message_id': 7, 'reaction': values}) as response:
+                self.assertTrue(json.load(response)['ok'])
+        self.assertEqual(len(self.forwarded), 2)
+        self.forwarded.clear()
+        for body in ({'chat_id': 43, 'message_id': 7, 'reaction': []},
+                     {'chat_id': 42, 'message_id': 0, 'reaction': []},
+                     {'chat_id': 42, 'message_id': 7, 'reaction': [{'type': 'paid'}]},
+                     {'chat_id': 42, 'message_id': 7, 'reaction': [{'type': 'custom_emoji', 'custom_emoji_id': '1'}]},
+                     {'chat_id': 42, 'message_id': 7, 'reaction': [], 'business_connection_id': 'other'}):
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                self.request('/bot999:fake/setMessageReaction', body)
+            self.assertEqual(error.exception.code, 403)
+            error.exception.close()
+        self.assertEqual(self.forwarded, [])
+
     def test_oversized_stream_is_incomplete_instead_of_silently_truncated(self):
         with patch.object(telegram_guard, "MAX_FILE", 4):
             with self.request("/file/bot999:fake/stream") as response:

@@ -40,6 +40,18 @@ func TestBaselineMigrationLifecycle(t *testing.T) {
 	baselineKeepsLegacy73HistoryAndAcceptedData(t)
 	baselineRollbackPreservesAcceptedData(t)
 	baselineRollbackRefusesEvenUnapplied73History(t)
+	baselineRollbackRefusesVersion75History(t)
+}
+
+func baselineRollbackRefusesVersion75History(t *testing.T) {
+	t.Helper()
+	s := testStore(t)
+	_, err := s.Pool().Exec(t.Context(), `INSERT INTO goose_db_version(version_id,is_applied) VALUES(75,true)`)
+	require.NoError(t, err)
+	before := migrationHistory(t, s)
+	_, err = baselineProvider(t, s).ApplyVersion(t.Context(), 76, false)
+	require.ErrorContains(t, err, "legacy migration history must be preserved")
+	require.Equal(t, before, migrationHistory(t, s))
 }
 
 func baselineFreshDownUpAndPartialLegacyRefusal(t *testing.T) {
@@ -50,7 +62,7 @@ func baselineFreshDownUpAndPartialLegacyRefusal(t *testing.T) {
 		var version int64
 		require.NoError(t, s.Pool().QueryRow(t.Context(),
 			"SELECT max(version_id) FROM goose_db_version WHERE is_applied").Scan(&version))
-		require.EqualValues(t, 74, version)
+		require.EqualValues(t, 76, version)
 		_, err := provider.DownTo(t.Context(), 0)
 		require.NoError(t, err)
 		var tables int
@@ -86,7 +98,7 @@ func baselineKeepsLegacy73HistoryAndAcceptedData(t *testing.T) {
 	_, err = s.Pool().Exec(t.Context(), "DELETE FROM goose_db_version WHERE version_id<>0")
 	require.NoError(t, err)
 	// Use the byte-verified original DDL, without the version-74 extension.
-	source, err := migrations.Files.ReadFile("00074_schema.sql")
+	source, err := migrations.Files.ReadFile("00076_schema.sql")
 	require.NoError(t, err)
 	_, ddl, ok := strings.Cut(string(source), "-- BEGIN PRESERVED VERSION 73 DDL\n")
 	require.True(t, ok)
@@ -123,7 +135,11 @@ SELECT user_id,1,'Анна Иванова','Анна','Иванова','user' FR
 	)
 	var objects string
 	const objectQuery = "SELECT array_agg(oid ORDER BY oid)::text FROM pg_class WHERE " +
-		"relnamespace=current_schema()::regnamespace"
+		"relnamespace=current_schema()::regnamespace " +
+		"AND NOT starts_with(relname,'shuttle_reaction') " +
+		"AND NOT starts_with(relname,'shuttle_telegram_reactions') AND relname NOT IN " +
+		"('shuttle_symbols','shuttle_symbols_pkey','shuttle_symbols_pending','shuttle_tasks_symbols'," +
+		"'shuttle_symbol_decay','shuttle_symbol_decay_pkey')"
 	require.NoError(t, s.Pool().QueryRow(t.Context(), objectQuery).Scan(&objects))
 	require.NoError(t, s.Migrate(t.Context()))
 	var retainedHistory, retainedProfile string
@@ -155,7 +171,7 @@ SELECT user_id,1,'Анна Иванова','Анна','Иванова','user' FR
 	upgradedHistory := migrationHistory(t, s)
 	require.NoError(t, s.Migrate(t.Context()))
 	require.Equal(t, upgradedHistory, migrationHistory(t, s))
-	_, err = baselineProvider(t, s).ApplyVersion(t.Context(), 74, false)
+	_, err = baselineProvider(t, s).ApplyVersion(t.Context(), 76, false)
 	require.ErrorContains(t, err, "legacy migration history must be preserved")
 	require.Equal(t, upgradedHistory, migrationHistory(t, s))
 	var after string
@@ -242,7 +258,7 @@ func baselineRollbackRefusesEvenUnapplied73History(t *testing.T) {
 	_, err := s.Pool().Exec(t.Context(), `INSERT INTO goose_db_version(version_id,is_applied) VALUES(73,false)`)
 	require.NoError(t, err)
 	before := migrationHistory(t, s)
-	_, err = baselineProvider(t, s).ApplyVersion(t.Context(), 74, false)
+	_, err = baselineProvider(t, s).ApplyVersion(t.Context(), 76, false)
 	require.ErrorContains(t, err, "legacy migration history must be preserved")
 	require.Equal(t, before, migrationHistory(t, s))
 	var exists bool

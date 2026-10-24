@@ -11,6 +11,10 @@ def extract_schema(source: str) -> str:
         "-- END PRESERVED VERSION 73 DDL\n",
         "-- BEGIN COMMON VERSION 74 DDL\n",
         "-- END COMMON VERSION 74 DDL\n",
+        "-- BEGIN COMMON VERSION 75 DDL\n",
+        "-- END COMMON VERSION 75 DDL\n",
+        "-- BEGIN COMMON VERSION 76 DDL\n",
+        "-- END COMMON VERSION 76 DDL\n",
     )
     if any(source.count(marker) != 1 for marker in markers):
         raise ValueError("expected exactly one fresh and one common schema section")
@@ -26,14 +30,20 @@ def extract_schema(source: str) -> str:
     if "ADD COLUMN first_name_latin text" not in common or "ADD COLUMN last_name_latin text" not in common:
         raise ValueError("common Latin schema is missing")
     # Goose directives delimit PL/pgSQL for Goose; sqlc parses PostgreSQL SQL.
-    return "\n".join(line for line in (fresh + common).splitlines()
+    extra = source[positions[4] + len(markers[4]):positions[5]]
+    if "CREATE TABLE shuttle_symbols (" not in extra:
+        raise ValueError("visual symbol schema is missing")
+    reactions = source[positions[6] + len(markers[6]):positions[7]]
+    if "CREATE TABLE shuttle_telegram_reactions (" not in reactions:
+        raise ValueError("reaction schema is missing")
+    return "\n".join(line for line in (fresh + common + extra + reactions).splitlines()
                      if not line.startswith("-- +goose ")) + "\n"
 
 
 def main() -> None:
     migrations = sorted((ROOT / "migrations").glob("*.sql"))
-    if [path.name for path in migrations] != ["00074_schema.sql"]:
-        raise ValueError("expected the single version-74 migration")
+    if [path.name for path in migrations] != ["00076_schema.sql"]:
+        raise ValueError("expected the single version-76 migration")
     source = migrations[0].read_text(encoding="utf-8")
     if len(source) > 1_000_000:
         raise ValueError("unexpected migration size")

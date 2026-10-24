@@ -40,6 +40,10 @@ import (
 // These tests exercise real durable acceptance and recovery; upstream services
 // remain HTTP peers so their uncertainty is observed through public behavior.
 type peers struct {
+	reactionEvents                          []loom.ChatEvent
+	reactionCalls                           []reactionCall
+	reactionsEnabled                        bool
+	loseReaction                            bool
 	registrationDetails                     *registrationdetails.Protector
 	retainResolvedPrompts                   bool
 	miniAppOrigin                           string
@@ -85,6 +89,8 @@ type peers struct {
 	getRelease                              chan struct{}
 	echoInput                               bool
 	createdInputs                           []string
+	createdOutputPolicies                   []*loom.OutputPolicy
+	outputValidationUnavailable             bool
 	createAttempts                          []string
 	pauseAfterLostCreate                    bool
 	steering                                bool
@@ -303,6 +309,12 @@ func (p *peers) agent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
+	case strings.HasSuffix(r.URL.Path, "/history") && r.Method == http.MethodGet && p.reactionsEnabled:
+		p.reactionHistory(w, r)
+	case strings.HasSuffix(r.URL.Path, "/capabilities") && r.Method == http.MethodGet:
+		respond(w, map[string]any{"output_validation": map[string]any{
+			"version": 1, "disallow_custom_emoji": !p.outputValidationUnavailable,
+		}})
 	case strings.HasSuffix(r.URL.Path, "/auth/sessions"), strings.HasSuffix(r.URL.Path, "/reauthorize"):
 		p.authSession(w, r)
 	case strings.HasSuffix(r.URL.Path, "/runs") && r.Method == http.MethodPost:
@@ -438,6 +450,7 @@ func (p *peers) createRun(w http.ResponseWriter, r *http.Request) {
 	run, ok := p.runs[key]
 	if !ok {
 		p.createdInputs = append(p.createdInputs, request.Input.Text)
+		p.createdOutputPolicies = append(p.createdOutputPolicies, request.OutputPolicy)
 		run = p.initialRun(key, request)
 		p.runs[key] = run
 	}
@@ -459,6 +472,15 @@ func (p *peers) initialRun(key string, request loom.CreateRunRequest) loom.Run {
 		Status:        "completed",
 		Result:        "**Hello**, Daniel!",
 		Version:       1,
+	}
+	if p.reactionsEnabled {
+		run.ChatID = "reaction-chat"
+		p.reactionEvents = []loom.ChatEvent{
+			{Seq: 1, Type: "message.user", RunID: run.ID, ReactionsSeq: 2,
+				Reactions: map[string][]string{"assistant": {"🙈"}}},
+			{Seq: 2, Type: "message.reaction", RunID: run.ID,
+				Data: json.RawMessage(`{"message_seq":1,"actor":"assistant"}`)},
+		}
 	}
 	if p.createdReplyMode != nil {
 		run.Interaction.ReplyMode = *p.createdReplyMode
@@ -496,6 +518,10 @@ func (p *peers) initialRun(key string, request loom.CreateRunRequest) loom.Run {
 func (p *peers) telegram(w http.ResponseWriter, r *http.Request) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if strings.HasSuffix(r.URL.Path, "/setMessageReaction") {
+		p.telegramReaction(w, r)
+		return
+	}
 	if strings.HasSuffix(r.URL.Path, "/setMyCommands") || strings.HasSuffix(r.URL.Path, "/setChatMenuButton") {
 		var call menuCall
 		if json.NewDecoder(r.Body).Decode(&call) != nil {

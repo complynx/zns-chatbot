@@ -3,6 +3,9 @@ package api
 import "github.com/complynx/zns-chatbot/internal/db"
 
 const (
+	settingsSchemaNumber             = "number"
+	settingsMinMedianMultiplier      = 0.01
+	settingsMaxMedianMultiplier      = 1000
 	settingsSchemaMaxMassageBookings = 100
 	settingsSchemaMaxWorkers         = 128
 	settingsSchemaMaxQuestionSeconds = 604800
@@ -12,6 +15,9 @@ const (
 	settingsSchemaMaxLoginSeconds    = 900
 	settingsSchemaMinSessionSeconds  = 60
 	settingsSchemaMaxSessionSeconds  = 3600
+	settingsSchemaMaxSymbolEntries   = 50000
+	settingsSchemaMinSymbolHalfLife  = 60
+	settingsSchemaMaxSymbolHalfLife  = 365 * 24 * 60 * 60
 )
 
 func settingsIntegerSchema(minimum, maximum int) map[string]any {
@@ -35,6 +41,25 @@ func settingsDocumentSchema() map[string]any {
 			settingsSchemaQuestionTimeout,
 		},
 		schemaProperties: map[string]any{
+			"sticker_catalog_limit": optionalSettingsIntegerSchema(1, settingsSchemaMaxSymbolEntries),
+			"emoji_catalog_limit":   optionalSettingsIntegerSchema(1, settingsSchemaMaxSymbolEntries),
+			"symbol_half_life_seconds": optionalSettingsIntegerSchema(
+				settingsSchemaMinSymbolHalfLife,
+				settingsSchemaMaxSymbolHalfLife,
+			),
+			"symbol_min_half_life_seconds": optionalSettingsIntegerSchema(
+				settingsSchemaMinSymbolHalfLife,
+				settingsSchemaMaxSymbolHalfLife,
+			),
+			"symbol_max_half_life_seconds": optionalSettingsIntegerSchema(
+				settingsSchemaMinSymbolHalfLife,
+				settingsSchemaMaxSymbolHalfLife,
+			),
+			"symbol_median_multiplier": map[string]any{manifestType: settingsSchemaNumber, mealSchemaAnyOf: []any{
+				map[string]any{schemaEnum: []int{0}}, map[string]any{
+					schemaMinimum: settingsMinMedianMultiplier, schemaMaximum: settingsMaxMedianMultiplier,
+				},
+			}},
 			"avatar_browser_storage_limit_bytes": optionalSettingsIntegerSchema(
 				1,
 				int(db.MaxAvatarBrowserStorageBytes),

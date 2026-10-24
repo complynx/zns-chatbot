@@ -1,6 +1,6 @@
 -- +goose Up
--- Fresh databases receive the preserved version-73 schema, then the Latin pair.
--- Completed version-73 databases receive only the compatible Latin extension.
+-- Fresh databases receive the preserved schema, Latin names and visual symbol catalog.
+-- Completed version-73/74/75 databases receive only missing compatible extensions.
 -- +goose StatementBegin
 DO $shuttle_baseline74$
 DECLARE applied bigint;
@@ -3213,16 +3213,20 @@ ALTER TABLE ONLY shuttle_user_revocation_proposals
 
 INSERT INTO shuttle_settings (id, version, document) VALUES (true, 1, '{"default_language": "en", "max_parallel_tasks": 8, "auth_cache_ttl_seconds": 0, "question_timeout_seconds": 3600}');
 -- END PRESERVED VERSION 73 DDL
- ELSIF applied<>73 THEN
+ ELSIF applied NOT IN (73,74,75) THEN
   RAISE EXCEPTION 'partial legacy schema: finish migrations through version 73 with the previous release';
  END IF;
 END $shuttle_baseline74$;
 -- +goose StatementEnd
+-- +goose StatementBegin
+DO $shuttle_latin74$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM (
+  SELECT DISTINCT ON(version_id) version_id,is_applied FROM goose_db_version ORDER BY version_id,id DESC
+ ) history WHERE version_id IN(74,75) AND is_applied) THEN
 -- BEGIN COMMON VERSION 74 DDL
 ALTER TABLE shuttle_user_profiles
  ADD COLUMN first_name_latin text NOT NULL DEFAULT '',
  ADD COLUMN last_name_latin text NOT NULL DEFAULT '';
--- +goose StatementBegin
 CREATE FUNCTION shuttle_clear_stale_latin_name() RETURNS trigger
  LANGUAGE plpgsql AS $$
 BEGIN
@@ -3232,21 +3236,103 @@ BEGIN
  END IF;
  RETURN NEW;
 END $$;
--- +goose StatementEnd
 CREATE TRIGGER shuttle_clear_stale_latin_name
  BEFORE UPDATE OF first_name,last_name ON shuttle_user_profiles
  FOR EACH ROW EXECUTE FUNCTION shuttle_clear_stale_latin_name();
 -- END COMMON VERSION 74 DDL
+ END IF;
+END $shuttle_latin74$;
+-- +goose StatementEnd
+-- +goose StatementBegin
+DO $shuttle_symbols75$
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM (
+  SELECT DISTINCT ON(version_id) version_id,is_applied FROM goose_db_version ORDER BY version_id,id DESC
+ ) history WHERE version_id=75 AND is_applied) THEN
+-- BEGIN COMMON VERSION 75 DDL
+CREATE TABLE shuttle_symbols (
+ bot_id bigint NOT NULL,
+ kind text NOT NULL CHECK(kind IN ('sticker','emoji')),
+ asset_key text NOT NULL CHECK(length(asset_key) BETWEEN 1 AND 512),
+ generation uuid NOT NULL,
+ reference jsonb NOT NULL,
+ description jsonb,
+ score double precision NOT NULL CHECK(score>0 AND score<'Infinity'::float8),
+ last_used_at timestamptz NOT NULL,
+ last_interval_seconds double precision NOT NULL DEFAULT 0 CHECK(last_interval_seconds>=0),
+ workflow jsonb NOT NULL DEFAULT '{}'::jsonb,
+ PRIMARY KEY(bot_id,kind,asset_key)
+);
+CREATE INDEX shuttle_symbols_pending ON shuttle_symbols(bot_id,kind,last_used_at) WHERE description IS NULL;
+CREATE INDEX shuttle_tasks_symbols ON shuttle_tasks USING gin(request jsonb_path_ops);
+CREATE TABLE shuttle_symbol_decay (
+ bot_id bigint NOT NULL,
+ kind text NOT NULL CHECK(kind IN ('sticker','emoji')),
+ half_life_seconds integer NOT NULL CHECK(half_life_seconds>=60),
+ evaluated_at timestamptz NOT NULL,
+ policy jsonb NOT NULL,
+ PRIMARY KEY(bot_id,kind)
+);
+CREATE FUNCTION shuttle_symbol_weight(value double precision,elapsed double precision,half_life double precision)
+ RETURNS double precision LANGUAGE plpgsql IMMUTABLE STRICT AS $$
+DECLARE log_weight double precision;
+BEGIN
+ IF value<=0 THEN RETURN 0; END IF;
+ log_weight:=ln(value)-ln(2.0)*greatest(0,elapsed)/half_life;
+ IF log_weight < -700 THEN RETURN 0; END IF;
+ RETURN exp(least(700.0,log_weight));
+END $$;
+-- END COMMON VERSION 75 DDL
+ END IF;
+END $shuttle_symbols75$;
+-- +goose StatementEnd
+-- BEGIN COMMON VERSION 76 DDL
+CREATE TABLE shuttle_reaction_cursors (
+ user_id uuid NOT NULL REFERENCES shuttle_users(id) ON DELETE CASCADE,
+ loom_chat_id text NOT NULL CHECK(length(loom_chat_id) BETWEEN 1 AND 128),
+ task_id uuid NOT NULL REFERENCES shuttle_tasks(id) ON DELETE CASCADE,
+ after_seq bigint NOT NULL DEFAULT 0 CHECK(after_seq>=0),
+ active boolean NOT NULL DEFAULT true,
+ next_check_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(user_id,loom_chat_id)
+);
+CREATE TABLE shuttle_telegram_reactions (
+ user_id uuid NOT NULL REFERENCES shuttle_users(id) ON DELETE CASCADE,
+ loom_chat_id text NOT NULL,
+ message_seq bigint NOT NULL CHECK(message_seq>0),
+ chat_id bigint CHECK(chat_id<>0),
+ message_id bigint CHECK(message_id>0),
+ CHECK((chat_id IS NULL)=(message_id IS NULL)),
+ target_kind text NOT NULL,
+ target_run_id text NOT NULL,
+ target_event_id text NOT NULL,
+ watermark bigint NOT NULL CHECK(watermark>0),
+ emoji text NOT NULL CHECK(octet_length(emoji)<=32),
+ state text NOT NULL DEFAULT 'pending' CHECK(state IN('pending','sending','delivered','failed','unknown')),
+ version bigint NOT NULL DEFAULT 1 CHECK(version>0),
+ attempt_id uuid,
+ attempt_emoji text,
+ attempt_version bigint,
+ attempt_watermark bigint,
+ CHECK(attempt_id IS NULL OR (attempt_emoji IS NOT NULL AND attempt_version>0 AND attempt_watermark>0)),
+ next_attempt_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(user_id,loom_chat_id,message_seq),
+ UNIQUE(user_id,chat_id,message_id)
+);
+CREATE INDEX shuttle_reactions_pending ON shuttle_telegram_reactions(next_attempt_at) WHERE state='pending';
+-- END COMMON VERSION 76 DDL
+
 -- +goose Down
 -- Rollback removes only an unused baseline; preserve accepted data before rollback.
 -- +goose StatementBegin
 DO $$ BEGIN
- IF EXISTS (SELECT 1 FROM goose_db_version WHERE version_id > 0 AND version_id <= 73) THEN
+ IF EXISTS (SELECT 1 FROM goose_db_version WHERE version_id > 0 AND version_id <= 75) THEN
   RAISE EXCEPTION 'legacy migration history must be preserved; baseline rollback requires a fresh database';
  END IF;
 END $$;
 -- +goose StatementEnd
-LOCK TABLE shuttle_active_pair_members, shuttle_assignment_aliases, shuttle_assignment_preparations, shuttle_authority_operations, shuttle_authority_preparations, shuttle_avatar_deliveries, shuttle_avatar_delivery_resolutions, shuttle_avatar_draft_operations, shuttle_avatar_drafts, shuttle_avatar_resolution_aliases, shuttle_avatars, shuttle_conversations, shuttle_deployment, shuttle_event_authorities, shuttle_event_change_proposals, shuttle_event_context_operations, shuttle_event_deposit_policy, shuttle_event_operations, shuttle_event_registration_rules, shuttle_events, shuttle_files, shuttle_history_account_receipts, shuttle_iam_name_origins, shuttle_identity_audit, shuttle_inbox, shuttle_knowledge_articles, shuttle_knowledge_moderators, shuttle_knowledge_suggestions, shuttle_users, shuttle_knowledge_notices, shuttle_knowledge_operations, shuttle_knowledge_preparations, shuttle_knowledge_revisions, shuttle_legacy_archive_chunks, shuttle_legacy_archive_operations, shuttle_legacy_archive_preparations, shuttle_legacy_archives, shuttle_legacy_history_applications, shuttle_legacy_history_memberships, shuttle_legacy_history_operations, shuttle_legacy_history_preparations, shuttle_legacy_history_records, shuttle_massage_binding_operation_aliases, shuttle_massage_binding_operations, shuttle_massage_bookings, shuttle_massage_operations, shuttle_massage_preparations, shuttle_massage_reminders, shuttle_massage_schedule_operations, shuttle_massage_schedule_preparations, shuttle_massage_schedules, shuttle_massage_specialist_bindings, shuttle_massage_specialist_notifications, shuttle_massage_specialist_preference_operations, shuttle_massage_specialist_preferences, shuttle_meal_catalog_operations, shuttle_meal_catalog_preparations, shuttle_meal_catalogs, shuttle_meal_draft_operations, shuttle_meal_drafts, shuttle_miniapp_assignment_actions, shuttle_miniapp_avatar_resolution_actions, shuttle_miniapp_details_actions, shuttle_miniapp_meal_draft_actions, shuttle_miniapp_order_evidence_actions, shuttle_miniapp_orders_selection_actions, shuttle_miniapp_pair_assignment_actions, shuttle_miniapp_profile_actions, shuttle_miniapp_sessions, shuttle_native_payment_evidence_actions, shuttle_notification_resolutions, shuttle_order_allocations, shuttle_order_evidence, shuttle_order_evidence_notices, shuttle_order_evidence_operations, shuttle_order_evidence_preparations, shuttle_order_evidence_reviews, shuttle_order_operations, shuttle_order_preparations, shuttle_order_review_calls, shuttle_order_review_workspaces, shuttle_orders, shuttle_orders_catalog_operations, shuttle_orders_catalog_preparations, shuttle_orders_catalogs, shuttle_orders_selection_operations, shuttle_orders_selections, shuttle_outbox, shuttle_pair_assignment_aliases, shuttle_pair_invitations, shuttle_pair_notifications, shuttle_pair_operations, shuttle_pair_preparations, shuttle_pairs, shuttle_pass_deposit_policy, shuttle_pass_tiers, shuttle_passes, shuttle_payment_evidence, shuttle_payment_notifications, shuttle_payment_operations, shuttle_payment_preparations, shuttle_payment_review_calls, shuttle_payment_review_workspaces, shuttle_payment_reviews, shuttle_payment_versions, shuttle_profile_name_sync, shuttle_profile_operations, shuttle_registration_details, shuttle_registration_details_operations, shuttle_registration_details_request_operations, shuttle_registration_details_requests, shuttle_registration_operations, shuttle_registrations, shuttle_run_event_context, shuttle_settings, shuttle_settings_audit, shuttle_settings_change_proposals, shuttle_task_closure_proposals, shuttle_task_resolutions, shuttle_tasks, shuttle_telegram_prelinks, shuttle_user_event_context, shuttle_user_profiles, shuttle_user_revocation_proposals IN ACCESS EXCLUSIVE MODE;
+LOCK TABLE shuttle_reaction_cursors, shuttle_telegram_reactions, shuttle_symbol_decay, shuttle_symbols, shuttle_active_pair_members, shuttle_assignment_aliases, shuttle_assignment_preparations, shuttle_authority_operations, shuttle_authority_preparations, shuttle_avatar_deliveries, shuttle_avatar_delivery_resolutions, shuttle_avatar_draft_operations, shuttle_avatar_drafts, shuttle_avatar_resolution_aliases, shuttle_avatars, shuttle_conversations, shuttle_deployment, shuttle_event_authorities, shuttle_event_change_proposals, shuttle_event_context_operations, shuttle_event_deposit_policy, shuttle_event_operations, shuttle_event_registration_rules, shuttle_events, shuttle_files, shuttle_history_account_receipts, shuttle_iam_name_origins, shuttle_identity_audit, shuttle_inbox, shuttle_knowledge_articles, shuttle_knowledge_moderators, shuttle_knowledge_suggestions, shuttle_users, shuttle_knowledge_notices, shuttle_knowledge_operations, shuttle_knowledge_preparations, shuttle_knowledge_revisions, shuttle_legacy_archive_chunks, shuttle_legacy_archive_operations, shuttle_legacy_archive_preparations, shuttle_legacy_archives, shuttle_legacy_history_applications, shuttle_legacy_history_memberships, shuttle_legacy_history_operations, shuttle_legacy_history_preparations, shuttle_legacy_history_records, shuttle_massage_binding_operation_aliases, shuttle_massage_binding_operations, shuttle_massage_bookings, shuttle_massage_operations, shuttle_massage_preparations, shuttle_massage_reminders, shuttle_massage_schedule_operations, shuttle_massage_schedule_preparations, shuttle_massage_schedules, shuttle_massage_specialist_bindings, shuttle_massage_specialist_notifications, shuttle_massage_specialist_preference_operations, shuttle_massage_specialist_preferences, shuttle_meal_catalog_operations, shuttle_meal_catalog_preparations, shuttle_meal_catalogs, shuttle_meal_draft_operations, shuttle_meal_drafts, shuttle_miniapp_assignment_actions, shuttle_miniapp_avatar_resolution_actions, shuttle_miniapp_details_actions, shuttle_miniapp_meal_draft_actions, shuttle_miniapp_order_evidence_actions, shuttle_miniapp_orders_selection_actions, shuttle_miniapp_pair_assignment_actions, shuttle_miniapp_profile_actions, shuttle_miniapp_sessions, shuttle_native_payment_evidence_actions, shuttle_notification_resolutions, shuttle_order_allocations, shuttle_order_evidence, shuttle_order_evidence_notices, shuttle_order_evidence_operations, shuttle_order_evidence_preparations, shuttle_order_evidence_reviews, shuttle_order_operations, shuttle_order_preparations, shuttle_order_review_calls, shuttle_order_review_workspaces, shuttle_orders, shuttle_orders_catalog_operations, shuttle_orders_catalog_preparations, shuttle_orders_catalogs, shuttle_orders_selection_operations, shuttle_orders_selections, shuttle_outbox, shuttle_pair_assignment_aliases, shuttle_pair_invitations, shuttle_pair_notifications, shuttle_pair_operations, shuttle_pair_preparations, shuttle_pairs, shuttle_pass_deposit_policy, shuttle_pass_tiers, shuttle_passes, shuttle_payment_evidence, shuttle_payment_notifications, shuttle_payment_operations, shuttle_payment_preparations, shuttle_payment_review_calls, shuttle_payment_review_workspaces, shuttle_payment_reviews, shuttle_payment_versions, shuttle_profile_name_sync, shuttle_profile_operations, shuttle_registration_details, shuttle_registration_details_operations, shuttle_registration_details_request_operations, shuttle_registration_details_requests, shuttle_registration_operations, shuttle_registrations, shuttle_run_event_context, shuttle_settings, shuttle_settings_audit, shuttle_settings_change_proposals, shuttle_task_closure_proposals, shuttle_task_resolutions, shuttle_tasks, shuttle_telegram_prelinks, shuttle_user_event_context, shuttle_user_profiles, shuttle_user_revocation_proposals IN ACCESS EXCLUSIVE MODE;
 -- +goose StatementBegin
 DO $$
 DECLARE item record; occupied boolean;
@@ -3265,5 +3351,6 @@ BEGIN
 END $$;
 -- +goose StatementEnd
 DROP VIEW shuttle_legacy_history_previews, shuttle_knowledge_notice_candidates;
-DROP TABLE shuttle_active_pair_members, shuttle_assignment_aliases, shuttle_assignment_preparations, shuttle_authority_operations, shuttle_authority_preparations, shuttle_avatar_deliveries, shuttle_avatar_delivery_resolutions, shuttle_avatar_draft_operations, shuttle_avatar_drafts, shuttle_avatar_resolution_aliases, shuttle_avatars, shuttle_conversations, shuttle_deployment, shuttle_event_authorities, shuttle_event_change_proposals, shuttle_event_context_operations, shuttle_event_deposit_policy, shuttle_event_operations, shuttle_event_registration_rules, shuttle_events, shuttle_files, shuttle_history_account_receipts, shuttle_iam_name_origins, shuttle_identity_audit, shuttle_inbox, shuttle_knowledge_articles, shuttle_knowledge_moderators, shuttle_knowledge_suggestions, shuttle_users, shuttle_knowledge_notices, shuttle_knowledge_operations, shuttle_knowledge_preparations, shuttle_knowledge_revisions, shuttle_legacy_archive_chunks, shuttle_legacy_archive_operations, shuttle_legacy_archive_preparations, shuttle_legacy_archives, shuttle_legacy_history_applications, shuttle_legacy_history_memberships, shuttle_legacy_history_operations, shuttle_legacy_history_preparations, shuttle_legacy_history_records, shuttle_massage_binding_operation_aliases, shuttle_massage_binding_operations, shuttle_massage_bookings, shuttle_massage_operations, shuttle_massage_preparations, shuttle_massage_reminders, shuttle_massage_schedule_operations, shuttle_massage_schedule_preparations, shuttle_massage_schedules, shuttle_massage_specialist_bindings, shuttle_massage_specialist_notifications, shuttle_massage_specialist_preference_operations, shuttle_massage_specialist_preferences, shuttle_meal_catalog_operations, shuttle_meal_catalog_preparations, shuttle_meal_catalogs, shuttle_meal_draft_operations, shuttle_meal_drafts, shuttle_miniapp_assignment_actions, shuttle_miniapp_avatar_resolution_actions, shuttle_miniapp_details_actions, shuttle_miniapp_meal_draft_actions, shuttle_miniapp_order_evidence_actions, shuttle_miniapp_orders_selection_actions, shuttle_miniapp_pair_assignment_actions, shuttle_miniapp_profile_actions, shuttle_miniapp_sessions, shuttle_native_payment_evidence_actions, shuttle_notification_resolutions, shuttle_order_allocations, shuttle_order_evidence, shuttle_order_evidence_notices, shuttle_order_evidence_operations, shuttle_order_evidence_preparations, shuttle_order_evidence_reviews, shuttle_order_operations, shuttle_order_preparations, shuttle_order_review_calls, shuttle_order_review_workspaces, shuttle_orders, shuttle_orders_catalog_operations, shuttle_orders_catalog_preparations, shuttle_orders_catalogs, shuttle_orders_selection_operations, shuttle_orders_selections, shuttle_outbox, shuttle_pair_assignment_aliases, shuttle_pair_invitations, shuttle_pair_notifications, shuttle_pair_operations, shuttle_pair_preparations, shuttle_pairs, shuttle_pass_deposit_policy, shuttle_pass_tiers, shuttle_passes, shuttle_payment_evidence, shuttle_payment_notifications, shuttle_payment_operations, shuttle_payment_preparations, shuttle_payment_review_calls, shuttle_payment_review_workspaces, shuttle_payment_reviews, shuttle_payment_versions, shuttle_profile_name_sync, shuttle_profile_operations, shuttle_registration_details, shuttle_registration_details_operations, shuttle_registration_details_request_operations, shuttle_registration_details_requests, shuttle_registration_operations, shuttle_registrations, shuttle_run_event_context, shuttle_settings, shuttle_settings_audit, shuttle_settings_change_proposals, shuttle_task_closure_proposals, shuttle_task_resolutions, shuttle_tasks, shuttle_telegram_prelinks, shuttle_user_event_context, shuttle_user_profiles, shuttle_user_revocation_proposals;
+DROP TABLE shuttle_reaction_cursors, shuttle_telegram_reactions, shuttle_symbol_decay, shuttle_symbols, shuttle_active_pair_members, shuttle_assignment_aliases, shuttle_assignment_preparations, shuttle_authority_operations, shuttle_authority_preparations, shuttle_avatar_deliveries, shuttle_avatar_delivery_resolutions, shuttle_avatar_draft_operations, shuttle_avatar_drafts, shuttle_avatar_resolution_aliases, shuttle_avatars, shuttle_conversations, shuttle_deployment, shuttle_event_authorities, shuttle_event_change_proposals, shuttle_event_context_operations, shuttle_event_deposit_policy, shuttle_event_operations, shuttle_event_registration_rules, shuttle_events, shuttle_files, shuttle_history_account_receipts, shuttle_iam_name_origins, shuttle_identity_audit, shuttle_inbox, shuttle_knowledge_articles, shuttle_knowledge_moderators, shuttle_knowledge_suggestions, shuttle_users, shuttle_knowledge_notices, shuttle_knowledge_operations, shuttle_knowledge_preparations, shuttle_knowledge_revisions, shuttle_legacy_archive_chunks, shuttle_legacy_archive_operations, shuttle_legacy_archive_preparations, shuttle_legacy_archives, shuttle_legacy_history_applications, shuttle_legacy_history_memberships, shuttle_legacy_history_operations, shuttle_legacy_history_preparations, shuttle_legacy_history_records, shuttle_massage_binding_operation_aliases, shuttle_massage_binding_operations, shuttle_massage_bookings, shuttle_massage_operations, shuttle_massage_preparations, shuttle_massage_reminders, shuttle_massage_schedule_operations, shuttle_massage_schedule_preparations, shuttle_massage_schedules, shuttle_massage_specialist_bindings, shuttle_massage_specialist_notifications, shuttle_massage_specialist_preference_operations, shuttle_massage_specialist_preferences, shuttle_meal_catalog_operations, shuttle_meal_catalog_preparations, shuttle_meal_catalogs, shuttle_meal_draft_operations, shuttle_meal_drafts, shuttle_miniapp_assignment_actions, shuttle_miniapp_avatar_resolution_actions, shuttle_miniapp_details_actions, shuttle_miniapp_meal_draft_actions, shuttle_miniapp_order_evidence_actions, shuttle_miniapp_orders_selection_actions, shuttle_miniapp_pair_assignment_actions, shuttle_miniapp_profile_actions, shuttle_miniapp_sessions, shuttle_native_payment_evidence_actions, shuttle_notification_resolutions, shuttle_order_allocations, shuttle_order_evidence, shuttle_order_evidence_notices, shuttle_order_evidence_operations, shuttle_order_evidence_preparations, shuttle_order_evidence_reviews, shuttle_order_operations, shuttle_order_preparations, shuttle_order_review_calls, shuttle_order_review_workspaces, shuttle_orders, shuttle_orders_catalog_operations, shuttle_orders_catalog_preparations, shuttle_orders_catalogs, shuttle_orders_selection_operations, shuttle_orders_selections, shuttle_outbox, shuttle_pair_assignment_aliases, shuttle_pair_invitations, shuttle_pair_notifications, shuttle_pair_operations, shuttle_pair_preparations, shuttle_pairs, shuttle_pass_deposit_policy, shuttle_pass_tiers, shuttle_passes, shuttle_payment_evidence, shuttle_payment_notifications, shuttle_payment_operations, shuttle_payment_preparations, shuttle_payment_review_calls, shuttle_payment_review_workspaces, shuttle_payment_reviews, shuttle_payment_versions, shuttle_profile_name_sync, shuttle_profile_operations, shuttle_registration_details, shuttle_registration_details_operations, shuttle_registration_details_request_operations, shuttle_registration_details_requests, shuttle_registration_operations, shuttle_registrations, shuttle_run_event_context, shuttle_settings, shuttle_settings_audit, shuttle_settings_change_proposals, shuttle_task_closure_proposals, shuttle_task_resolutions, shuttle_tasks, shuttle_telegram_prelinks, shuttle_user_event_context, shuttle_user_profiles, shuttle_user_revocation_proposals;
 DROP FUNCTION shuttle_guard_assignment_namespace(), shuttle_guard_pair_assignment_namespace(), shuttle_clear_stale_latin_name();
+DROP FUNCTION shuttle_symbol_weight(double precision,double precision,double precision);

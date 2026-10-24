@@ -1195,6 +1195,15 @@ type ShuttleProfileOperation struct {
 	Result      []byte    `json:"result"`
 }
 
+type ShuttleReactionCursor struct {
+	UserID      uuid.UUID          `json:"user_id"`
+	LoomChatID  string             `json:"loom_chat_id"`
+	TaskID      uuid.UUID          `json:"task_id"`
+	AfterSeq    int64              `json:"after_seq"`
+	Active      bool               `json:"active"`
+	NextCheckAt pgtype.Timestamptz `json:"next_check_at"`
+}
+
 type ShuttleRegistration struct {
 	ID          uuid.UUID          `json:"id"`
 	EventID     uuid.UUID          `json:"event_id"`
@@ -1285,6 +1294,27 @@ type ShuttleSettingsChangeProposal struct {
 	Result         []byte             `json:"result"`
 }
 
+type ShuttleSymbol struct {
+	BotID               int64              `json:"bot_id"`
+	Kind                string             `json:"kind"`
+	AssetKey            string             `json:"asset_key"`
+	Generation          uuid.UUID          `json:"generation"`
+	Reference           []byte             `json:"reference"`
+	Description         []byte             `json:"description"`
+	Score               float64            `json:"score"`
+	LastUsedAt          pgtype.Timestamptz `json:"last_used_at"`
+	LastIntervalSeconds float64            `json:"last_interval_seconds"`
+	Workflow            []byte             `json:"workflow"`
+}
+
+type ShuttleSymbolDecay struct {
+	BotID           int64              `json:"bot_id"`
+	Kind            string             `json:"kind"`
+	HalfLifeSeconds int32              `json:"half_life_seconds"`
+	EvaluatedAt     pgtype.Timestamptz `json:"evaluated_at"`
+	Policy          []byte             `json:"policy"`
+}
+
 type ShuttleTask struct {
 	ID                    uuid.UUID          `json:"id"`
 	UserID                uuid.UUID          `json:"user_id"`
@@ -1349,6 +1379,27 @@ type ShuttleTelegramPrelink struct {
 	Subject         string             `json:"subject"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
+}
+
+type ShuttleTelegramReaction struct {
+	UserID           uuid.UUID          `json:"user_id"`
+	LoomChatID       string             `json:"loom_chat_id"`
+	MessageSeq       int64              `json:"message_seq"`
+	ChatID           pgtype.Int8        `json:"chat_id"`
+	MessageID        pgtype.Int8        `json:"message_id"`
+	TargetKind       string             `json:"target_kind"`
+	TargetRunID      string             `json:"target_run_id"`
+	TargetEventID    string             `json:"target_event_id"`
+	Watermark        int64              `json:"watermark"`
+	Emoji            string             `json:"emoji"`
+	State            string             `json:"state"`
+	Version          int64              `json:"version"`
+	AttemptID        pgtype.UUID        `json:"attempt_id"`
+	AttemptEmoji     pgtype.Text        `json:"attempt_emoji"`
+	AttemptVersion   pgtype.Int8        `json:"attempt_version"`
+	AttemptWatermark pgtype.Int8        `json:"attempt_watermark"`
+	NextAttemptAt    pgtype.Timestamptz `json:"next_attempt_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
 type ShuttleUser struct {

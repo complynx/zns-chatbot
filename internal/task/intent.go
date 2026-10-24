@@ -10,31 +10,33 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/complynx/zns-chatbot/internal/files"
+	"github.com/complynx/zns-chatbot/internal/symbols"
 	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
 var ErrUnsupportedUpdate = errors.New("unsupported Telegram update")
 
 type intent struct {
-	NativeAvatar         bool             `json:"native_avatar,omitempty"`
-	RegistrationPromptID uuid.UUID        `json:"registration_prompt_id,omitempty"`
-	RegistrationRole     string           `json:"registration_role,omitempty"`
-	CallbackMessageID    int64            `json:"callback_message_id,omitempty"`
-	ReplyToMessageID     int64            `json:"reply_to_message_id,omitempty"`
-	StructuredCommand    string           `json:"structured_command,omitempty"`
-	PartnerCode          *uuid.UUID       `json:"partner_code,omitempty"`
-	Attachments          []files.Incoming `json:"attachments,omitempty"`
-	PreferredLanguage    string           `json:"preferred_language,omitempty"`
-	TraceParent          string           `json:"traceparent,omitempty"`
-	TraceState           string           `json:"tracestate,omitempty"`
-	Kind                 string           `json:"kind"`
-	User                 telegram.User    `json:"user"`
-	ChatID               int64            `json:"chat_id"`
-	Text                 string           `json:"text,omitempty"`
-	RawUpdate            json.RawMessage  `json:"raw_update"`
-	CallbackTaskID       uuid.UUID        `json:"callback_task_id,omitempty"`
-	PromptKey            string           `json:"prompt_key,omitempty"`
-	Decision             string           `json:"decision,omitempty"`
+	Symbols              []symbols.Occurrence `json:"symbols,omitempty"`
+	NativeAvatar         bool                 `json:"native_avatar,omitempty"`
+	RegistrationPromptID uuid.UUID            `json:"registration_prompt_id,omitempty"`
+	RegistrationRole     string               `json:"registration_role,omitempty"`
+	CallbackMessageID    int64                `json:"callback_message_id,omitempty"`
+	ReplyToMessageID     int64                `json:"reply_to_message_id,omitempty"`
+	StructuredCommand    string               `json:"structured_command,omitempty"`
+	PartnerCode          *uuid.UUID           `json:"partner_code,omitempty"`
+	Attachments          []files.Incoming     `json:"attachments,omitempty"`
+	PreferredLanguage    string               `json:"preferred_language,omitempty"`
+	TraceParent          string               `json:"traceparent,omitempty"`
+	TraceState           string               `json:"tracestate,omitempty"`
+	Kind                 string               `json:"kind"`
+	User                 telegram.User        `json:"user"`
+	ChatID               int64                `json:"chat_id"`
+	Text                 string               `json:"text,omitempty"`
+	RawUpdate            json.RawMessage      `json:"raw_update"`
+	CallbackTaskID       uuid.UUID            `json:"callback_task_id,omitempty"`
+	PromptKey            string               `json:"prompt_key,omitempty"`
+	Decision             string               `json:"decision,omitempty"`
 }
 
 func normalize(u telegram.Update, raw json.RawMessage) (intent, error) {
@@ -67,8 +69,15 @@ func messageIntent(i intent, m *telegram.Message) (intent, error) {
 	i.ChatID = m.Chat.ID
 	i.Text = m.Text
 	var err error
+	i.Symbols, err = symbols.FromMessage(m)
+	if err != nil {
+		return i, ErrUnsupportedUpdate
+	}
 	i.Attachments, err = files.FromMessage(m)
 	if err != nil {
+		return i, ErrUnsupportedUpdate
+	}
+	if m.Sticker != nil && (len(i.Attachments) > 0 || m.Text != "" || m.Caption != "") {
 		return i, ErrUnsupportedUpdate
 	}
 	if len(i.Attachments) > 0 {
@@ -77,16 +86,18 @@ func messageIntent(i intent, m *telegram.Message) (intent, error) {
 	if len(i.Attachments) == 0 {
 		i.PartnerCode = telegram.PartnerStartCode(m.Text)
 	}
-	if (strings.TrimSpace(i.Text) == "" && len(i.Attachments) == 0) || unsupportedMedia(i.RawUpdate) {
+	if (strings.TrimSpace(i.Text) == "" && len(i.Attachments) == 0 && len(i.Symbols) == 0) ||
+		unsupportedMedia(i.RawUpdate, m.Sticker != nil) {
 		i.Kind = kindUnsupported
 		i.Attachments = nil
+		i.Symbols = nil
 	}
 	if i.Kind == kindMessage && m.ReplyToMessage != nil {
 		i.ReplyToMessageID = m.ReplyToMessage.ID
 	}
 	i.NativeAvatar = i.Kind == kindMessage && nativeAvatarImage(i.Attachments) &&
 		strings.TrimSpace(i.Text) == "" && i.ReplyToMessageID == 0
-	if i.Kind == kindMessage && len(i.Attachments) == 0 && structuredCommand(m.Text) {
+	if i.Kind == kindMessage && len(i.Attachments) == 0 && len(i.Symbols) == 0 && structuredCommand(m.Text) {
 		i.Kind = kindStructured
 		i.StructuredCommand = strings.Fields(strings.TrimSpace(m.Text))[0]
 	}
@@ -101,13 +112,16 @@ func nativeAvatarImage(attachments []files.Incoming) bool {
 	return a.Kind == "photo" || a.Kind == "document" && strings.HasPrefix(a.MIMEType, "image/")
 }
 
-func unsupportedMedia(raw json.RawMessage) bool {
+func unsupportedMedia(raw json.RawMessage, knownSticker bool) bool {
 	var update map[string]json.RawMessage
 	var message map[string]json.RawMessage
 	_ = json.Unmarshal(raw, &update)
 	_ = json.Unmarshal(update["message"], &message)
 	for _, key := range []string{"sticker", "contact", "location", "poll", "dice", "paid_media", "live_photo",
 		"rich_message"} {
+		if key == "sticker" && knownSticker {
+			continue
+		}
 		if _, ok := message[key]; ok {
 			return true
 		}

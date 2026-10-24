@@ -50,6 +50,7 @@ type MediaFile struct {
 	Height    int32  `json:"height,omitempty"`
 }
 type Message struct {
+	Sticker   *Sticker    `json:"sticker,omitempty"`
 	Photo     []MediaFile `json:"photo,omitempty"`
 	Document  *MediaFile  `json:"document,omitempty"`
 	Audio     *MediaFile  `json:"audio,omitempty"`
@@ -58,14 +59,15 @@ type Message struct {
 	VideoNote *MediaFile  `json:"video_note,omitempty"`
 	Animation *MediaFile  `json:"animation,omitempty"`
 
-	ID             int64           `json:"message_id"`
-	From           *User           `json:"from,omitempty"`
-	Chat           Chat            `json:"chat"`
-	Date           int64           `json:"date"`
-	Text           string          `json:"text,omitempty"`
-	Caption        string          `json:"caption,omitempty"`
-	Entities       []MessageEntity `json:"entities,omitempty"`
-	ReplyToMessage *Message        `json:"reply_to_message,omitempty"`
+	ID              int64           `json:"message_id"`
+	From            *User           `json:"from,omitempty"`
+	Chat            Chat            `json:"chat"`
+	Date            int64           `json:"date"`
+	Text            string          `json:"text,omitempty"`
+	Caption         string          `json:"caption,omitempty"`
+	Entities        []MessageEntity `json:"entities,omitempty"`
+	CaptionEntities []MessageEntity `json:"caption_entities,omitempty"`
+	ReplyToMessage  *Message        `json:"reply_to_message,omitempty"`
 }
 type CallbackQuery struct {
 	ID      string   `json:"id"`

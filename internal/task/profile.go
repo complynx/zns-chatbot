@@ -84,13 +84,15 @@ func (s *Service) prepareCreate(ctx context.Context, t *db.Task, c *checkpoint, 
 	}
 	c.WelcomeAfterOnboarding = !named
 	c.Create = &loom.CreateRunRequest{
-		Input: loom.Input{Text: text},
+		Input: loom.Input{Text: text + reactionInstructions},
 		Interaction: loom.Interaction{
 			ReplyMode: loom.ReplyModeAgent,
 			Questions: "choices_and_text",
 			Approvals: true,
+			Reactions: &loom.ReactionPolicy{Emoji: telegram.ReactionEmoji()},
 		},
 		Discovery:        &loom.Discovery{ExpandServices: []string{"zinusya"}},
+		OutputPolicy:     &loom.OutputPolicy{DisallowCustomEmoji: true},
 		DisconnectPolicy: "continue",
 		Delivery:         loom.Delivery{Mode: "async"},
 	}
@@ -125,7 +127,7 @@ func (s *Service) prepareControl(ctx context.Context, t *db.Task, c *checkpoint,
 			input.Presentation = &presentation
 		}
 	}
-	if input.Text != "" {
+	if input.Text != "" || len(i.Symbols) > 0 {
 		input.Text, err = s.profilePrompt(ctx, *t, i)
 		if err != nil {
 			s.reportDatabaseFailure(ctx, t.ID, "profile_context", err)
@@ -182,7 +184,11 @@ func (s *Service) profilePrompt(ctx context.Context, t db.Task, i intent) (strin
 	}
 	language := profileLanguage(profile.BotLanguage, i.User.LanguageCode, settings.Document.DefaultLanguage)
 	var text strings.Builder
-	text.WriteString(files.Prompt(i.Text, language, i.Attachments))
+	input, err := s.symbolPrompt(ctx, bot, i)
+	if err != nil {
+		return "", err
+	}
+	text.WriteString(files.Prompt(input, language, i.Attachments))
 	if err = appendProfileContext(&text, profile, i.User, language); err != nil {
 		return "", err
 	}

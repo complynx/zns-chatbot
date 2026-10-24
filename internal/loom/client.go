@@ -36,9 +36,10 @@ type Input struct {
 	ArtifactIDs []string `json:"artifact_ids,omitempty"`
 }
 type Interaction struct {
-	ReplyMode string `json:"reply_mode"`
-	Questions string `json:"questions"`
-	Approvals bool   `json:"approvals"`
+	Reactions *ReactionPolicy `json:"reactions,omitempty"`
+	ReplyMode string          `json:"reply_mode"`
+	Questions string          `json:"questions"`
+	Approvals bool            `json:"approvals"`
 }
 type Delivery struct {
 	Mode   string `json:"mode"`
@@ -52,16 +53,21 @@ type Discovery struct {
 	ExpandServices []string `json:"expand_services,omitempty"`
 }
 
+type OutputPolicy struct {
+	DisallowCustomEmoji bool `json:"disallow_custom_emoji"`
+}
+
 // CreateRunRequest contains semantic arguments; the session is sent in an authorization header.
 type CreateRunRequest struct {
-	ChatID           string      `json:"chat_id,omitempty"`
-	PreviousRunID    string      `json:"previous_run_id,omitempty"`
-	Input            Input       `json:"input"`
-	Interaction      Interaction `json:"interaction"`
-	Discovery        *Discovery  `json:"discovery,omitempty"`
-	DisconnectPolicy string      `json:"disconnect_policy"`
-	Delivery         Delivery    `json:"delivery"`
-	Budget           Budget      `json:"budget"`
+	ChatID           string        `json:"chat_id,omitempty"`
+	PreviousRunID    string        `json:"previous_run_id,omitempty"`
+	Input            Input         `json:"input"`
+	Interaction      Interaction   `json:"interaction"`
+	Discovery        *Discovery    `json:"discovery,omitempty"`
+	OutputPolicy     *OutputPolicy `json:"output_policy,omitempty"`
+	DisconnectPolicy string        `json:"disconnect_policy"`
+	Delivery         Delivery      `json:"delivery"`
+	Budget           Budget        `json:"budget"`
 }
 type Choice struct {
 	ID    string `json:"id"`
