@@ -12,9 +12,22 @@ import (
 type miniAppOrderWrites struct {
 	*Server
 
-	prepare func(context.Context, db.EventScope, db.MiniAppOrderSession, uuid.UUID, db.OrderSubmission) (db.OrderPreparation, error)
-	submit  func(context.Context, db.EventScope, db.MiniAppOrderSession, uuid.UUID, db.OrderSubmission, uuid.UUID) (db.OrderSubmissionResult, error)
-	cancel  func(context.Context, db.EventScope, db.MiniAppOrderSession, uuid.UUID, db.OrderCancellation) (db.SubmittedOrder, error)
+	prepare func(context.Context,
+		db.EventScope,
+		db.MiniAppOrderSession,
+		uuid.UUID,
+		db.OrderSubmission) (db.OrderPreparation, error)
+	submit func(context.Context,
+		db.EventScope,
+		db.MiniAppOrderSession,
+		uuid.UUID,
+		db.OrderSubmission,
+		uuid.UUID) (db.OrderSubmissionResult, error)
+	cancel func(context.Context,
+		db.EventScope,
+		db.MiniAppOrderSession,
+		uuid.UUID,
+		db.OrderCancellation) (db.SubmittedOrder, error)
 	failure func(context.Context, http.ResponseWriter, *http.Request, error)
 }
 

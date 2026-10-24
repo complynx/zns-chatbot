@@ -80,8 +80,8 @@ func avatarReceipt(
 ) (*AvatarReceipt, error) {
 	var storedHash, raw []byte
 	var draft pgtype.UUID
-	err := tx.QueryRow(ctx, "SELECT request_hash,receipt,draft_id FROM shuttle_avatars WHERE user_id=" +
-"$1 AND operation_id=$2", ownerID, operationID).
+	err := tx.QueryRow(ctx, "SELECT request_hash,receipt,draft_id FROM shuttle_avatars WHERE user_id=$1 AND "+
+		"operation_id=$2", ownerID, operationID).
 		Scan(&storedHash, &raw, &draft)
 	if err != nil {
 		return nil, err
@@ -104,14 +104,15 @@ func avatarTarget(
 	request AvatarRequest,
 	lock bool,
 ) (uuid.UUID, string, error) {
-	query := "SELECT t.id,CASE WHEN t.run_id='' THEN 'run_binding_pending'\nWHEN EXISTS" +
-"(SELECT 1 FROM shuttle_conversations c WHERE c.id=t.conversation_id AND " +
-"c.active_task_id=t.id AND c.active_run_id=t.run_id) THEN t.state ELSE 'c" +
-"losed' END\nFROM shuttle_tasks t WHERE t.user_id=$1 AND\n(t.run_id=$2 OR (" +
-"t.run_id='' AND t.state IN ('creating_run','awaiting_service') AND t.sna" +
-"pshot->'create' IS NOT NULL\n AND EXISTS(SELECT 1 FROM shuttle_conversati" +
-"ons c WHERE c.id=t.conversation_id AND c.active_task_id=t.id)))\nORDER BY" +
-" (t.run_id=$2) DESC,t.created_at,t.id LIMIT 1"
+	query := "SELECT t.id,CASE WHEN t.run_id='' THEN 'run_binding_pending'\n" +
+		"WHEN EXISTS(SELECT 1 FROM shuttle_conversations c WHERE c.id=t.conversation_id AND " +
+		"c.active_task_id=t.id AND c.active_run_id=t.run_id) THEN t.state ELSE 'closed' END\n" +
+		"FROM shuttle_tasks t WHERE t.user_id=$1 AND\n" +
+		"(t.run_id=$2 OR (t.run_id='' AND t.state IN ('creating_run','awaiting_service') AND " +
+		"t.snapshot->'create' IS NOT NULL\n" +
+		" AND EXISTS(SELECT 1 FROM shuttle_conversations c WHERE c.id=t.conversation_id AND " +
+		"c.active_task_id=t.id)))\n" +
+		"ORDER BY (t.run_id=$2) DESC,t.created_at,t.id LIMIT 1"
 	if lock {
 		query += ` FOR UPDATE OF t`
 	}
@@ -292,9 +293,9 @@ func commitRenderedAvatar(
 	}
 	_, err = tx.Exec(
 		ctx,
-		"INSERT INTO shuttle_avatars(id,user_id,task_id,delivery_id,source_file_i" +
-"d,operation_id,request_hash,receipt,jpeg,created_at) VALUES($1,$2,$3,$4," +
-"$5,$6,$7,$8,$9,$10)",
+		"INSERT INTO shuttle_avatars(id,user_id,task_id,delivery_id,source_file_id,"+
+			"operation_id,request_hash,receipt,jpeg,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,"+
+			"$10)",
 		result.ArtifactID,
 		scope.UserID,
 		taskID,
@@ -349,9 +350,8 @@ func (s *Store) GetAvatar(
 
 func readAvatar(ctx context.Context, tx pgx.Tx, ownerID, artifactID, taskID uuid.UUID) (AvatarReceipt, []byte, error) {
 	var raw, jpeg []byte
-	err := tx.QueryRow(ctx, "SELECT receipt,jpeg FROM shuttle_avatars WHERE id=$1 AND user_id=$2 AND " +
-"draft_id IS NULL AND ($3::uuid='00000000-0000-0000-0000-000000000000'::u" +
-"uid OR task_id=$3)", artifactID, ownerID, taskID).
+	err := tx.QueryRow(ctx, "SELECT receipt,jpeg FROM shuttle_avatars WHERE id=$1 AND user_id=$2 AND draft_id IS "+
+		"NULL AND ($3::uuid='00000000-0000-0000-0000-000000000000'::uuid OR task_id=$3)", artifactID, ownerID, taskID).
 		Scan(&raw, &jpeg)
 	if err != nil {
 		return AvatarReceipt{}, nil, err
@@ -372,8 +372,8 @@ func (s *Store) AvatarStatus(ctx context.Context, scope ProfileScope, artifactID
 	}
 	var raw []byte
 	var result AvatarView
-	err = tx.QueryRow(ctx, "SELECT a.receipt,o.state FROM shuttle_avatars a JOIN shuttle_outbox o ON" +
-" o.id=a.delivery_id WHERE a.id=$1 AND a.user_id=$2", artifactID, scope.UserID).
+	err = tx.QueryRow(ctx, "SELECT a.receipt,o.state FROM shuttle_avatars a JOIN shuttle_outbox o ON "+
+		"o.id=a.delivery_id WHERE a.id=$1 AND a.user_id=$2", artifactID, scope.UserID).
 		Scan(&raw, &result.DeliveryState)
 	if err != nil {
 		return AvatarView{}, err
@@ -390,8 +390,8 @@ func (s *Store) GetAvatarForDelivery(ctx context.Context, taskID, artifactID uui
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var scope ProfileScope
-	err = tx.QueryRow(ctx, "SELECT u.id,u.bot_id,u.zitadel_org,u.zitadel_subject FROM shuttle_tasks " +
-"t JOIN shuttle_users u ON u.id=t.user_id WHERE t.id=$1 AND NOT u.revoked", taskID).
+	err = tx.QueryRow(ctx, "SELECT u.id,u.bot_id,u.zitadel_org,u.zitadel_subject FROM shuttle_tasks t JOIN "+
+		"shuttle_users u ON u.id=t.user_id WHERE t.id=$1 AND NOT u.revoked", taskID).
 		Scan(&scope.UserID, &scope.BotID, &scope.Organization, &scope.Subject)
 	if err != nil {
 		return AvatarReceipt{}, nil, err
@@ -418,9 +418,9 @@ func appendOutbox(ctx context.Context, tx pgx.Tx, taskID uuid.UUID, out []Outbou
 		}
 		_, err := tx.Exec(
 			ctx,
-			"INSERT INTO shuttle_outbox(id,task_id,dedup_key,chunk_seq,payload) SELEC" +
-"T $1,$2,$3,coalesce(max(chunk_seq),-1)+1,$4 FROM shuttle_outbox WHERE ta" +
-"sk_id=$2 ON CONFLICT(dedup_key) DO NOTHING",
+			"INSERT INTO shuttle_outbox(id,task_id,dedup_key,chunk_seq,payload) SELECT $1,$2,$3,"+
+				"coalesce(max(chunk_seq),-1)+1,$4 FROM shuttle_outbox WHERE task_id=$2 ON "+
+				"CONFLICT(dedup_key) DO NOTHING",
 			item.ID,
 			taskID,
 			item.DedupKey,

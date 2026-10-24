@@ -92,7 +92,8 @@ func testAuthorizationDeadlineRetainsRun(t *testing.T, lost bool) {
 	require.NoError(t, err)
 	// Model a long outage while the process was stopped, retaining its deadline.
 	_, err = h.store.Pool().Exec(context.Background(),
-		`UPDATE shuttle_tasks SET snapshot=jsonb_set(snapshot,'{loom_auth_retry_until}',to_jsonb($2::text)) WHERE id=$1`,
+		"UPDATE shuttle_tasks SET snapshot=jsonb_set(snapshot,'{loom_auth_retry_until}',"+
+			"to_jsonb($2::text)) WHERE id=$1",
 		id, time.Now().Add(-time.Minute).UTC().Format(time.RFC3339Nano))
 	require.NoError(t, err)
 	p.mu.Lock()
@@ -184,7 +185,8 @@ func TestLoomAuthorizationDeadlineBeforeCreationStillDenies(t *testing.T) {
 	h.await(t, id, "awaiting_authorization")
 	h.stop(t)
 	_, err := h.store.Pool().Exec(context.Background(),
-		`UPDATE shuttle_tasks SET snapshot=jsonb_set(snapshot,'{loom_auth_retry_until}',to_jsonb($2::text)) WHERE id=$1`,
+		"UPDATE shuttle_tasks SET snapshot=jsonb_set(snapshot,'{loom_auth_retry_until}',"+
+			"to_jsonb($2::text)) WHERE id=$1",
 		id, time.Now().Add(-time.Minute).UTC().Format(time.RFC3339Nano))
 	require.NoError(t, err)
 	h.start(t)
@@ -206,7 +208,8 @@ func TestLostReauthorizationReceiptIsNotRepeatedAfterRestart(t *testing.T) {
 	awaitLoomRun(t, h, id)
 	h.stop(t)
 	_, err := h.store.Pool().Exec(context.Background(),
-		`UPDATE shuttle_tasks SET snapshot=jsonb_set(snapshot,'{session,expires_at}',to_jsonb($2::text)) WHERE id=$1`,
+		"UPDATE shuttle_tasks SET snapshot=jsonb_set(snapshot,'{session,expires_at}',"+
+			"to_jsonb($2::text)) WHERE id=$1",
 		id, time.Now().Add(-time.Minute).UTC().Format(time.RFC3339Nano))
 	require.NoError(t, err)
 	p.mu.Lock()
@@ -274,7 +277,8 @@ func TestServiceOutageDoesNotConsumeLoomAuthorizationGrace(t *testing.T) {
 	h.await(t, id, "awaiting_authorization")
 	h.stop(t)
 	_, err := h.store.Pool().Exec(context.Background(),
-		`UPDATE shuttle_tasks SET snapshot=jsonb_set(snapshot,'{loom_auth_retry_until}',to_jsonb($2::text)) WHERE id=$1`,
+		"UPDATE shuttle_tasks SET snapshot=jsonb_set(snapshot,'{loom_auth_retry_until}',"+
+			"to_jsonb($2::text)) WHERE id=$1",
 		id, time.Now().Add(-time.Minute).UTC().Format(time.RFC3339Nano))
 	require.NoError(t, err)
 	p.mu.Lock()

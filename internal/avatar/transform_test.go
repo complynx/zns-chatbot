@@ -60,12 +60,12 @@ func TestRenderInputPreservesRawAndParsesStrictBoundedHeader(t *testing.T) {
 	require.Equal(t, expected, transform)
 	require.Equal(t, raw, source)
 	for _, input := range []string{
-		`{"protocol_version":3,"transform":{"zoom_ppm":1000000}}` + "\nimage",
-		`{"protocol_version":2,"transform":{"zoom_ppm":1000000},"unknown":1}` + "\nimage",
-		`{"protocol_version":2,"transform":{"zoom_ppm":1000000,"unknown":1}}` + "\nimage",
-		`{"protocol_version":2,"transform":{"zoom_ppm":0}}` + "\nimage",
-		`{"protocol_version":2,"transform":null}` + "\nimage",
-		`{} {}` + "\nimage", `{}`,
+		"{\"protocol_version\":3,\"transform\":{\"zoom_ppm\":1000000}}\nimage",
+		"{\"protocol_version\":2,\"transform\":{\"zoom_ppm\":1000000},\"unknown\":1}\nimage",
+		"{\"protocol_version\":2,\"transform\":{\"zoom_ppm\":1000000,\"unknown\":1}}\nimage",
+		"{\"protocol_version\":2,\"transform\":{\"zoom_ppm\":0}}\nimage",
+		"{\"protocol_version\":2,\"transform\":null}\nimage",
+		"{} {}\nimage", `{}`,
 		"{" + strings.Repeat(" ", avatar.MaxHeaderBytes) + "}\nimage",
 	} {
 		_, _, err = avatar.ReadInput(strings.NewReader(input))

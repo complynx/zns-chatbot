@@ -57,7 +57,12 @@ func TestTelegramPrelinkStartupRejectsIncompleteOrSharedTrust(t *testing.T) {
 			require.NotContains(t, err.Error(), "secret-do-not-print")
 		})
 	}
-	for _, env := range []string{"IDENTITY_ACTOR_CLIENT_SECRET", "IDENTITY_CLIENT_SECRET", "IDENTITY_INTROSPECTION_CLIENT_SECRET", "TELEGRAM_WEBHOOK_SECRET"} {
+	for _, env := range []string{
+		"IDENTITY_ACTOR_CLIENT_SECRET",
+		"IDENTITY_CLIENT_SECRET",
+		"IDENTITY_INTROSPECTION_CLIENT_SECRET",
+		"TELEGRAM_WEBHOOK_SECRET",
+	} {
 		t.Run("shared-"+env, func(t *testing.T) {
 			key := prelinkEnv(t)
 			t.Setenv("SHUTTLE_"+env, key)

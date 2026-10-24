@@ -190,9 +190,8 @@ func TestOrderSubmissionStaleExpiredAndChangedOperationAreRejected(t *testing.T)
 	require.ErrorIs(t, err, db.ErrConflict)
 	// Expire only this disposable preparation while preserving its schema constraints.
 	_, err = f.H.store.Pool().
-		Exec(ctx, "UPDATE shuttle_order_preparations SET created_at=clock_timestamp()-inter" +
-"val '2 minutes',expires_at=clock_timestamp()-interval '1 minute' WHERE i" +
-"d=$1", prepared.ID)
+		Exec(ctx, "UPDATE shuttle_order_preparations SET created_at=clock_timestamp()-interval '2 minutes',"+
+			"expires_at=clock_timestamp()-interval '1 minute' WHERE id=$1", prepared.ID)
 	require.NoError(t, err)
 	_, err = f.H.store.SubmitOwnOrder(ctx, scope, operation, args, prepared.ID, db.OrderSourceAgent)
 	require.ErrorIs(t, err, db.ErrConflict)
@@ -217,10 +216,9 @@ func TestOrderSubmissionReceiptFailureRollsBackOrderAndDraft(t *testing.T) {
 	prepared, err := f.H.store.PrepareOwnOrderSubmission(ctx, scope, uuid.New(), args, db.OrderSourceAgent)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(ctx, "CREATE FUNCTION reject_order_receipt() RETURNS trigger LANGUAGE plpgsql " +
-"AS $$ BEGIN RAISE EXCEPTION 'synthetic receipt failure'; END $$;\n CREATE" +
-" TRIGGER reject_order_receipt BEFORE INSERT ON shuttle_order_operations " +
-"FOR EACH ROW EXECUTE FUNCTION reject_order_receipt()")
+		Exec(ctx, "CREATE FUNCTION reject_order_receipt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE "+
+			"EXCEPTION 'synthetic receipt failure'; END $$;\n CREATE TRIGGER reject_order_receipt BEFORE INSERT ON "+
+			"shuttle_order_operations FOR EACH ROW EXECUTE FUNCTION reject_order_receipt()")
 	require.NoError(t, err)
 	_, err = f.H.store.SubmitOwnOrder(ctx, scope, uuid.New(), args, prepared.ID, db.OrderSourceAgent)
 	require.ErrorContains(t, err, "synthetic receipt failure")
@@ -285,8 +283,8 @@ func TestOrderCancellationFrozenCutoffAndExactOperation(t *testing.T) {
 	cancel.ExpectedVersion = 1
 	// Set up a closed retained order; catalog edits cannot reopen this stored cutoff.
 	_, err = f.H.store.Pool().
-		Exec(ctx, "UPDATE shuttle_orders SET submitted_at=clock_timestamp()-interval '2 min" +
-"utes',sales_closes_at=clock_timestamp()-interval '1 minute' WHERE id=$1", result.Order.ID)
+		Exec(ctx, "UPDATE shuttle_orders SET submitted_at=clock_timestamp()-interval '2 minutes',"+
+			"sales_closes_at=clock_timestamp()-interval '1 minute' WHERE id=$1", result.Order.ID)
 	require.NoError(t, err)
 	_, err = f.H.store.CancelOwnOrder(ctx, scope, uuid.New(), cancel, db.OrderSourceMiniApp)
 	require.ErrorIs(t, err, db.ErrConflict)

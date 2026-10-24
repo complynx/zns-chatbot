@@ -143,20 +143,20 @@ func TestMassageSpecialistPreferencesShareNativeAgentCASAndOriginalReceipts(t *t
 func anotherStaffEvent(t *testing.T, f paymentFixture) uuid.UUID {
 	t.Helper()
 	id := uuid.New()
-	_, err := f.H.store.Pool().Exec(t.Context(), "INSERT INTO shuttle_events\n (id,bot_id,organization_id,name,timezone,sta" +
-"rts_at,ends_at,modules,version)\n SELECT $1,bot_id,organization_id,name,t" +
-"imezone,starts_at,ends_at,modules,version FROM shuttle_events WHERE id=$" +
-"2", id, f.Event.ID)
+	_, err := f.H.store.Pool().Exec(t.Context(), "INSERT INTO shuttle_events\n"+
+		" (id,bot_id,organization_id,name,timezone,starts_at,ends_at,modules,version)\n"+
+		" SELECT $1,bot_id,organization_id,name,timezone,starts_at,ends_at,modules,version "+
+		"FROM shuttle_events WHERE id=$2", id, f.Event.ID)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "INSERT INTO shuttle_massage_schedules SELECT $1,version,document FROM sh" +
-"uttle_massage_schedules WHERE event_id=$2", id, f.Event.ID)
+		Exec(t.Context(), "INSERT INTO shuttle_massage_schedules SELECT $1,version,document FROM "+
+			"shuttle_massage_schedules WHERE event_id=$2", id, f.Event.ID)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "INSERT INTO shuttle_massage_specialist_bindings(event_id,specialist_id,u" +
-"ser_id,active,version,updated_by)\n SELECT $1,specialist_id,user_id,activ" +
-"e,version,updated_by FROM shuttle_massage_specialist_bindings WHERE even" +
-"t_id=$2", id, f.Event.ID)
+		Exec(t.Context(), "INSERT INTO shuttle_massage_specialist_bindings(event_id,specialist_id,user_id,"+
+			"active,version,updated_by)\n"+
+			" SELECT $1,specialist_id,user_id,active,version,updated_by FROM "+
+			"shuttle_massage_specialist_bindings WHERE event_id=$2", id, f.Event.ID)
 	require.NoError(t, err)
 	return id
 }
@@ -246,8 +246,8 @@ func TestMassageSpecialistPreferencesDenyForeignRevokedAndExpiredSession(t *test
 	}
 	session := nativeMassageSession(t, f, staff, 11001)
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interva" +
-"l '1 second' WHERE user_id=$1", staff.UserID)
+		Exec(t.Context(), "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 "+
+			"second' WHERE user_id=$1", staff.UserID)
 	require.NoError(t, err)
 	_, err = f.H.store.SetMiniAppMassageSpecialistPreferences(
 		t.Context(),
@@ -410,11 +410,11 @@ func TestMassageSpecialistNoticeFailureRollsBackBookingOrCancellation(t *testing
 				before = specialistNotices(t, f, booking.ID)
 			}
 			_, err := f.H.store.Pool().
-				Exec(t.Context(), "CREATE FUNCTION reject_specialist_notice() RETURNS trigger LANGUAGE plpg" +
-"sql AS $$ BEGIN RAISE EXCEPTION 'synthetic specialist notice failure'; E" +
-"ND $$;\n CREATE TRIGGER reject_specialist_notice BEFORE INSERT ON shuttle" +
-"_massage_specialist_notifications FOR EACH ROW EXECUTE FUNCTION reject_s" +
-"pecialist_notice()")
+				Exec(t.Context(), "CREATE FUNCTION reject_specialist_notice() RETURNS trigger LANGUAGE plpgsql AS $$ "+
+					"BEGIN RAISE EXCEPTION 'synthetic specialist notice failure'; END $$;\n"+
+					" CREATE TRIGGER reject_specialist_notice BEFORE INSERT ON "+
+					"shuttle_massage_specialist_notifications FOR EACH ROW EXECUTE FUNCTION "+
+					"reject_specialist_notice()")
 			require.NoError(t, err)
 			op := uuid.New()
 			if kind == "booked" {

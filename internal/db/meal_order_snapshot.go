@@ -55,7 +55,8 @@ func (s *Store) orderSnapshotForKind(ctx context.Context, tx pgx.Tx, scope Profi
 // Unlimited quantities are explicit empty demands, never an absent capacity policy.
 func buildMealOrderSnapshot(catalog MealCatalogView, draft MealDraft, args OrderSubmission) (OrderSnapshot, error) {
 	if catalog.EventID != args.EventID || catalog.EventVersion != args.ExpectedEventVersion ||
-		catalog.Version != args.ExpectedCatalogVersion || draft.Version != args.ExpectedDraftVersion || draft.Version == math.MaxInt64 ||
+		catalog.Version != args.ExpectedCatalogVersion || draft.Version != args.ExpectedDraftVersion ||
+		draft.Version == math.MaxInt64 ||
 		draft.EventVersion != catalog.EventVersion || draft.CatalogVersion != catalog.Version {
 		return OrderSnapshot{}, ErrConflict
 	}

@@ -174,8 +174,8 @@ func TestAgentAssignmentRequiresExactProposalAndReplaysAcrossRestart(t *testing.
 	require.EqualValues(t, 12345, assigned.Pass.PriceMinor)
 	// Expiry limits new effects, never reconciliation of an already committed assignment.
 	_, err = h.store.Pool().
-		Exec(context.Background(), "UPDATE shuttle_assignment_preparations SET expires_at=clock_timestamp()-" +
-"interval '1 second' WHERE proposal_id=$1", proposal.Preconditions.ProposalID)
+		Exec(context.Background(), "UPDATE shuttle_assignment_preparations"+
+			" SET expires_at=clock_timestamp()-interval '1 second' WHERE proposal_id=$1", proposal.Preconditions.ProposalID)
 	require.NoError(t, err)
 	h.stop(t)
 	h.start(t)
@@ -215,8 +215,8 @@ func TestAgentAssignmentRechecksPriceCapacityAndExpiry(t *testing.T) {
 	b := registerForEvent(t, h, bToken, event.ID, "join", "leader")
 	expired := prepareAssignment(t, h, operator, "expired", event, a)
 	_, err := h.store.Pool().
-		Exec(context.Background(), "UPDATE shuttle_assignment_preparations SET expires_at=clock_timestamp()-" +
-"interval '1 second' WHERE proposal_id=$1", expired.Preconditions.ProposalID)
+		Exec(context.Background(), "UPDATE shuttle_assignment_preparations"+
+			" SET expires_at=clock_timestamp()-interval '1 second' WHERE proposal_id=$1", expired.Preconditions.ProposalID)
 	require.NoError(t, err)
 	code, data := executeAssignment(t, h, operator, expired)
 	require.Equal(t, http.StatusOK, code, string(data))
@@ -296,8 +296,9 @@ func TestAgentAssignmentExpiryCannotPassWhileWaitingForRecipient(t *testing.T) {
 	require.NoError(t, err)
 	var expiresAt time.Time
 	err = h.store.Pool().
-		QueryRow(ctx, "UPDATE shuttle_assignment_preparations SET expires_at=clock_timestamp()+" +
-"interval '1 second' WHERE proposal_id=$1 RETURNING expires_at", proposal.Preconditions.ProposalID).
+		QueryRow(ctx, "UPDATE shuttle_assignment_preparations"+
+			" SET expires_at=clock_timestamp()+interval '1 second'"+
+			" WHERE proposal_id=$1 RETURNING expires_at", proposal.Preconditions.ProposalID).
 		Scan(&expiresAt)
 	require.NoError(t, err)
 	type response struct {
@@ -334,9 +335,9 @@ func TestAgentAssignmentExpiryCannotPassWhileWaitingForRecipient(t *testing.T) {
 	require.Eventually(t, func() bool {
 		var waiting bool
 		e := h.store.Pool().
-			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity a JOIN pg_locks l ON l.pid=" +
-"a.pid WHERE a.wait_event_type='Lock' AND l.relation='shuttle_users'::reg" +
-"class AND a.query LIKE '%FOR SHARE%')").
+			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity a JOIN pg_locks l ON l.pid=a.pid"+
+				" WHERE a.wait_event_type='Lock' AND l.relation='shuttle_users'::regclass AND "+
+				"a.query LIKE '%FOR SHARE%')").
 			Scan(&waiting)
 		return e == nil && waiting
 	}, 3*time.Second, 10*time.Millisecond)

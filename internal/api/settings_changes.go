@@ -27,6 +27,7 @@ type settingsChangePreparationResponse struct {
 }
 
 func (s *Server) registerSettingsChanges(api huma.API) {
+	describeSettingsSchema(api.OpenAPI().Components.Schemas)
 	registerAgentPost(
 		api,
 		"agent-prepare-settings-change",

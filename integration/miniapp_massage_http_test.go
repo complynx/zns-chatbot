@@ -145,12 +145,16 @@ func TestMiniAppMassageHTTPBothHandoffsKeepHistoryAfterPassAndModuleLoss(t *test
 	recovered := massageAppCall[db.MassageBooking](t, f, session, http.MethodPost, path+"/book", nativeBody)
 	require.Equal(t, booking, recovered)
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_events SET modules=array_remove(modules,'massage'),versio" +
-"n=version+1 WHERE id=$1", f.Event.ID)
+		Exec(t.Context(), "UPDATE shuttle_events SET modules=array_remove(modules,'massage'),"+
+			"version=version+1 WHERE id=$1", f.Event.ID)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_registrations SET state='waitlisted' WHERE event_id=$1 AN" +
-"D user_id=$2", f.Event.ID, owner.UserID)
+		Exec(
+			t.Context(),
+			"UPDATE shuttle_registrations SET state='waitlisted' WHERE event_id=$1 AND user_id=$2",
+			f.Event.ID,
+			owner.UserID,
+		)
 	require.NoError(t, err)
 	cancelArgs := db.MassageCancellationArguments{
 		EventID:         f.Event.ID,
@@ -236,7 +240,13 @@ func TestMiniAppMassageHTTPRejectsStaleApprovalForeignOwnerAndLoggedOutReads(t *
 	require.Equal(t, http.StatusNotFound, code, string(raw))
 	code, raw, _ = appCall(t, f.H, http.MethodPost, "/app/session/logout", "{}", session.Token, appTestOrigin)
 	require.Equal(t, http.StatusNoContent, code, string(raw))
-	for _, read := range []string{"/app/massage/events", path + "/schedule", path + "/bookings", path + "/bookings/" + booking.ID.String(), path + "/operations/" + operation.String()} {
+	for _, read := range []string{
+		"/app/massage/events",
+		path + "/schedule",
+		path + "/bookings",
+		path + "/bookings/" + booking.ID.String(),
+		path + "/operations/" + operation.String(),
+	} {
 		code, raw, _ = appCall(t, f.H, http.MethodGet, read, "", session.Token, "")
 		require.Equal(t, http.StatusUnauthorized, code, string(raw))
 	}

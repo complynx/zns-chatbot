@@ -71,24 +71,24 @@ func orderNoticeStatus(n db.OrderNotification, ru, reviewer bool) (string, error
 		return structuredText(
 			ru,
 			"Proof received. Payment awaits human review; limited resources are held for this evidence.",
-			"Подтверждение получено. Оплата ожидает проверки человеком; ограниченные "+
-				"ресурсы удерживаются за этим подтверждением.",
+			"Подтверждение получено. Оплата ожидает проверки человеком; "+
+				"ограниченные ресурсы удерживаются за этим подтверждением.",
 		), nil
 	case db.OrderEvidenceExhausted:
 		if reviewer {
 			return structuredText(
 				ru,
-				"Capacity is exhausted. Check the payment; a refund requires attention. N"+
-					"o resources are held and no refund was performed.",
+				"Capacity is exhausted. Check the payment; a refund requires attention. "+
+					"No resources are held and no refund was performed.",
 				"Места закончились. Проверьте платёж: требуется решение о возврате. Ресурсы не удерживаются, возврат не выполнен.",
 			), nil
 		}
 		return structuredText(
 			ru,
-			"Places have run out. An event ambassador must review the payment and res"+
-				"olve the refund. No places are held and no automatic refund was made.",
-			"Места закончились. Амбассадор эвента проверит платёж и решит вопрос возв"+
-				"рата. Места не удерживаются, автоматический возврат не выполнялся.",
+			"Places have run out. An event ambassador must review the payment and resolve the refund. "+
+				"No places are held and no automatic refund was made.",
+			"Места закончились. Амбассадор эвента проверит платёж и решит вопрос возврата. "+
+				"Места не удерживаются, автоматический возврат не выполнялся.",
 		), nil
 	case db.OrderEvidenceNeedsDecision:
 		return structuredText(

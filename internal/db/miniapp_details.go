@@ -68,8 +68,8 @@ func (s *Store) MiniAppRegistrationDetails(
 		return registrationDetailsStatus(ctx, s.q.WithTx(tx), attempt.User.ID)
 	}
 	var raw []byte
-	if err = tx.QueryRow(ctx, "SELECT result FROM shuttle_registration_details_operations WHERE user_id" +
-"=$1 AND operation_id=$2", attempt.User.ID, operation).
+	if err = tx.QueryRow(ctx, "SELECT result FROM shuttle_registration_details_operations WHERE user_id=$1 AND "+
+		"operation_id=$2", attempt.User.ID, operation).
 		Scan(&raw); err != nil {
 		return registrationdetails.Status{}, err
 	}

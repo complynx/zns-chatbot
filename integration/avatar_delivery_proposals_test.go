@@ -33,8 +33,8 @@ func TestAvatarProposalRecoversOriginalAndCompletedReceipt(t *testing.T) {
 	result, err := f.h.store.ResolveAvatarDelivery(t.Context(), scope, op, a, prep.ID)
 	require.NoError(t, err)
 	_, err = f.h.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_avatar_delivery_resolutions SET expires_at=clock_timestam" +
-"p()-interval '1 second' WHERE proposal_id=$1", prep.ID)
+		Exec(t.Context(), "UPDATE shuttle_avatar_delivery_resolutions"+
+			" SET expires_at=clock_timestamp()-interval '1 second' WHERE proposal_id=$1", prep.ID)
 	require.NoError(t, err)
 	view, err := f.h.store.AvatarDeliveryProposal(
 		t.Context(),
@@ -90,8 +90,8 @@ func TestAvatarProposalPendingPagesBoundBytesAndExcludeExpiry(t *testing.T) {
 		require.NoError(t, err)
 		if i == 0 {
 			_, err = f.h.store.Pool().
-				Exec(t.Context(), "UPDATE shuttle_avatar_delivery_resolutions SET expires_at=clock_timestam" +
-"p()-interval '1 second' WHERE proposal_id=$1", prep.ID)
+				Exec(t.Context(), "UPDATE shuttle_avatar_delivery_resolutions"+
+					" SET expires_at=clock_timestamp()-interval '1 second' WHERE proposal_id=$1", prep.ID)
 			require.NoError(t, err)
 			view, readErr := f.h.store.AvatarDeliveryProposal(
 				t.Context(),
@@ -105,8 +105,9 @@ func TestAvatarProposalPendingPagesBoundBytesAndExcludeExpiry(t *testing.T) {
 		expected[prep.ID] = true
 		// Stored proposals are individually bounded; a page must also bound their aggregate.
 		_, err = f.h.store.Pool().
-			Exec(t.Context(), "UPDATE shuttle_avatar_delivery_resolutions SET document=jsonb_set(docume" +
-"nt,'{description}',to_jsonb($2::text)) WHERE proposal_id=$1", prep.ID, strings.Repeat("x", 14000))
+			Exec(t.Context(), "UPDATE shuttle_avatar_delivery_resolutions"+
+				" SET document=jsonb_set(document,'{description}',to_jsonb($2::text))"+
+				" WHERE proposal_id=$1", prep.ID, strings.Repeat("x", 14000))
 		require.NoError(t, err)
 	}
 	after := uuid.Nil

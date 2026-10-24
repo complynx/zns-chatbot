@@ -43,16 +43,27 @@ func (s *Store) RegistrationEntryForCallback(
 		return RegistrationEntry{}, err
 	}
 	var raw []byte
-	err = tx.QueryRow(ctx, "SELECT prior.snapshot->'registration_entry'\nFROM shuttle_tasks current_t"+
-		"ask JOIN shuttle_tasks prior\n ON prior.user_id=current_task.user_id AND "+
-		"prior.conversation_id=current_task.conversation_id AND prior.seq<current"+
-		"_task.seq\nJOIN shuttle_outbox o ON o.task_id=prior.id\nWHERE current_task"+
-		".id=$1 AND current_task.user_id=$2 AND prior.id=$3\n AND prior.route='str"+
-		"uctured' AND prior.state='completed' AND prior.request->>'structured_com"+
-		"mand'='/register'\n AND prior.snapshot->'registration_entry' IS NOT NULL "+
-		"AND o.state='delivered'\n AND o.receipt->>'message_id'=$4\n AND o.payload#"+
-		">'{reply_markup,inline_keyboard}' @> jsonb_build_array(jsonb_build_array"+
-		"(jsonb_build_object('callback_data',$5::text)))\nLIMIT 1", taskID, scope.UserID, promptID, strconv.FormatInt(messageID, 10), "g:"+promptID.String()+":"+role).Scan(&raw)
+	err = tx.QueryRow(
+		ctx,
+		"SELECT prior.snapshot->'registration_entry'\n"+
+			"FROM shuttle_tasks current_task JOIN shuttle_tasks prior\n"+
+			" ON prior.user_id=current_task.user_id AND "+
+			"prior.conversation_id=current_task.conversation_id AND prior.seq<current_task.seq\n"+
+			"JOIN shuttle_outbox o ON o.task_id=prior.id\n"+
+			"WHERE current_task.id=$1 AND current_task.user_id=$2 AND prior.id=$3\n"+
+			" AND prior.route='structured' AND prior.state='completed' AND "+
+			"prior.request->>'structured_command'='/register'\n"+
+			" AND prior.snapshot->'registration_entry' IS NOT NULL AND o.state='delivered'\n"+
+			" AND o.receipt->>'message_id'=$4\n"+
+			" AND o.payload#>'{reply_markup,inline_keyboard}' @> "+
+			"jsonb_build_array(jsonb_build_array(jsonb_build_object('callback_data',$5::text)))\n"+
+			"LIMIT 1",
+		taskID,
+		scope.UserID,
+		promptID,
+		strconv.FormatInt(messageID, 10),
+		"g:"+promptID.String()+":"+role,
+	).Scan(&raw)
 	if err != nil {
 		return RegistrationEntry{}, err
 	}

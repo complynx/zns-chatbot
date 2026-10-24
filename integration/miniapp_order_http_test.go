@@ -211,7 +211,15 @@ func TestMiniAppOrderHTTPValidationOriginAndCurrentSession(t *testing.T) {
 	path := ordersAppPath(args.EventID)
 	operation := uuid.New()
 	body := orderAppPrepareBody(operation, args)
-	for _, invalid := range []string{"null", "{}", paymentAppJSON(t, map[string]any{"operation_id": operation, "expected_event_version": 1, "expected_catalog_version": 1}), paymentAppJSON(t, body) + " {}"} {
+	for _, invalid := range []string{
+		"null",
+		"{}",
+		paymentAppJSON(
+			t,
+			map[string]any{"operation_id": operation, "expected_event_version": 1, "expected_catalog_version": 1},
+		),
+		paymentAppJSON(t, body) + " {}",
+	} {
 		code, raw, _ := appCall(t, f.H, http.MethodPost, path+"/submit/prepare", invalid, session.Token, appTestOrigin)
 		require.Equal(t, http.StatusBadRequest, code, string(raw))
 	}
@@ -255,7 +263,13 @@ func TestMiniAppOrderHTTPValidationOriginAndCurrentSession(t *testing.T) {
 	)
 	require.Equal(t, http.StatusBadRequest, code, string(raw))
 	delete(submit, "total_minor")
-	for _, suffix := range []string{"/submitted?limit=0", "/submitted?limit=21", "/submitted?after=bad", "/submitted/00000000-0000-0000-0000-000000000000", "/operation-receipts/other/" + operation.String()} {
+	for _, suffix := range []string{
+		"/submitted?limit=0",
+		"/submitted?limit=21",
+		"/submitted?after=bad",
+		"/submitted/00000000-0000-0000-0000-000000000000",
+		"/operation-receipts/other/" + operation.String(),
+	} {
 		code, raw, _ = appCall(t, f.H, http.MethodGet, path+suffix, "", session.Token, "")
 		require.Equal(t, http.StatusBadRequest, code, string(raw))
 	}
@@ -271,7 +285,11 @@ func TestMiniAppOrderHTTPValidationOriginAndCurrentSession(t *testing.T) {
 	require.Equal(t, http.StatusOK, code, string(raw))
 	code, raw, _ = appCall(t, f.H, http.MethodPost, "/app/session/logout", "{}", session.Token, appTestOrigin)
 	require.Equal(t, http.StatusNoContent, code, string(raw))
-	for _, suffix := range []string{"/submitted", "/operation-receipts/prepare/" + operation.String(), "/operation-receipts/submit/" + operation.String()} {
+	for _, suffix := range []string{
+		"/submitted",
+		"/operation-receipts/prepare/" + operation.String(),
+		"/operation-receipts/submit/" + operation.String(),
+	} {
 		code, raw, _ = appCall(t, f.H, http.MethodGet, path+suffix, "", session.Token, "")
 		require.Equal(t, http.StatusUnauthorized, code, string(raw))
 	}
@@ -351,7 +369,11 @@ func TestMiniAppOrderHTTPUnknownPhaseStaleBodyAndOwnerIsolation(t *testing.T) {
 	_, err := f.H.store.Pool().
 		Exec(t.Context(), "UPDATE shuttle_events SET modules=ARRAY['registrations'] WHERE id=$1", args.EventID)
 	require.NoError(t, err)
-	for _, suffix := range []string{"/submitted", "/submitted/" + result.Order.ID.String(), "/operation-receipts/submit/" + operation.String()} {
+	for _, suffix := range []string{
+		"/submitted",
+		"/submitted/" + result.Order.ID.String(),
+		"/operation-receipts/submit/" + operation.String(),
+	} {
 		code, raw, _ = appCall(t, f.H, http.MethodGet, path+suffix, "", session.Token, "")
 		require.Equal(t, http.StatusNotFound, code, string(raw))
 	}

@@ -214,7 +214,11 @@ func TestMiniAppPaymentReviewHTTPValidationAndAccess(t *testing.T) {
 	var choices events.ContextList
 	require.NoError(t, json.Unmarshal(raw, &choices))
 	require.Empty(t, choices.Events)
-	for _, path := range []string{paymentAppEvidencePath(review), paymentAppEvidencePath(review) + "/content", paymentAppPath + "events/" + review.EventID.String() + "/evidence"} {
+	for _, path := range []string{
+		paymentAppEvidencePath(review),
+		paymentAppEvidencePath(review) + "/content",
+		paymentAppPath + "events/" + review.EventID.String() + "/evidence",
+	} {
 		code, raw, _ = appCall(t, f.H, http.MethodGet, path, "", owner.Token, appTestOrigin)
 		require.Equal(t, http.StatusForbidden, code, string(raw))
 		require.NotContains(t, string(raw), "%PDF")
@@ -462,13 +466,13 @@ func TestMiniAppPaymentReviewHTTPVerifiedGlobalRole(t *testing.T) {
 func TestMiniAppPaymentReviewHTTPPayerDisplayAndAccess(t *testing.T) {
 	t.Parallel()
 	f, review, session := paymentAppFixture(t)
-	profile := `{"first_name":"Telegram","last_name":"Fallback","username":"not_disclosed","private":"not_disclosed"}`
+	profile := `{"first_name":"Telegram","last_name":"Fallback","username":"not_disclosed",` +
+		`"private":"not_disclosed"}`
 	_, err := f.H.store.Pool().Exec(t.Context(), `UPDATE shuttle_users SET profile=$2 WHERE id=$1`, f.OwnerID, profile)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "INSERT INTO shuttle_user_profiles(user_id,version,full_name) VALUES($1,1" +
-",'Chosen payer') ON CONFLICT(user_id) DO UPDATE SET full_name=EXCLUDED.f" +
-"ull_name", f.OwnerID)
+		Exec(t.Context(), "INSERT INTO shuttle_user_profiles(user_id,version,full_name) VALUES($1,1,'Chosen "+
+			"payer') ON CONFLICT(user_id) DO UPDATE SET full_name=EXCLUDED.full_name", f.OwnerID)
 	require.NoError(t, err)
 	eventPath := paymentAppPath + "events/" + review.EventID.String()
 	code, raw, _ := appCall(t, f.H, http.MethodGet, eventPath, "", session.Token, appTestOrigin)
@@ -506,7 +510,12 @@ func TestMiniAppPaymentReviewHTTPPayerDisplayAndAccess(t *testing.T) {
 	require.NotContains(t, string(raw), event.Name)
 
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), `DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2`, f.Event.ID, f.AmbassadorID)
+		Exec(
+			t.Context(),
+			`DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2`,
+			f.Event.ID,
+			f.AmbassadorID,
+		)
 	require.NoError(t, err)
 	code, raw, _ = appCall(t, f.H, http.MethodGet, path, "", session.Token, appTestOrigin)
 	require.Equal(t, http.StatusForbidden, code, string(raw))

@@ -191,7 +191,12 @@ func TestNativePhotoFramesDeliversAndRecordsCropWithoutLoom(t *testing.T) {
 	current, _, err := h.store.GetFinalizedAvatar(t.Context(), scope, receipt.ArtifactID)
 	require.NoError(t, err)
 	require.Equal(t, receipt, current, "UI entry must not rewrite the artifact receipt")
-	for _, table := range []string{"shuttle_tasks", "shuttle_avatars", "shuttle_avatar_drafts", "shuttle_avatar_deliveries"} {
+	for _, table := range []string{
+		"shuttle_tasks",
+		"shuttle_avatars",
+		"shuttle_avatar_drafts",
+		"shuttle_avatar_deliveries",
+	} {
 		var count int
 		require.NoError(t, h.store.Pool().QueryRow(t.Context(), "SELECT count(*) FROM "+table).Scan(&count))
 		require.Equal(t, 1, count, table)

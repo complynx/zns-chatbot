@@ -59,7 +59,13 @@ func (s *Store) TypingChats(ctx context.Context, botID int64, organization strin
 // NeedsTyping rechecks a candidate immediately before the cosmetic API call.
 func (s *Store) NeedsTyping(ctx context.Context, botID int64, organization string, chatID int64) (bool, error) {
 	var needed bool
-	err := s.pool.QueryRow(ctx, typingCandidates+`SELECT EXISTS(SELECT 1 FROM eligible WHERE chat_id=$3)`, botID, organization, chatID).
+	err := s.pool.QueryRow(
+		ctx,
+		typingCandidates+`SELECT EXISTS(SELECT 1 FROM eligible WHERE chat_id=$3)`,
+		botID,
+		organization,
+		chatID,
+	).
 		Scan(&needed)
 	return needed, err
 }

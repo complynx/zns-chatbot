@@ -61,10 +61,11 @@ func (s *Store) DispatchProfileName(
 	var nextAttempt, observed time.Time
 	var pending bool
 	value.UserID = scope.UserID
-	err = tx.QueryRow(ctx, "SELECT n.desired_version,p.first_name,p.last_name,n.next_attempt_at,cloc"+
-		"k_timestamp(),n.desired_version>n.synced_version\nFROM shuttle_profile_na"+
-		"me_sync n JOIN shuttle_user_profiles p ON p.user_id=n.user_id\nWHERE n.us"+
-		"er_id=$1\nFOR UPDATE OF n", scope.UserID).
+	err = tx.QueryRow(ctx, "SELECT n.desired_version,p.first_name,p.last_name,n.next_attempt_at,clock_timestamp(),"+
+		"n.desired_version>n.synced_version\n"+
+		"FROM shuttle_profile_name_sync n JOIN shuttle_user_profiles p ON p.user_id=n.user_id\n"+
+		"WHERE n.user_id=$1\n"+
+		"FOR UPDATE OF n", scope.UserID).
 		Scan(&value.Version, &value.FirstName, &value.LastName, &nextAttempt, &observed, &pending)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
@@ -82,9 +83,9 @@ func (s *Store) DispatchProfileName(
 	if dispatchErr == nil {
 		_, err = tx.Exec(
 			ctx,
-			"UPDATE shuttle_profile_name_sync SET synced_version=$2,next_attempt_at=c"+
-				"lock_timestamp()+interval '10 minutes',updated_at=clock_timestamp()\nWHER"+
-				"E user_id=$1 AND desired_version=$2",
+			"UPDATE shuttle_profile_name_sync SET synced_version=$2,"+
+				"next_attempt_at=clock_timestamp()+interval '10 minutes',updated_at=clock_timestamp()\n"+
+				"WHERE user_id=$1 AND desired_version=$2",
 			scope.UserID,
 			value.Version,
 		)
@@ -93,9 +94,9 @@ func (s *Store) DispatchProfileName(
 		// still overwrite a newer acknowledged name. Later reads repair that.
 		_, err = tx.Exec(
 			ctx,
-			"UPDATE shuttle_profile_name_sync SET synced_version=0,next_attempt_at=cl"+
-				"ock_timestamp()+interval '30 seconds',updated_at=clock_timestamp()\nWHERE"+
-				" user_id=$1 AND desired_version=$2",
+			"UPDATE shuttle_profile_name_sync SET synced_version=0,"+
+				"next_attempt_at=clock_timestamp()+interval '30 seconds',updated_at=clock_timestamp()\n"+
+				"WHERE user_id=$1 AND desired_version=$2",
 			scope.UserID,
 			value.Version,
 		)

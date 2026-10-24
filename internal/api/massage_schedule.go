@@ -149,9 +149,8 @@ func (s *Server) prepareMassageSchedule(
 
 func massageScheduleDescription(args db.MassageScheduleChange) string {
 	return fmt.Sprintf(
-		"Replace massage schedule for event %s at event version %d, schedule vers"+
-			"ion %d. Currency %s, %d services, %d work windows. Schedule only; no res"+
-			"ervations or money change.",
+		"Replace massage schedule for event %s at event version %d, schedule version %d. "+
+			"Currency %s, %d services, %d work windows. Schedule only; no reservations or money change.",
 		args.EventID,
 		args.ExpectedEventVersion,
 		args.ExpectedVersion,

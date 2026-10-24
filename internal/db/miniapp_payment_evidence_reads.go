@@ -83,11 +83,18 @@ func (s *Store) MiniAppPaymentTargets(ctx context.Context, scope PaymentScope, s
 		return result, err
 	}
 	defer rollbackLegacyArchive(ctx, tx)
-	rows, err := tx.Query(ctx, "SELECT e.id,p.id FROM shuttle_registrations r\n JOIN shuttle_passes p ON " +
-"p.registration_id=r.id JOIN shuttle_events e ON e.id=r.event_id\n WHERE r" +
-".user_id=$1 AND r.state='assigned' AND e.bot_id=$2 AND e.organization_id" +
-"=$3\n AND 'registrations'=ANY(e.modules) AND p.id>$4 ORDER BY p.id LIMIT " +
-"$5", scope.UserID, scope.BotID, scope.Organization, after, limit+1)
+	rows, err := tx.Query(
+		ctx,
+		`SELECT e.id,p.id FROM shuttle_registrations r
+ JOIN shuttle_passes p ON p.registration_id=r.id JOIN shuttle_events e ON e.id=r.event_id
+ WHERE r.user_id=$1 AND r.state='assigned' AND e.bot_id=$2 AND e.organization_id=$3
+ AND 'registrations'=ANY(e.modules) AND p.id>$4 ORDER BY p.id LIMIT $5`,
+		scope.UserID,
+		scope.BotID,
+		scope.Organization,
+		after,
+		limit+1,
+	)
 	if err != nil {
 		return result, err
 	}
@@ -154,7 +161,10 @@ func (s *Store) MiniAppPaymentEvidenceFiles(
 	}
 	defer rollbackLegacyArchive(ctx, tx)
 	rows, err := s.q.WithTx(tx).
-		ListMiniAppOrderEvidenceFiles(ctx, sqlc.ListMiniAppOrderEvidenceFilesParams{UserID: scope.UserID, AfterID: after, PageLimit: limit + 1})
+		ListMiniAppOrderEvidenceFiles(
+			ctx,
+			sqlc.ListMiniAppOrderEvidenceFilesParams{UserID: scope.UserID, AfterID: after, PageLimit: limit + 1},
+		)
 	if err != nil {
 		return result, err
 	}
@@ -199,7 +209,16 @@ func (s *Store) MiniAppPaymentEvidenceSource(
 	}
 	defer rollbackLegacyArchive(ctx, tx)
 	row, err := s.q.WithTx(tx).
-		GetOwnedFile(ctx, sqlc.GetOwnedFileParams{ID: file, ID_2: scope.UserID, BotID: scope.BotID, ZitadelOrg: scope.Organization, ZitadelSubject: scope.Subject})
+		GetOwnedFile(
+			ctx,
+			sqlc.GetOwnedFileParams{
+				ID:             file,
+				ID_2:           scope.UserID,
+				BotID:          scope.BotID,
+				ZitadelOrg:     scope.Organization,
+				ZitadelSubject: scope.Subject,
+			},
+		)
 	if err != nil {
 		return File{}, err
 	}

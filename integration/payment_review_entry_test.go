@@ -198,7 +198,8 @@ func TestMiniAppPaymentReviewContextIsBoundedRedactedAndPermissionFiltered(t *te
 	require.NotContains(t, string(raw), "agent-only-review")
 	require.NotContains(t, string(raw), session.Token)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), `DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2`, f.Event.ID, f.AmbassadorID)
+		Exec(t.Context(), `DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2`, f.Event.ID,
+			f.AmbassadorID)
 	require.NoError(t, err)
 	rows, err = f.H.store.RecentMiniAppPaymentReviewActions(t.Context(), scope, after.ID)
 	require.NoError(t, err)
@@ -263,7 +264,8 @@ func TestMiniAppPaymentReviewActionsReachOnlyExplicitAgentTurn(t *testing.T) {
 	require.NotContains(t, prompt, "amount_minor")
 	require.NotContains(t, prompt, session.Token)
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), `DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2`, f.Event.ID, f.AmbassadorID)
+		Exec(t.Context(), `DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2`, f.Event.ID,
+			f.AmbassadorID)
 	require.NoError(t, err)
 	accepted = paymentReviewMessage(t, f.H, 97801, 11003, "Check what I can review now")
 	f.H.await(t, accepted, "completed")

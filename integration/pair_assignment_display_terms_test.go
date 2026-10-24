@@ -88,8 +88,8 @@ func TestPairAssignmentLegacyDescriptionSurvivesRestartAndConfirmation(t *testin
 	prep := pairAssignmentAppPrepare(t, f, "legacy-display")
 	// Reproduce the persisted shape written before structured display terms existed.
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_pair_preparations SET document=document-'display_terms' W" +
-"HERE proposal_id=$1", prep.ID)
+		Exec(t.Context(), "UPDATE shuttle_pair_preparations SET document=document-'display_terms' WHERE "+
+			"proposal_id=$1", prep.ID)
 	require.NoError(t, err)
 	prep.DisplayTerms = nil
 	f.H.stop(t)
@@ -112,8 +112,8 @@ func TestPairAssignmentLegacyDescriptionSurvivesRestartAndConfirmation(t *testin
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(t.Context(), "SELECT document ? 'display_terms' FROM shuttle_pair_preparations WHERE p" +
-"roposal_id=$1", prep.ID).
+			QueryRow(t.Context(), "SELECT document ? 'display_terms' FROM shuttle_pair_preparations WHERE "+
+				"proposal_id=$1", prep.ID).
 			Scan(&storedHasTerms),
 	)
 	require.False(t, storedHasTerms)

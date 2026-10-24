@@ -31,8 +31,8 @@ func avatarFinalizationFixture(t *testing.T) (avatarDraftFixture, db.AvatarDraft
 	require.NoError(t, err)
 	var bearer, generation []byte
 	err = f.h.store.Pool().
-		QueryRow(t.Context(), "SELECT bearer_hash,key_generation FROM shuttle_miniapp_sessions WHERE us" +
-"er_id=$1 AND state='active'", f.scope.UserID).
+		QueryRow(t.Context(), "SELECT bearer_hash,key_generation FROM shuttle_miniapp_sessions"+
+			" WHERE user_id=$1 AND state='active'", f.scope.UserID).
 		Scan(&bearer, &generation)
 	require.NoError(t, err)
 	require.Len(t, bearer, sha256.Size)
@@ -45,8 +45,8 @@ func avatarIntentCount(t *testing.T, f avatarDraftFixture, want int) {
 	require.NoError(
 		t,
 		f.h.store.Pool().
-			QueryRow(t.Context(), "SELECT (SELECT count(*) FROM shuttle_avatars WHERE user_id=$1),(SELECT c" +
-"ount(*) FROM shuttle_avatar_deliveries WHERE user_id=$1)", f.scope.UserID).
+			QueryRow(t.Context(), "SELECT (SELECT count(*) FROM shuttle_avatars WHERE user_id=$1),"+
+				"(SELECT count(*) FROM shuttle_avatar_deliveries WHERE user_id=$1)", f.scope.UserID).
 			Scan(&artifacts, &intents),
 	)
 	require.Equal(t, want, artifacts)
@@ -93,8 +93,9 @@ func TestAvatarFinalizationStoresImmutableSnapshotAndIntentWithoutLoom(t *testin
 	require.NoError(
 		t,
 		f.h.store.Pool().
-			QueryRow(ctx, "SELECT state FROM shuttle_avatar_deliveries WHERE id=$1 AND artifact_id=" +
-"$2", receipt.DeliveryID, receipt.ArtifactID).
+			QueryRow(ctx,
+				"SELECT state FROM shuttle_avatar_deliveries WHERE id=$1 AND artifact_id=$2",
+				receipt.DeliveryID, receipt.ArtifactID).
 			Scan(&state),
 	)
 	require.Equal(t, "pending", state)

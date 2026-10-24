@@ -92,7 +92,17 @@ func (s *Server) agentOrderEvidenceFetch(
 		OperationID string           `json:"operation_id"`
 		Result      files.Metadata   `json:"result"`
 		Artifacts   []fileDescriptor `json:"artifacts"`
-	}{agentSucceeded, in.Body.OperationID, record.Metadata, []fileDescriptor{{ExternalID: id.String(), FetchMethod: method, DownloadPath: orderEvidenceContentPath + id.String() + suffix, MIMEType: fileContentType(raw), SizeBytes: int64(len(raw)), SHA256: hex.EncodeToString(digest[:])}}}
+	}{agentSucceeded,
+		in.Body.OperationID,
+		record.Metadata,
+		[]fileDescriptor{{ExternalID: id.String(),
+			FetchMethod: method,
+			DownloadPath: orderEvidenceContentPath +
+				id.String() +
+				suffix,
+			MIMEType:  fileContentType(raw),
+			SizeBytes: int64(len(raw)),
+			SHA256:    hex.EncodeToString(digest[:])}}}
 	body, err := json.Marshal(result)
 	if err != nil || len(body) > agentAdminResultLimit {
 		return nil, huma.Error503ServiceUnavailable("order evidence descriptor exceeds supported bound")

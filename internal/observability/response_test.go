@@ -34,7 +34,7 @@ func TestResponseLatencyOmitsClockAnomaliesAndExportsUnlabelledSeconds(t *testin
 	body := read()
 	require.Contains(t, body, "\nzinusya_response_confirmed_duration_seconds_count 2\n")
 	require.Contains(t, body, "\nzinusya_response_confirmed_duration_seconds_sum 7202\n")
-	require.Contains(t, body, "zinusya_response_confirmed_duration_seconds_bucket{le=\"3600\"} 1\n")
-	require.Contains(t, body, "zinusya_response_confirmed_duration_seconds_bucket{le=\"21600\"} 2\n")
+	require.Contains(t, body, `zinusya_response_confirmed_duration_seconds_bucket{le="3600"} 1`+"\n")
+	require.Contains(t, body, `zinusya_response_confirmed_duration_seconds_bucket{le="21600"} 2`+"\n")
 	require.NotContains(t, body, "zinusya_response_confirmed_duration_seconds_count{")
 }

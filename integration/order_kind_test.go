@@ -14,13 +14,12 @@ import (
 func orderKindFingerprint(t *testing.T, f paymentFixture) string {
 	t.Helper()
 	var value string
-	err := f.H.store.Pool().QueryRow(t.Context(), "SELECT jsonb_build_object(\n 'preparations',(SELECT jsonb_agg(to_jsonb(p)" +
-"-'order_kind' ORDER BY id) FROM shuttle_order_preparations p),\n 'orders'" +
-",(SELECT jsonb_agg(to_jsonb(o)-'order_kind' ORDER BY id) FROM shuttle_or" +
-"ders o),\n 'operations',(SELECT jsonb_agg(to_jsonb(op)-'order_kind' ORDER" +
-" BY operation_id,kind) FROM shuttle_order_operations op),\n 'evidence',(S" +
-"ELECT jsonb_agg(to_jsonb(ev)-'order_kind' ORDER BY id) FROM shuttle_orde" +
-"r_evidence ev))::text").Scan(&value)
+	err := f.H.store.Pool().QueryRow(t.Context(), "SELECT jsonb_build_object(\n 'preparations',(SELECT "+
+		"jsonb_agg(to_jsonb(p)-'order_kind' ORDER BY id) FROM shuttle_order_preparations p),\n 'orders',(SELECT "+
+		"jsonb_agg(to_jsonb(o)-'order_kind' ORDER BY id) FROM shuttle_orders o),\n 'operations',(SELECT "+
+		"jsonb_agg(to_jsonb(op)-'order_kind' ORDER BY operation_id,kind) FROM shuttle_order_operations op),\n "+
+		"'evidence',(SELECT jsonb_agg(to_jsonb(ev)-'order_kind' ORDER BY id) FROM shuttle_order_evidence "+
+		"ev))::text").Scan(&value)
 	require.NoError(t, err)
 	return value
 }
@@ -41,12 +40,11 @@ func seedOrderKindPreparation(t *testing.T, f paymentFixture, service uuid.UUID,
 func seedMealOrder(t *testing.T, f paymentFixture, preparation, service uuid.UUID) uuid.UUID {
 	t.Helper()
 	id := uuid.New()
-	_, err := f.H.store.Pool().Exec(t.Context(), "INSERT INTO shuttle_orders\n (id,user_id,event_id,source_draft_version,pr" +
-"eparation_id,request_hash,version,state,submitted_result,sales_closes_at" +
-",submitted_at,order_kind)\n SELECT $1,user_id,event_id,source_draft_versi" +
-"on,$2,request_hash,1,'submitted',\n '{\"unsupported_meal_fixture\":true}'::" +
-"jsonb,sales_closes_at,submitted_at,'meal'\n FROM shuttle_orders WHERE id=" +
-"$3", id, preparation, service)
+	_, err := f.H.store.Pool().Exec(t.Context(), "INSERT INTO shuttle_orders\n (id,user_id,event_id,"+
+		"source_draft_version,preparation_id,request_hash,version,state,submitted_result,sales_closes_at,"+
+		"submitted_at,order_kind)\n SELECT $1,user_id,event_id,source_draft_version,$2,request_hash,1,'submitted',"+
+		"\n '{\"unsupported_meal_fixture\":true}'::jsonb,sales_closes_at,submitted_at,'meal'\n FROM "+
+		"shuttle_orders WHERE id=$3", id, preparation, service)
 	require.NoError(t, err)
 	return id
 }
@@ -145,8 +143,8 @@ func TestOrderKindIndependentIdentityAndServiceAccess(t *testing.T) {
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(ctx, "SELECT count(*) FROM shuttle_orders WHERE user_id=$1 AND event_id=$2 AND" +
-" source_draft_version=$3", scope.UserID, args.EventID, args.ExpectedDraftVersion).
+			QueryRow(ctx, "SELECT count(*) FROM shuttle_orders WHERE user_id=$1 AND event_id=$2 AND "+
+				"source_draft_version=$3", scope.UserID, args.EventID, args.ExpectedDraftVersion).
 			Scan(&count),
 	)
 	require.Equal(t, 2, count)
@@ -186,16 +184,16 @@ func TestOrderKindForeignLinksAndPrematureMealEvidenceFailClosed(t *testing.T) {
 		{scope.UserID, other.ID, db.OrderKindService},
 		{scope.UserID, args.EventID, db.OrderKindMeal},
 	} {
-		_, err = f.H.store.Pool().Exec(ctx, "INSERT INTO shuttle_orders\n (id,user_id,event_id,source_draft_version,pr" +
-"eparation_id,request_hash,version,state,submitted_result,sales_closes_at" +
-",submitted_at,order_kind)\n SELECT $1,$2,$3,source_draft_version+10,$4,re" +
-"quest_hash,1,'submitted',submitted_result,sales_closes_at,submitted_at,$" +
-"5\n FROM shuttle_orders WHERE id=$6", uuid.New(), test.owner, test.event, unusedService, string(test.kind), submitted.Order.ID)
+		_, err = f.H.store.Pool().Exec(ctx, "INSERT INTO shuttle_orders\n (id,user_id,event_id,"+
+			"source_draft_version,preparation_id,request_hash,version,state,submitted_result,sales_closes_at,"+
+			"submitted_at,order_kind)\n SELECT $1,$2,$3,source_draft_version+10,$4,request_hash,1,'submitted',"+
+			"submitted_result,sales_closes_at,submitted_at,$5\n FROM shuttle_orders WHERE id=$6", uuid.New(),
+			test.owner, test.event, unusedService, string(test.kind), submitted.Order.ID)
 		requireOrderKindConstraint(t, err, "order_preparation_kind")
 	}
 	_, err = f.H.store.Pool().
-		Exec(ctx, "UPDATE shuttle_order_operations SET preparation_id=$1 WHERE operation_id" +
-"=$2 AND kind='prepare'", mealPreparation, op)
+		Exec(ctx, "UPDATE shuttle_order_operations SET preparation_id=$1 WHERE operation_id=$2 AND kind='prepare'",
+			mealPreparation, op)
 	requireOrderKindConstraint(t, err, "order_operation_preparation_kind")
 	_, err = f.H.store.Pool().
 		Exec(ctx, "UPDATE shuttle_order_operations SET order_id=$1 WHERE operation_id=$2 AND kind='submit'", meal, op)
@@ -205,12 +203,11 @@ func TestOrderKindForeignLinksAndPrematureMealEvidenceFailClosed(t *testing.T) {
 	_, err = f.H.store.SubmitOwnOrderEvidence(ctx, scope, uuid.New(), proof)
 	file := proof.FileID
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-	_, err = f.H.store.Pool().Exec(ctx, "INSERT INTO shuttle_order_evidence\n (id,order_id,event_id,user_id,file_i" +
-"d,source_unique_id,reported_amount_minor,quoted_amount_minor,currency,cu" +
-"rrency_scale,sent_at,submitted_at,due_at,admission_state,reason,state)\n " +
-"VALUES($1,$2,$3,$4,$5,'synthetic-meal',2568,2568,'BYN',2,clock_timestamp" +
-"(),clock_timestamp(),clock_timestamp()+interval '1 hour','pending','','p" +
-"ending')", uuid.New(), meal, args.EventID, scope.UserID, file)
+	_, err = f.H.store.Pool().Exec(ctx, "INSERT INTO shuttle_order_evidence\n (id,order_id,event_id,user_id,"+
+		"file_id,source_unique_id,reported_amount_minor,quoted_amount_minor,currency,currency_scale,sent_at,"+
+		"submitted_at,due_at,admission_state,reason,state)\n VALUES($1,$2,$3,$4,$5,'synthetic-meal',2568,2568,"+
+		"'BYN',2,clock_timestamp(),clock_timestamp(),clock_timestamp()+interval '1 hour','pending','','pending')",
+		uuid.New(), meal, args.EventID, scope.UserID, file)
 	requireOrderKindConstraint(t, err, "order_evidence_service_identity")
 	var count int
 	require.NoError(t, f.H.store.Pool().QueryRow(ctx, "SELECT count(*) FROM shuttle_order_evidence").Scan(&count))

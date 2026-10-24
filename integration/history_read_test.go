@@ -124,10 +124,10 @@ func TestHistoricalImportRejectsCorruptStoredFooterAndExpiredProposal(t *testing
 	r := prepareHistory(t, h.store, scope, a)
 	ctx := context.Background()
 	_, err := h.store.Pool().
-		Exec(ctx, "UPDATE shuttle_legacy_archive_chunks SET content=set_byte(content,octet_" +
-"length(content)-8,get_byte(content,octet_length(content)-8)#1)\nWHERE arc" +
-"hive_id=$1 AND ordinal=(SELECT max(ordinal) FROM shuttle_legacy_archive_" +
-"chunks WHERE archive_id=$1)", a.ArchiveID)
+		Exec(ctx, "UPDATE shuttle_legacy_archive_chunks SET content=set_byte(content,"+
+			"octet_length(content)-8,get_byte(content,octet_length(content)-8)#1)\n"+
+			"WHERE archive_id=$1 AND ordinal=(SELECT max(ordinal) FROM "+
+			"shuttle_legacy_archive_chunks WHERE archive_id=$1)", a.ArchiveID)
 	require.NoError(t, err)
 	_, err = h.store.ApplyHistory(ctx, scope, r, func(context.Context) error { return nil })
 	require.ErrorIs(t, err, legacyimport.ErrInvalidBundle)
@@ -135,15 +135,15 @@ func TestHistoricalImportRejectsCorruptStoredFooterAndExpiredProposal(t *testing
 	require.NoError(
 		t,
 		h.store.Pool().
-			QueryRow(ctx, "SELECT (SELECT count(*) FROM shuttle_legacy_history_records),(SELECT cou" +
-"nt(*) FROM shuttle_legacy_history_operations)").
+			QueryRow(ctx, "SELECT (SELECT count(*) FROM shuttle_legacy_history_records),(SELECT count(*) "+
+				"FROM shuttle_legacy_history_operations)").
 			Scan(&records, &operations),
 	)
 	require.Zero(t, records)
 	require.Zero(t, operations)
 	_, err = h.store.Pool().
-		Exec(ctx, "UPDATE shuttle_legacy_history_preparations SET expires_at=clock_timestam" +
-"p()-interval '1 hour' WHERE id=$1", r.ProposalID)
+		Exec(ctx, "UPDATE shuttle_legacy_history_preparations SET "+
+			"expires_at=clock_timestamp()-interval '1 hour' WHERE id=$1", r.ProposalID)
 	require.NoError(t, err)
 	_, err = h.store.ApplyHistory(ctx, scope, r, func(context.Context) error { return nil })
 	require.ErrorIs(t, err, db.ErrConflict)

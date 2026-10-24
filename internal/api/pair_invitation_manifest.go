@@ -10,7 +10,7 @@ const (
 	methodDecline      = "decline"
 	methodRevoke       = "revoke"
 	methodInvite       = "invite"
-	invitationPending  = "pending"
+	invitationPending  = agentPending
 	schemaInvitation   = "invitation"
 	schemaTargetUserID = "target_user_id"
 	schemaExpiresAt    = "expires_at"
@@ -23,11 +23,11 @@ func pairInvitationMethods() []map[string]any {
 	version := map[string]any{manifestType: schemaInteger, schemaMinimum: 1}
 	context := paymentMethod(
 		"invitation_context",
-		"Read your waitlist role, current registration version and invitation exp" +
-"iry for an explicit event before inviting. Explain that a pending invita" +
-"tion pauses your solo allocation until acceptance, decline, revoke or ex" +
-"piry. It reserves no place for the target. The policy read is a snapshot" +
-", not a guarantee of future eligibility.",
+		"Read your waitlist role, current registration version and invitation expiry for an "+
+			"explicit event before inviting. Explain that a pending invitation pauses your solo "+
+			"allocation until acceptance, decline, revoke or expiry. "+
+			"It reserves no place for the target. The policy read is a snapshot, not a guarantee of "+
+			"future eligibility.",
 		map[string]any{schemaEventID: uuidField},
 		[]string{schemaEventID},
 		[]string{schemaEventID, schemaExpectedVersion, schemaExpiresAt, schemaRole},
@@ -36,13 +36,12 @@ func pairInvitationMethods() []map[string]any {
 	context[manifestOutputSchema] = invitationContextSchema()
 	list := paymentMethod(
 		schemaInvitations,
-		"Read your incoming or outgoing invitations with event name/timezone/date" +
-"s, public inviter name and account code, required opposite role, current" +
-" state/version and expiry. Defaults incoming/pending; state=all includes" +
-" history. UUID pagination default/max20; follow next as after. A pending" +
-" state does not guarantee unexpired consent. Do not treat a historical o" +
-"peration receipt as current state. No profile directory, pass or payment" +
-" data.",
+		"Read your incoming or outgoing invitations with event name/timezone/dates, public inviter "+
+			"name and account code, required opposite role, current state/version and expiry. "+
+			"Defaults incoming/pending; state=all includes history. UUID pagination default/max20; "+
+			"follow next as after. A pending state does not guarantee unexpired consent. "+
+			"Do not treat a historical operation receipt as current state. "+
+			"No profile directory, pass or payment data.",
 		map[string]any{
 			"direction": map[string]any{manifestType: schemaString, schemaEnum: []string{"incoming", "outgoing"}},
 			schemaState: map[string]any{
@@ -64,14 +63,13 @@ func pairInvitationMethods() []map[string]any {
 	list[manifestOutputSchema] = invitationListSchema()
 	invite := invitationWriteMethod(
 		methodInvite,
-		"Create a directed invitation only after an explicit user request and exp" +
-"lanation of the allocation hold. Get your own current waitlist version a" +
-"nd expiry from invitation_context. The partner may share their own accou" +
-"nt/me id as a partner code; use only a code they supplied, never enumera" +
-"te Telegram IDs, usernames or profiles. A code identifies the target; it" +
-" is not authentication or acceptance. The target remains unregistered/un" +
-"reserved until their explicit acceptance. Do not claim delivery from cre" +
-"ation alone.",
+		"Create a directed invitation only after an explicit user request and explanation of the "+
+			"allocation hold. Get your own current waitlist version and expiry from "+
+			"invitation_context. The partner may share their own account/me id as a partner code; "+
+			"use only a code they supplied, never enumerate Telegram IDs, usernames or profiles. "+
+			"A code identifies the target; it is not authentication or acceptance. "+
+			"The target remains unregistered/unreserved until their explicit acceptance. "+
+			"Do not claim delivery from creation alone.",
 		map[string]any{
 			schemaEventID:         uuidField,
 			schemaTargetUserID:    uuidField,
@@ -87,9 +85,9 @@ func pairInvitationMethods() []map[string]any {
 			schemaExpectedVersion: version,
 		}
 		required := []string{schemaEventID, schemaInvitationID, schemaExpectedVersion}
-		description := "Decline an incoming invitation only after the authenticated target expli" +
-"citly requests it. Releases the inviter's hold, without registering the " +
-"target. Read the current incoming invitation first."
+		description := "Decline an incoming invitation only after the authenticated target explicitly " +
+			"requests it. Releases the inviter's hold, without registering the target. " +
+			"Read the current incoming invitation first."
 		switch kind {
 		case methodAccept:
 			fields[schemaRole] = map[string]any{
@@ -97,16 +95,16 @@ func pairInvitationMethods() []map[string]any {
 				schemaEnum:   []string{registrations.Leader, registrations.Follower},
 			}
 			required = append(required, schemaRole)
-			description = "Accept an incoming invitation only after the target explicitly agrees to" +
-" pair with this inviter and join this event as required_role from the in" +
-"vitation read. This may create the target's first opposite-role waitlist" +
-" registration. It does not assign passes or combine finances. Clarify am" +
-"biguous invitations and re-read on a stale version; do not silently revo" +
-"ke another outgoing invitation."
+			description = "Accept an incoming invitation only after the target explicitly agrees to pair " +
+				"with this inviter and join this event as required_role from the invitation read. " +
+				"This may create the target's first opposite-role waitlist registration. " +
+				"It does not assign passes or combine finances. " +
+				"Clarify ambiguous invitations and re-read on a stale version; " +
+				"do not silently revoke another outgoing invitation."
 		case methodRevoke:
-			description = "Revoke your outgoing invitation only after your request. This releases y" +
-"our allocation hold without changing the target's registration. Read the" +
-" current outgoing invitation first."
+			description = "Revoke your outgoing invitation only after your request. " +
+				"This releases your allocation hold without changing the target's registration. " +
+				"Read the current outgoing invitation first."
 		}
 		methods = append(methods, invitationWriteMethod(kind, description, fields, required))
 	}
@@ -186,9 +184,9 @@ func invitationListSchema() map[string]any {
 func invitationWriteMethod(kind, description string, fields map[string]any, required []string) map[string]any {
 	method := paymentMethod(
 		kind,
-		description+" After uncertainty reconcile the same operation ID. Missing status is un" +
-"known; never create a replacement operation blindly. The receipt is hist" +
-"orical; use invitations for current state.",
+		description+" After uncertainty reconcile the same operation ID. Missing status is un"+
+			"known; never create a replacement operation blindly. The receipt is hist"+
+			"orical; use invitations for current state.",
 		fields,
 		required,
 		nil,

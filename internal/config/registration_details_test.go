@@ -29,7 +29,12 @@ func TestRegistrationDetailsKeyIsOptionalAndEnvironmentOverridesYAML(t *testing.
 
 func TestRegistrationDetailsKeyRejectsMalformedInputWithoutDisclosure(t *testing.T) {
 	encoded := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{73}, 32))
-	for _, value := range []string{"synthetic-key-do-not-print", base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{74}, 31)), encoded + "=", " " + encoded} {
+	for _, value := range []string{
+		"synthetic-key-do-not-print",
+		base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{74}, 31)),
+		encoded + "=",
+		" " + encoded,
+	} {
 		t.Run(value[:4], func(t *testing.T) {
 			t.Setenv("SHUTTLE_REGISTRATION_DETAILS_KEY", value)
 			_, err := config.Load(configFile(t, ""))

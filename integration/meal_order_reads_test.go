@@ -163,9 +163,8 @@ func TestMiniAppMealOrderReadsRecheckLogoutAfterEventWait(t *testing.T) {
 			require.Eventually(t, func() bool {
 				var waiting bool
 				e := f.H.store.Pool().QueryRow(ctx,
-					"SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
-"ase() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid" +
-")))",
+					"SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND "+
+						"pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid)))",
 					blocking.Conn().PgConn().PID()).
 					Scan(&waiting)
 				return e == nil && waiting

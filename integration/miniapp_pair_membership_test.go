@@ -91,8 +91,8 @@ func TestMiniAppPairDissolutionRechecksSessionAfterWaitingForEventLock(t *testin
 	require.Eventually(t, func() bool {
 		var waiting bool
 		e := f.H.store.Pool().
-			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
-"ase() AND $1::integer=ANY(pg_blocking_pids(pid)))", blocker.Conn().PgConn().PID()).
+			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND "+
+				"$1::integer=ANY(pg_blocking_pids(pid)))", blocker.Conn().PgConn().PID()).
 			Scan(&waiting)
 		return e == nil && waiting
 	}, 3*time.Second, 5*time.Millisecond)

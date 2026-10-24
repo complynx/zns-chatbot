@@ -32,7 +32,7 @@ type RegistrationClaim struct {
 	Kind              string              `json:"kind"`
 	ProjectionVersion string              `json:"projection_version"`
 	PassKey           string              `json:"pass_key"`
-	Status            string              `json:"status"             enum:"missing,unsupported,claim"`
+	Status            string              `json:"status" enum:"missing,unsupported,claim"`
 	Fields            *RegistrationFields `json:"fields,omitempty"`
 }
 

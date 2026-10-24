@@ -12,13 +12,13 @@ const (
 )
 
 type ScheduleCandidateQuery struct {
-	WindowID     string     `json:"window_id"             pattern:"^[a-z][a-z0-9_-]{0,31}$"`
-	SpecialistID string     `json:"specialist_id"         pattern:"^[a-z][a-z0-9_-]{0,31}$"`
-	ServiceID    string     `json:"service_id"            pattern:"^[a-z][a-z0-9_-]{0,31}$"`
+	WindowID     string     `json:"window_id" pattern:"^[a-z][a-z0-9_-]{0,31}$"`
+	SpecialistID string     `json:"specialist_id" pattern:"^[a-z][a-z0-9_-]{0,31}$"`
+	ServiceID    string     `json:"service_id" pattern:"^[a-z][a-z0-9_-]{0,31}$"`
 	From         time.Time  `json:"from"`
 	Until        time.Time  `json:"until"`
 	AfterStart   *time.Time `json:"after_start,omitempty"`
-	Limit        int        `json:"limit,omitempty"                                         minimum:"1" maximum:"100"`
+	Limit        int        `json:"limit,omitempty" minimum:"1" maximum:"100"`
 }
 
 type ScheduleCandidate struct {

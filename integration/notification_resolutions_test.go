@@ -93,8 +93,8 @@ func TestNotificationResolutionRetryAndDismissPreserveMoneyAndOriginalReceipt(t 
 			require.Equal(t, wantState, result.State)
 			// An expired proposal cannot invalidate a previously committed operation receipt.
 			_, err := f.H.store.Pool().
-				Exec(context.Background(), "UPDATE shuttle_notification_resolutions SET expires_at=clock_timestamp()" +
-"-interval '1 second' WHERE operation_id='resolution-op'")
+				Exec(context.Background(), "UPDATE shuttle_notification_resolutions SET "+
+					"expires_at=clock_timestamp()-interval '1 second' WHERE operation_id='resolution-op'")
 			require.NoError(t, err)
 			p.mu.Lock()
 			p.loseSend = false
@@ -183,8 +183,8 @@ func TestNotificationResolutionRejectsExpiredChangedAndForeignProposals(t *testi
 	require.Contains(t, string(data), `"status":"rejected"`)
 	body["arguments"] = args
 	_, err := f.H.store.Pool().
-		Exec(context.Background(), "UPDATE shuttle_notification_resolutions SET expires_at=clock_timestamp()" +
-"-interval '1 second' WHERE operation_id='expired-resolution'")
+		Exec(context.Background(), "UPDATE shuttle_notification_resolutions SET "+
+			"expires_at=clock_timestamp()-interval '1 second' WHERE operation_id='expired-resolution'")
 	require.NoError(t, err)
 	code, data = adminRequest(t, f.H, f.Admin, http.MethodPost, notificationResolutionAPI, body)
 	require.Equal(t, http.StatusOK, code, string(data))

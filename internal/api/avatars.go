@@ -279,24 +279,22 @@ func avatarModule() map[string]any {
 	}
 	generate := method(
 		"generate",
-		"Create and queue one framed 1024-square JPEG from your source_file_id. U"+
-			"se this one-step path for an explicit current avatar request. Native cap"+
-			"tionless-photo framing runs independently and must not be repeated merel"+
-			"y because its history appears. Payment proofs, documents and photos sent"+
-			" for another stated purpose are excluded. Optional transform uses frame-"+
-			"relative PPM pan/zoom and clockwise millidegree rotation after EXIF orie"+
-			"ntation and centered cover fit; 1000000 PPM is one frame/1x zoom. Omitte"+
-			"d or explicit identity keeps legacy centered output. Exposed background "+
-			"is white. This creates a separate downloadable document, not a Telegram "+
-			"profile photo. Supply the current owned active run_id in the envelope. T"+
-			"he source attachment reference is kept; original bytes remain in Telegra"+
-			"m. Success means the document is durably queued for your current chat, n"+
-			"ot delivered. Read get with the returned artifact_id; claim sent only wh"+
-			"en delivery_state is delivered. Fetching or attaching an artifact to mod"+
-			"el context is not Telegram delivery. Reconcile uncertainty with operatio"+
-			"n; reuse the same operation ID, source, run and transform. Inspect image"+
-			" content rather than inferring a person from metadata; never classify pa"+
-			"yment proof as an avatar from menu state.",
+		"Create and queue one framed 1024-square JPEG from your source_file_id. "+
+			"Use this one-step path for an explicit current avatar request. "+
+			"Native captionless-photo framing runs independently and must not be repeated merely "+
+			"because its history appears. Payment proofs, documents and photos sent for another stated "+
+			"purpose are excluded. Optional transform uses frame-relative PPM pan/zoom and clockwise "+
+			"millidegree rotation after EXIF orientation and centered cover fit; "+
+			"1000000 PPM is one frame/1x zoom. Omitted or explicit identity keeps legacy centered "+
+			"output. Exposed background is white. This creates a separate downloadable document, not a "+
+			"Telegram profile photo. Supply the current owned active run_id in the envelope. "+
+			"The source attachment reference is kept; original bytes remain in Telegram. "+
+			"Success means the document is durably queued for your current chat, not delivered. "+
+			"Read get with the returned artifact_id; claim sent only when delivery_state is delivered. "+
+			"Fetching or attaching an artifact to model context is not Telegram delivery. "+
+			"Reconcile uncertainty with operation; reuse the same operation ID, source, run and "+
+			"transform. Inspect image content rather than inferring a person from metadata; "+
+			"never classify payment proof as an avatar from menu state.",
 		avatarGenerateSchema(),
 		avatarReceiptSchema(),
 	)
@@ -305,42 +303,40 @@ func avatarModule() map[string]any {
 	generate[manifestStatusPath], generate[manifestDedupWindow] = avatarPath+"operation", agentRegistrationDedupSeconds
 	get := method(
 		"get",
-		"Read your generated avatar and its current delivery state. Receipt prove"+
-			"nance is immutable; delivery state is current and may be pending, delive"+
-			"red or uncertain. No administrator bypass exists.",
+		"Read your generated avatar and its current delivery state. "+
+			"Receipt provenance is immutable; delivery state is current and may be pending, delivered "+
+			"or uncertain. No administrator bypass exists.",
 		input(schemaArtifactID),
 		avatarViewSchema(),
 	)
 	fetch := method(
 		"fetch",
-		"Explicitly import your generated JPEG into Loom's file tools by artifact"+
-			"_id. Content remains in Zinusya and requires current owner authorization"+
-			".",
+		"Explicitly import your generated JPEG into Loom's file tools by artifact_id. "+
+			"Content remains in Zinusya and requires current owner authorization.",
 		input(schemaArtifactID),
 		avatarReceiptSchema(),
 	)
 	fetch[manifestDisclosure], fetch[manifestMIMETypes] = true, []string{mimeJPEG}
 	operation := method(
 		"operation",
-		"Read the original immutable generation receipt using arguments.operation"+
-			"_id. The status endpoint also accepts protocol_version and operation_id "+
-			"alone in the envelope. A missing receipt is unknown; do not invent a new"+
-			" operation after an uncertain result. This receipt does not assert docum"+
-			"ent delivery.",
+		"Read the original immutable generation receipt using arguments.operation_id. "+
+			"The status endpoint also accepts protocol_version and operation_id alone in the envelope. "+
+			"A missing receipt is unknown; do not invent a new operation after an uncertain result. "+
+			"This receipt does not assert document delivery.",
 		input("operation_id"),
 		avatarReceiptSchema(),
 	)
 	return map[string]any{
 		"id": "zinusya_avatars",
-		manifestDescription: "Owner-scoped framed avatar documents. Captionless photos are framed by t" +
-			"he native workflow without model generation. Do not repeat that work mer" +
-			"ely from history. For an explicit current avatar request, prefer generat" +
-			"e over editing drafts. If continuing an existing edit, read draft then f" +
-			"inalize_draft at its current version. create_draft/save_draft/preview/fe" +
-			"tch alone are not completed avatar requests and do not send a document. " +
-			"Use get/finalized to verify delivery; never claim sent on a draft or que" +
-			"ued receipt. Recover saved sources through drafts/fetch_original before " +
-			"asking for a resend.",
+		manifestDescription: "Owner-scoped framed avatar documents. " +
+			"Captionless photos are framed by the native workflow without model generation. " +
+			"Do not repeat that work merely from history. " +
+			"For an explicit current avatar request, prefer generate over editing drafts. " +
+			"If continuing an existing edit, read draft then finalize_draft at its current version. " +
+			"create_draft/save_draft/preview/fetch alone are not completed avatar requests and do not " +
+			"send a document. Use get/finalized to verify delivery; " +
+			"never claim sent on a draft or queued receipt. " +
+			"Recover saved sources through drafts/fetch_original before asking for a resend.",
 		manifestPermissions: []string{},
 		manifestDiscovery:   discoveryStatic,
 		manifestMethods: append(

@@ -17,10 +17,10 @@ const mealDraftPath = "/internal/agent/meals/"
 
 type mealDraftArguments struct {
 	EventID                uuid.UUID          `json:"event_id"`
-	ExpectedEventVersion   int64              `json:"expected_event_version"   minimum:"1"`
+	ExpectedEventVersion   int64              `json:"expected_event_version" minimum:"1"`
 	ExpectedCatalogVersion int64              `json:"expected_catalog_version" minimum:"1"`
-	ExpectedDraftVersion   int64              `json:"expected_draft_version"   minimum:"0"`
-	Choices                []mealDayArguments `json:"choices"                              maxItems:"14"`
+	ExpectedDraftVersion   int64              `json:"expected_draft_version" minimum:"0"`
+	Choices                []mealDayArguments `json:"choices" maxItems:"14"`
 }
 
 // Optional meal fields preserve incomplete drafts and dinner-only services.

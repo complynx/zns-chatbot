@@ -165,8 +165,8 @@ func TestOrderEvidenceRejectResubmitAndStaleRejectionCannotReleaseNewAttempt(t *
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(t.Context(), "SELECT document->'review'->>'reason' FROM shuttle_order_evidence_notices" +
-" WHERE evidence_id=$1 AND recipient_id=$2 AND kind='rejected'", first.ID, f.OwnerID).
+			QueryRow(t.Context(), "SELECT document->'review'->>'reason' FROM shuttle_order_evidence_notices WHERE "+
+				"evidence_id=$1 AND recipient_id=$2 AND kind='rejected'", first.ID, f.OwnerID).
 			Scan(&reason),
 	)
 	require.Equal(t, "Synthetic checked proof", reason)
@@ -233,8 +233,8 @@ func TestOrderEvidenceLastPlaceConcurrentAdmissionAndExhaustionNotices(t *testin
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(t.Context(), "SELECT count(*) FROM shuttle_order_evidence_notices WHERE evidence_id=$1" +
-" AND kind='exhausted' AND recipient_id IN ($2,$3)", exhausted, f.OwnerID, f.AmbassadorID).
+			QueryRow(t.Context(), "SELECT count(*) FROM shuttle_order_evidence_notices WHERE evidence_id=$1 AND "+
+				"kind='exhausted' AND recipient_id IN ($2,$3)", exhausted, f.OwnerID, f.AmbassadorID).
 			Scan(&notices),
 	)
 	require.Equal(t, 2, notices, "Customer and ambassador both retain refund-attention business notices")
@@ -281,9 +281,9 @@ func TestOrderEvidenceReceiptAndNoticeFailuresRollBackAllEffects(t *testing.T) {
 			args := orderEvidenceArgs(t, f, order, 61106, "rollback-proof")
 			op := uuid.New()
 			_, err := f.H.store.Pool().
-				Exec(t.Context(), "CREATE FUNCTION fail_order_proof_write() RETURNS trigger LANGUAGE plpgsq" +
-"l AS $$ BEGIN RAISE EXCEPTION 'synthetic proof write failure'; END $$; C" +
-"REATE TRIGGER fail_order_proof_write BEFORE INSERT ON "+table+" FOR EACH ROW EXECUTE FUNCTION fail_order_proof_write()")
+				Exec(t.Context(), "CREATE FUNCTION fail_order_proof_write() RETURNS trigger LANGUAGE plpgsql AS $$ "+
+					"BEGIN RAISE EXCEPTION 'synthetic proof write failure'; END $$; CREATE TRIGGER fail_order_proof_write "+
+					"BEFORE INSERT ON "+table+" FOR EACH ROW EXECUTE FUNCTION fail_order_proof_write()")
 			require.NoError(t, err)
 			_, err = f.H.store.SubmitOwnOrderEvidence(t.Context(), scope, op, args)
 			require.ErrorContains(t, err, "synthetic proof write failure")
@@ -350,7 +350,8 @@ func TestOrderEvidenceCurrentAuthorityAndCeilingsRemainRequired(t *testing.T) {
 	prepared, err := f.H.store.PrepareOrderEvidenceReview(t.Context(), actor, reviewOp, review)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2", f.Event.ID, f.AmbassadorID)
+		Exec(t.Context(), "DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2", f.Event.ID,
+			f.AmbassadorID)
 	require.NoError(t, err)
 	_, err = f.H.store.ReviewOrderEvidence(t.Context(), actor, reviewOp, prepared.ID, review)
 	require.ErrorIs(t, err, payments.ErrDenied)
@@ -379,11 +380,10 @@ func TestOrderEvidenceReviewFailureRollsBackDecisionAndHolds(t *testing.T) {
 	prepared, err := f.H.store.PrepareOrderEvidenceReview(t.Context(), actor, op, review)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "CREATE FUNCTION fail_order_review_notice() RETURNS trigger LANGUAGE plpg" +
-"sql AS $$ BEGIN RAISE EXCEPTION 'synthetic review notice failure'; END $" +
-"$; CREATE TRIGGER fail_order_review_notice BEFORE INSERT ON shuttle_orde" +
-"r_evidence_notices FOR EACH ROW EXECUTE FUNCTION fail_order_review_notic" +
-"e()")
+		Exec(t.Context(), "CREATE FUNCTION fail_order_review_notice() RETURNS trigger LANGUAGE plpgsql AS $$ "+
+			"BEGIN RAISE EXCEPTION 'synthetic review notice failure'; END $$; CREATE TRIGGER "+
+			"fail_order_review_notice BEFORE INSERT ON shuttle_order_evidence_notices FOR EACH ROW EXECUTE FUNCTION "+
+			"fail_order_review_notice()")
 	require.NoError(t, err)
 	_, err = f.H.store.ReviewOrderEvidence(t.Context(), actor, op, prepared.ID, review)
 	require.ErrorContains(t, err, "synthetic review notice failure")
@@ -393,8 +393,8 @@ func TestOrderEvidenceReviewFailureRollsBackDecisionAndHolds(t *testing.T) {
 	require.Equal(t, int64(8), orderAllocationUnits(t, f, "held"))
 	require.Zero(t, orderAllocationUnits(t, f, "occupied"))
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "DROP TRIGGER fail_order_review_notice ON shuttle_order_evidence_notices;" +
-" DROP FUNCTION fail_order_review_notice()")
+		Exec(t.Context(), "DROP TRIGGER fail_order_review_notice ON shuttle_order_evidence_notices; DROP FUNCTION "+
+			"fail_order_review_notice()")
 	require.NoError(t, err)
 	result, err := f.H.store.ReviewOrderEvidence(t.Context(), actor, op, prepared.ID, review)
 	require.NoError(t, err)
@@ -557,7 +557,8 @@ func TestOrderEvidenceUnresolvedRequirementsAndDeadlinePreserveClaims(t *testing
 			require.Equal(t, db.OrderEvidenceNeedsDecision, evidence.State)
 			require.Equal(
 				t,
-				map[string]string{"unknown": "unknown_requirements", "late": "deadline_requires_decision", "mixed": "mixed_capacity_shortage"}[kind],
+				map[string]string{"unknown": "unknown_requirements", "late": "deadline_requires_decision",
+					"mixed": "mixed_capacity_shortage"}[kind],
 				evidence.Reason,
 			)
 			require.Equal(t, args.FileID, evidence.FileID)

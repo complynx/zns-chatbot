@@ -81,7 +81,8 @@ func knowledgeStatusHandler(
 	s *Server,
 	kind string,
 ) func(context.Context, *agentRegistrationStatusRequest) (*paymentWriteResponse[knowledgeResultView], error) {
-	return func(ctx context.Context, in *agentRegistrationStatusRequest) (*paymentWriteResponse[knowledgeResultView], error) {
+	return func(ctx context.Context,
+		in *agentRegistrationStatusRequest) (*paymentWriteResponse[knowledgeResultView], error) {
 		scope, err := s.paymentScope(ctx, in.AuthInput)
 		if err != nil {
 			return nil, err

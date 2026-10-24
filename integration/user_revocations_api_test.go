@@ -320,8 +320,8 @@ func TestAgentUserRevocationLostPreparationCommitKeepsOriginalProposal(t *testin
 	require.NoError(
 		t,
 		h.store.Pool().
-			QueryRow(t.Context(), "SELECT proposal_id FROM shuttle_user_revocation_proposals WHERE operatio" +
-"n_id='lost-preparation'").
+			QueryRow(t.Context(), "SELECT proposal_id FROM shuttle_user_revocation_proposals WHERE "+
+				"operation_id='lost-preparation'").
 			Scan(&original),
 	)
 	body := prepareRevocationBody(t, h, operator, "lost-preparation", revocationArguments(target))

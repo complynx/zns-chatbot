@@ -20,10 +20,10 @@ const fixtureBot = int64(6087685431)
 const fixtureSeconds = int64(1792029600)
 
 // Fixed independently generated Python hmac/urlencode fixture, not real initData.
-const fixtureProof = "auth_date=1792029600&user=%7B%22id%22%3A8968148043%2C%22first_name%22%3A" +
-	"%22QA%22%2C%22language_code%22%3A%22ru%22%7D&signature=signed-unknown-fi" +
-	"xture&start_param=test&hash=48b382a3a1a6c78f13380d5213caade2158bf1b0f8cb" +
-	"99e7fa001ae88e635252"
+const fixtureProof = "auth_date=1792029600&" +
+	"user=%7B%22id%22%3A8968148043%2C%22first_name%22%3A%22QA%22%2C%22language_code%22%3A%22ru%22%7D&" +
+	"signature=signed-unknown-fixture&start_param=test&" +
+	"hash=48b382a3a1a6c78f13380d5213caade2158bf1b0f8cb99e7fa001ae88e635252"
 
 func TestMiniAppVerifiesIndependentFixtureAndCanonicalReplayIdentity(t *testing.T) {
 	t.Parallel()

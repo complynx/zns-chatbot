@@ -141,8 +141,11 @@ func TestMassageSpecialistPreferenceHTTPSharedReceiptsAndBareLoomStatus(t *testi
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(t.Context(), "SELECT count(*) FROM shuttle_massage_specialist_preference_operations WH" +
-"ERE user_id=$1", staff.UserID).
+			QueryRow(
+				t.Context(),
+				"SELECT count(*) FROM shuttle_massage_specialist_preference_operations WHERE user_id=$1",
+				staff.UserID,
+			).
 			Scan(&operations),
 	)
 	require.Equal(t, 2, operations)
@@ -173,7 +176,10 @@ func TestMassageSpecialistPreferenceHTTPRejectsMissingBooleanCASAndWrongScope(t 
 		require.Equal(t, http.StatusOK, code, string(raw))
 		require.Contains(t, string(raw), `"status":"rejected"`)
 	}
-	for _, args := range []any{map[string]any{"event_id": f.Event.ID, "expected_version": 0}, map[string]any{"event_id": f.Event.ID, "expected_version": 0, "notify_bookings": nil}} {
+	for _, args := range []any{
+		map[string]any{"event_id": f.Event.ID, "expected_version": 0},
+		map[string]any{"event_id": f.Event.ID, "expected_version": 0, "notify_bookings": nil},
+	} {
 		code, raw := preferenceAgentWrite(t, f, token, uuid.New(), args)
 		if code == http.StatusOK {
 			require.Contains(t, string(raw), `"status":"rejected"`)
@@ -191,7 +197,10 @@ func TestMassageSpecialistPreferenceHTTPRejectsMissingBooleanCASAndWrongScope(t 
 		)
 		require.Equal(t, http.StatusBadRequest, code)
 	}
-	for _, args := range []any{map[string]any{"event_id": f.Event.ID, "notify_bookings": false}, map[string]any{"event_id": f.Event.ID, "notify_bookings": false, "expected_version": nil}} {
+	for _, args := range []any{
+		map[string]any{"event_id": f.Event.ID, "notify_bookings": false},
+		map[string]any{"event_id": f.Event.ID, "notify_bookings": false, "expected_version": nil},
+	} {
 		code, raw := preferenceAgentWrite(t, f, token, uuid.New(), args)
 		require.Equal(t, http.StatusUnprocessableEntity, code, string(raw))
 		code, _, _ = appCall(
@@ -270,7 +279,10 @@ func TestMassageSpecialistPreferenceHTTPRejectsMissingBooleanCASAndWrongScope(t 
 		},
 	)
 	require.Equal(t, http.StatusBadRequest, code, string(raw))
-	for _, scope := range []db.ProfileScope{{BotID: 124, Organization: staff.Organization, UserID: staff.UserID, Subject: staff.Subject}, {BotID: 123, Organization: "foreign", UserID: staff.UserID, Subject: staff.Subject}} {
+	for _, scope := range []db.ProfileScope{
+		{BotID: 124, Organization: staff.Organization, UserID: staff.UserID, Subject: staff.Subject},
+		{BotID: 123, Organization: "foreign", UserID: staff.UserID, Subject: staff.Subject},
+	} {
 		_, err := f.H.store.OwnMassageSpecialistPreferenceOperation(t.Context(), scope, op)
 		require.ErrorIs(t, err, pgx.ErrNoRows)
 	}
@@ -412,8 +424,8 @@ func TestMassageSpecialistPreferenceHTTPRechecksNativeSessionAfterIAMWait(t *tes
 			switch change {
 			case "session_expired":
 				_, err := f.H.store.Pool().
-					Exec(t.Context(), "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interva" +
-"l '1 second' WHERE user_id=$1", staff.UserID)
+					Exec(t.Context(), "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 "+
+						"second' WHERE user_id=$1", staff.UserID)
 				require.NoError(t, err)
 				expected = http.StatusUnauthorized
 			case "binding_revoked":
@@ -444,7 +456,10 @@ func TestMassageSpecialistPreferenceHTTPRechecksNativeSessionAfterIAMWait(t *tes
 			case <-time.After(8 * time.Second):
 				t.Fatal("preference write did not finish after IAM release")
 			}
-			for _, table := range []string{"shuttle_massage_specialist_preferences", "shuttle_massage_specialist_preference_operations"} {
+			for _, table := range []string{
+				"shuttle_massage_specialist_preferences",
+				"shuttle_massage_specialist_preference_operations",
+			} {
 				var count int
 				require.NoError(t, f.H.store.Pool().QueryRow(t.Context(), "SELECT count(*) FROM "+table).Scan(&count))
 				require.Zero(t, count)

@@ -68,20 +68,23 @@ func TestMassageInstantBrowserNativeAndHandoffs(t *testing.T) {
 	log, runErr := command.CombinedOutput()
 	require.NoError(t, os.WriteFile(filepath.Join(output, "browser-driver.private.log"), log, 0o600))
 	var ledger []byte
-	require.NoError(t, f.H.store.Pool().QueryRow(t.Context(), "SELECT jsonb_build_object(\n 'bookings',(SELECT coalesce(jsonb_agg(to_jso" +
-"nb(t)),'[]'::jsonb) FROM shuttle_massage_bookings t),\n 'preparations',(S" +
-"ELECT coalesce(jsonb_agg(to_jsonb(t)),'[]'::jsonb) FROM shuttle_massage_" +
-"preparations t),\n 'operations',(SELECT coalesce(jsonb_agg(to_jsonb(t)),'" +
-"[]'::jsonb) FROM shuttle_massage_operations t),\n 'reminders',(SELECT coa" +
-"lesce(jsonb_agg(to_jsonb(t)),'[]'::jsonb) FROM shuttle_massage_reminders" +
-" t),\n 'notices',(SELECT coalesce(jsonb_agg(to_jsonb(t)),'[]'::jsonb) FRO" +
-"M shuttle_massage_specialist_notifications t))").Scan(&ledger))
+	require.NoError(t, f.H.store.Pool().QueryRow(t.Context(), "SELECT jsonb_build_object(\n"+
+		" 'bookings',(SELECT coalesce(jsonb_agg(to_jsonb(t)),'[]'::jsonb) FROM "+
+		"shuttle_massage_bookings t),\n"+
+		" 'preparations',(SELECT coalesce(jsonb_agg(to_jsonb(t)),'[]'::jsonb) FROM "+
+		"shuttle_massage_preparations t),\n"+
+		" 'operations',(SELECT coalesce(jsonb_agg(to_jsonb(t)),'[]'::jsonb) FROM "+
+		"shuttle_massage_operations t),\n"+
+		" 'reminders',(SELECT coalesce(jsonb_agg(to_jsonb(t)),'[]'::jsonb) FROM "+
+		"shuttle_massage_reminders t),\n"+
+		" 'notices',(SELECT coalesce(jsonb_agg(to_jsonb(t)),'[]'::jsonb) FROM "+
+		"shuttle_massage_specialist_notifications t))").Scan(&ledger))
 	require.NoError(t, os.WriteFile(filepath.Join(output, "database.private.json"), ledger, 0o600))
 	require.NoError(t, runErr, "Inspect the retained browser log; do not replay uncertain effects")
 	var booked, cancelled, preparations, tasks, notices int
 	require.NoError(t, f.H.store.Pool().QueryRow(t.Context(),
-		"SELECT count(*) FILTER(WHERE state='booked'),count(*) FILTER(WHERE state" +
-"='cancelled') FROM shuttle_massage_bookings").
+		"SELECT count(*) FILTER(WHERE state='booked'),count(*) FILTER(WHERE "+
+			"state='cancelled') FROM shuttle_massage_bookings").
 		Scan(&booked, &cancelled))
 	require.Equal(t, 1, booked)
 	require.Equal(t, 2, cancelled)

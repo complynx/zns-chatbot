@@ -136,8 +136,8 @@ func TestRegistrationRulesPersistWithoutRewritingOldEventReceipts(t *testing.T) 
 			)
 			require.Contains(t, []int{http.StatusBadRequest, http.StatusUnprocessableEntity}, code, string(data))
 			_, updateErr := h.store.Pool().
-				Exec(context.Background(), "UPDATE shuttle_event_registration_rules SET document=$2 WHERE event_id=$" +
-"1", id, brokenJSON)
+				Exec(context.Background(), "UPDATE shuttle_event_registration_rules SET document=$2 WHERE event_id=$1",
+					id, brokenJSON)
 			require.NoError(t, updateErr)
 			code, _ = adminRequest(t, h, operator, http.MethodGet, path, nil)
 			require.Equal(t, http.StatusServiceUnavailable, code)

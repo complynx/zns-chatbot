@@ -109,7 +109,8 @@ func TestPaymentEvidenceNeedsHumanConfirmationAndSupportsTopUp(t *testing.T) {
 	sent := time.Now().UTC().Truncate(time.Second).Add(-2 * time.Hour)
 	due := sent.Add(time.Hour)
 	_, err = h.store.Pool().
-		Exec(ctx, "UPDATE shuttle_passes SET payment_due_at=$2,assigned_at=$3 WHERE id=$1", entry.Pass.ID, due, sent.Add(-time.Hour))
+		Exec(ctx, "UPDATE shuttle_passes SET payment_due_at=$2,assigned_at=$3 WHERE id=$1", entry.Pass.ID, due,
+			sent.Add(-time.Hour))
 	require.NoError(t, err)
 	fileID := paymentFile(t, h, ownerID, 10011, "deposit-proof", sent)
 	args := payments.Submission{
@@ -169,8 +170,8 @@ func TestPaymentEvidenceNeedsHumanConfirmationAndSupportsTopUp(t *testing.T) {
 	require.ErrorIs(t, err, payments.ErrInvalid)
 	// Event ending does not prevent confirmation of timely evidence.
 	_, err = h.store.Pool().
-		Exec(ctx, "UPDATE shuttle_events SET starts_at=clock_timestamp()-interval '3 days'," +
-"ends_at=clock_timestamp()-interval '1 day' WHERE id=$1", event.ID)
+		Exec(ctx, "UPDATE shuttle_events SET starts_at=clock_timestamp()-interval '3 days',"+
+			"ends_at=clock_timestamp()-interval '1 day' WHERE id=$1", event.ID)
 	require.NoError(t, err)
 	prep, err := h.store.PreparePaymentReview(ctx, ambScope, "confirm-deposit", review)
 	require.NoError(t, err)

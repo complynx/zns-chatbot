@@ -148,7 +148,10 @@ func TestMiniAppDetailsRejectForeignStaleInvalidAndLoggedOutRequests(t *testing.
 	require.Equal(t, http.StatusOK, code, string(raw))
 	code, raw, _ = appCall(t, h, http.MethodGet, appDetailsPath+"/operations/"+operation.String(), "", other.Token, "")
 	require.Equal(t, http.StatusNotFound, code, string(raw))
-	for _, body := range []string{appDetailsBody(t, operation, 0, "Different private value"), appDetailsBody(t, uuid.New(), 0, "SYNTHETIC-STALE-PASSPORT")} {
+	for _, body := range []string{
+		appDetailsBody(t, operation, 0, "Different private value"),
+		appDetailsBody(t, uuid.New(), 0, "SYNTHETIC-STALE-PASSPORT"),
+	} {
 		code, raw, _ = appCall(
 			t,
 			h,
@@ -161,7 +164,15 @@ func TestMiniAppDetailsRejectForeignStaleInvalidAndLoggedOutRequests(t *testing.
 		require.Equal(t, http.StatusConflict, code, string(raw))
 		require.NotContains(t, string(raw), "SYNTHETIC")
 	}
-	for _, body := range []string{`{"operation_id":"` + uuid.NewString() + `","value":"PRIVATE-NO-VERSION"}`, `{"operation_id":"` + uuid.NewString() + `","expected_version":1,"value":"PRIVATE-UNKNOWN","user_id":"` + other.UserID.String() + `"}`, appDetailsBody(t, uuid.New(), 1, "PRIVATE\nINVALID")} {
+	for _, body := range []string{
+		`{"operation_id":"` + uuid.NewString() + `","value":"PRIVATE-NO-VERSION"}`,
+		`{"operation_id":"` +
+			uuid.NewString() +
+			`","expected_version":1,"value":"PRIVATE-UNKNOWN","user_id":"` +
+			other.UserID.String() +
+			`"}`,
+		appDetailsBody(t, uuid.New(), 1, "PRIVATE\nINVALID"),
+	} {
 		code, raw, _ = appCall(t, h, http.MethodPost, appDetailsPath+"/legal-name", body, session.Token, appTestOrigin)
 		require.Equal(t, http.StatusBadRequest, code, string(raw))
 		require.NotContains(t, string(raw), "PRIVATE")
@@ -204,10 +215,10 @@ func TestMiniAppDetailsJournalFailureRollsBackPrivateWriteReceiptAndExpectation(
 	)
 	require.NoError(t, err)
 	_, err = h.store.Pool().
-		Exec(t.Context(), "CREATE FUNCTION reject_private_action() RETURNS trigger LANGUAGE plpgsql" +
-" AS $$ BEGIN RAISE EXCEPTION 'injected journal failure'; END $$;\nCREATE " +
-"TRIGGER reject_private_action BEFORE INSERT ON shuttle_miniapp_details_a" +
-"ctions FOR EACH ROW EXECUTE FUNCTION reject_private_action()")
+		Exec(t.Context(), "CREATE FUNCTION reject_private_action() RETURNS trigger LANGUAGE plpgsql AS $$ "+
+			"BEGIN RAISE EXCEPTION 'injected journal failure'; END $$;\n"+
+			"CREATE TRIGGER reject_private_action BEFORE INSERT ON "+
+			"shuttle_miniapp_details_actions FOR EACH ROW EXECUTE FUNCTION reject_private_action()")
 	require.NoError(t, err)
 	operation := uuid.New()
 	body := appDetailsBody(t, operation, 1, "SYNTHETIC-ATOMIC-PASSPORT")
@@ -268,14 +279,15 @@ func TestMiniAppDetailsRecheckSessionAfterOwnerLockWait(t *testing.T) {
 	require.Eventually(t, func() bool {
 		var waiting bool
 		err = h.store.Pool().
-			QueryRow(t.Context(), "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::integer=ANY(pg_bl" +
-"ocking_pids(pid)))", blocking.Conn().PgConn().PID()).
+			QueryRow(t.Context(), "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE "+
+				"$1::integer=ANY(pg_blocking_pids(pid)))", blocking.Conn().PgConn().PID()).
 			Scan(&waiting)
 		return err == nil && waiting
 	}, 3*time.Second, 5*time.Millisecond)
 	_, err = blocking.Exec(
 		t.Context(),
-		"UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 second' WHERE user_id=$1",
+		"UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 "+
+			"second' WHERE user_id=$1",
 		session.UserID,
 	)
 	require.NoError(t, err)

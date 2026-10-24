@@ -23,9 +23,9 @@ func (s *Server) miniAppPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().
-		Set("Content-Security-Policy", "default-src 'none'; script-src 'self' https://telegram.org; style-src 's" +
-"elf'; connect-src 'self'; img-src 'self' blob:; base-uri 'none'; object-" +
-"src 'none'; form-action 'none'; frame-ancestors https://web.telegram.org")
+		Set("Content-Security-Policy", "default-src 'none'; script-src 'self' https://telegram.org; "+
+			"style-src 'self'; connect-src 'self'; img-src 'self' blob:; base-uri 'none'; "+
+			"object-src 'none'; form-action 'none'; frame-ancestors https://web.telegram.org")
 	w.Header().Set("Content-Type", contentType)
 	_, _ = w.Write(raw)
 }

@@ -100,7 +100,12 @@ func TestTelegramPrelinkDurableRetryCompletesWithoutNewConversation(t *testing.T
 	replay, err := s.ClaimTelegramPrelink(ctx, claim)
 	require.NoError(t, err)
 	require.Equal(t, done, replay)
-	for _, table := range []string{"shuttle_users", "shuttle_telegram_prelinks", "shuttle_conversations", "shuttle_tasks"} {
+	for _, table := range []string{
+		"shuttle_users",
+		"shuttle_telegram_prelinks",
+		"shuttle_conversations",
+		"shuttle_tasks",
+	} {
 		var count int
 		require.NoError(t, s.Pool().QueryRow(ctx, "SELECT count(*) FROM "+table).Scan(&count))
 		if table == "shuttle_users" || table == "shuttle_telegram_prelinks" {

@@ -112,7 +112,8 @@ func (s *Service) notifyOrder(ctx context.Context, args orderNotificationArgs) e
 				{
 					Text: structuredText(language == "ru", "Review order proof", "Проверить оплату заказа"),
 					WebApp: &telegram.WebAppInfo{
-						URL: s.options.MiniAppURL + "#order-review?event=" + n.Evidence.EventID.String() + "&evidence=" + n.EvidenceID.String(),
+						URL: s.options.MiniAppURL + "#order-review?event=" + n.Evidence.EventID.String() + "&evidence=" +
+							n.EvidenceID.String(),
 					},
 				},
 			},

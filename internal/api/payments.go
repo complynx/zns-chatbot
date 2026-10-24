@@ -17,15 +17,15 @@ import (
 const paymentPath = "/internal/agent/payments/"
 
 type paymentConfirmation struct {
-	Mode          string                   `json:"mode"                    enum:"none,exact_parameters"`
+	Mode          string                   `json:"mode" enum:"none,exact_parameters"`
 	Preconditions *assignmentPreconditions `json:"preconditions,omitempty"`
 }
 type paymentWriteBody[T any] struct {
-	ProtocolVersion int                  `json:"protocol_version"       minimum:"1" maximum:"1"`
-	OperationID     string               `json:"operation_id"                                   minLength:"1" maxLength:"128"`
+	ProtocolVersion int                  `json:"protocol_version" minimum:"1" maximum:"1"`
+	OperationID     string               `json:"operation_id" minLength:"1" maxLength:"128"`
 	RunID           string               `json:"run_id,omitempty"`
 	Arguments       T                    `json:"arguments"`
-	IdempotencyKey  string               `json:"idempotency_key"                                minLength:"1" maxLength:"128"`
+	IdempotencyKey  string               `json:"idempotency_key" minLength:"1" maxLength:"128"`
 	Confirmation    *paymentConfirmation `json:"confirmation,omitempty"`
 }
 type paymentWriteRequest[T any] struct {

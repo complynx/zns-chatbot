@@ -37,7 +37,11 @@ func TestMiniAppPaymentsRequireSessionBeforeStoreOrIAM(t *testing.T) {
 		{
 			http.MethodPost,
 			"/app/pass-payments/events/" + id + "/evidence",
-			`{"operation_id":"qa-payment","pass_id":"` + id + `","file_id":"` + id + `","amount_minor":3000,"purpose":"initial"}`,
+			`{"operation_id":"qa-payment","pass_id":"` +
+				id +
+				`","file_id":"` +
+				id +
+				`","amount_minor":3000,"purpose":"initial"}`,
 		},
 	}
 	for _, route := range routes {

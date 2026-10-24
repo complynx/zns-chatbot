@@ -88,7 +88,8 @@ func (c *Client) DeploymentScope() (int64, string, string) {
 func New(o Options, h *http.Client) (*Client, error) {
 	u, err := url.Parse(o.Issuer)
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" ||
-		(u.Scheme != "https" && (u.Scheme != "http" || u.Hostname() != "localhost" && u.Hostname() != "127.0.0.1" && u.Hostname() != "::1")) {
+		(u.Scheme != "https" && (u.Scheme != "http" ||
+			u.Hostname() != "localhost" && u.Hostname() != "127.0.0.1" && u.Hostname() != "::1")) {
 		return nil, errors.New("valid identity issuer required")
 	}
 	if o.OrganizationID == "" || o.LoomAudience == "" || o.APIAudience == "" || o.ActorID == "" || o.BotID <= 0 ||
@@ -97,7 +98,11 @@ func New(o Options, h *http.Client) (*Client, error) {
 		o.PositiveCacheTTL > maxCacheTTL {
 		return nil, errors.New("identity org, audiences, actor, bot and bounded cache TTL required")
 	}
-	for _, v := range []ClientCredentials{o.ActorClientCredentials, o.ExchangeClientCredentials, o.IntrospectionClientCredentials} {
+	for _, v := range []ClientCredentials{
+		o.ActorClientCredentials,
+		o.ExchangeClientCredentials,
+		o.IntrospectionClientCredentials,
+	} {
 		if v.ID == "" || v.Secret == "" {
 			return nil, errors.New("identity client credentials required")
 		}

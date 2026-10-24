@@ -160,8 +160,8 @@ func TestPairAssignmentPendingProposalsExcludeExpiredAndCompletedDocuments(t *te
 	completed, err := f.H.store.PreparePairAssignment(ctx, admin, "completed", args)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().Exec(ctx,
-		"UPDATE shuttle_pair_preparations SET expires_at=clock_timestamp()-interv" +
-"al '1 minute' WHERE proposal_id=$1", expired.ID)
+		"UPDATE shuttle_pair_preparations SET expires_at=clock_timestamp()-interval '1 minute' WHERE "+
+			"proposal_id=$1", expired.ID)
 	require.NoError(t, err)
 	page, err := f.H.store.PendingPairAssignmentProposals(ctx, admin, uuid.Nil, 20)
 	require.NoError(t, err)

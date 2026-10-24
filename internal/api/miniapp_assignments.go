@@ -27,7 +27,12 @@ type miniAppAssignmentInput struct {
 }
 
 func (s *Server) registerMiniAppAssignments() {
-	for _, path := range []string{"recent", schemaEvents, "events/{event}/registrations", assignmentProposalsField, "proposals/{proposal}", "operations/{operation}"} {
+	for _, path := range []string{"recent",
+		schemaEvents,
+		"events/{event}/registrations",
+		assignmentProposalsField,
+		"proposals/{proposal}",
+		"operations/{operation}"} {
 		s.public.HandleFunc("GET /app/pass-assignments/"+path, s.miniAppAssignmentRead)
 	}
 	s.public.HandleFunc("POST /app/pass-assignments/prepare", s.miniAppAssignmentWrite)

@@ -100,7 +100,13 @@ func TestMassageAdministrationReadRequiresGlobalAdminAndDeploymentEvent(t *testi
 		"UPDATE shuttle_events SET bot_id=bot_id+1000 WHERE id=$1",
 	} {
 		_, err := f.H.store.Pool().
-			Exec(t.Context(), "UPDATE shuttle_events SET organization_id=$2,bot_id=$3 WHERE id=$1", f.Event.ID, owner.Organization, owner.BotID)
+			Exec(
+				t.Context(),
+				"UPDATE shuttle_events SET organization_id=$2,bot_id=$3 WHERE id=$1",
+				f.Event.ID,
+				owner.Organization,
+				owner.BotID,
+			)
 		require.NoError(t, err)
 		_, err = f.H.store.Pool().Exec(t.Context(), query, f.Event.ID)
 		require.NoError(t, err)
@@ -128,8 +134,8 @@ func TestMassageAdministrationReadBoundsPagesWithoutDroppingRecords(t *testing.T
 	three, _ := bookMassage(t, f, other, args)
 	// Stored labels are untrusted; JSON escaping must not exceed the advertised result limit.
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_massage_bookings SET snapshot=jsonb_set(snapshot,'{event_" +
-"name}',to_jsonb($2::text)) WHERE event_id=$1", f.Event.ID, strings.Repeat("<", 4500))
+		Exec(t.Context(), "UPDATE shuttle_massage_bookings SET snapshot=jsonb_set(snapshot,'{event_name}',"+
+			"to_jsonb($2::text)) WHERE event_id=$1", f.Event.ID, strings.Repeat("<", 4500))
 	require.NoError(t, err)
 	page := readAdministrativeMassage(t, f, uuid.Nil, 20)
 	require.NotEmpty(t, page.Bookings)

@@ -57,7 +57,7 @@ type ContextList struct {
 }
 
 type ContextRequest struct {
-	Module          string     `json:"module"                     minLength:"1" maxLength:"128"`
+	Module          string     `json:"module" minLength:"1" maxLength:"128"`
 	EventID         *uuid.UUID `json:"event_id,omitempty"`
 	HintID          *uuid.UUID `json:"hint_id,omitempty"`
 	RequireExplicit bool       `json:"require_explicit,omitempty"`

@@ -13,7 +13,8 @@ import (
 func TestOrderNotificationTextKeepsMoneyStatesAndEventDSTDistinct(t *testing.T) {
 	t.Parallel()
 	for _, language := range []string{"en", "ru"} {
-		for _, kind := range []string{db.OrderEvidencePending, db.OrderEvidenceExhausted, db.OrderEvidenceNeedsDecision, db.OrderEvidenceConfirmed, db.OrderEvidenceRejected} {
+		for _, kind := range []string{db.OrderEvidencePending, db.OrderEvidenceExhausted,
+			db.OrderEvidenceNeedsDecision, db.OrderEvidenceConfirmed, db.OrderEvidenceRejected} {
 			t.Run(language+"/"+kind, func(t *testing.T) {
 				t.Parallel()
 				n := db.OrderNotification{Kind: kind, Evidence: db.OrderPaymentEvidence{

@@ -13,25 +13,25 @@ const (
 )
 
 type CapacityResource struct {
-	ID      string `json:"id"      pattern:"^[a-z][a-z0-9_-]{0,31}$"`
+	ID      string `json:"id" pattern:"^[a-z][a-z0-9_-]{0,31}$"`
 	Name    Label  `json:"name"`
-	Ceiling int64  `json:"ceiling"                                   minimum:"0" maximum:"1000000000"`
+	Ceiling int64  `json:"ceiling" minimum:"0" maximum:"1000000000"`
 }
 
 // CapacityBinding charges once per selected offer, or per item quantity when ItemID is set.
 type CapacityBinding struct {
-	OfferID    string `json:"offer_id"          pattern:"^[a-z][a-z0-9_-]{0,31}$"`
+	OfferID    string `json:"offer_id" pattern:"^[a-z][a-z0-9_-]{0,31}$"`
 	ItemID     string `json:"item_id,omitempty" pattern:"^[a-z][a-z0-9_-]{0,31}$"`
-	ResourceID string `json:"resource_id"       pattern:"^[a-z][a-z0-9_-]{0,31}$"`
-	Units      int64  `json:"units"                                               minimum:"1" maximum:"1000000"`
+	ResourceID string `json:"resource_id" pattern:"^[a-z][a-z0-9_-]{0,31}$"`
+	Units      int64  `json:"units" minimum:"1" maximum:"1000000"`
 }
 
 // CompleteCapacity attests that all resource requirements are declared.
 // Unlisted offer/item pairs require none; an absent policy means unknown.
 type CompleteCapacity struct {
-	Version   int                `json:"version"   minimum:"1" maximum:"1"`
-	Resources []CapacityResource `json:"resources"                         minItems:"0" maxItems:"64"`
-	Bindings  []CapacityBinding  `json:"bindings"                          minItems:"0" maxItems:"400"`
+	Version   int                `json:"version" minimum:"1" maximum:"1"`
+	Resources []CapacityResource `json:"resources" minItems:"0" maxItems:"64"`
+	Bindings  []CapacityBinding  `json:"bindings" minItems:"0" maxItems:"400"`
 }
 
 type ResourceDemand struct {

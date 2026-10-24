@@ -71,8 +71,8 @@ func TestMiniAppPaymentReviewHandoffsAndOriginalReceipt(t *testing.T) {
 	require.NoError(t, err)
 	// An already completed/expired decision is recovered through a new native alias.
 	_, err = f.H.store.Pool().
-		Exec(ctx, "UPDATE shuttle_payment_preparations SET expires_at=clock_timestamp()-int" +
-"erval '1 hour' WHERE proposal_id=$1", w.Preparation.ID)
+		Exec(ctx, "UPDATE shuttle_payment_preparations SET expires_at=clock_timestamp()-interval '1 "+
+			"hour' WHERE proposal_id=$1", w.Preparation.ID)
 	require.NoError(t, err)
 	request := nativeReviewRequest(w)
 	native, err := f.H.store.CommitMiniAppPaymentReviewWorkspace(ctx, scope, session, "native-confirm", request)
@@ -107,11 +107,19 @@ func TestMiniAppPaymentReviewHandoffsAndOriginalReceipt(t *testing.T) {
 	)
 	require.ErrorIs(t, err, db.ErrConflict)
 	var reviews, notices, nativeActions int
-	require.NoError(t, reopened.Pool().QueryRow(ctx, "SELECT\n  (SELECT count(*) FROM shuttle_payment_reviews WHERE evidence_id" +
-"=$1),\n  (SELECT count(*) FROM shuttle_payment_notifications WHERE eviden" +
-"ce_id=$1 AND kind='confirmed'),\n  (SELECT count(*) FROM shuttle_payment_" +
-"review_calls WHERE actor_id=$2 AND source='miniapp' AND completed_at IS " +
-"NOT NULL)", review.EvidenceID, scope.UserID).Scan(&reviews, &notices, &nativeActions))
+	require.NoError(
+		t,
+		reopened.Pool().QueryRow(ctx, "SELECT\n"+
+			"  (SELECT count(*) FROM shuttle_payment_reviews WHERE evidence_id=$1),\n"+
+			"  (SELECT count(*) FROM shuttle_payment_notifications WHERE evidence_id=$1 AND "+
+			"kind='confirmed'),\n"+
+			"  (SELECT count(*) FROM shuttle_payment_review_calls WHERE actor_id=$2 AND "+
+			"source='miniapp' AND completed_at IS NOT NULL)", review.EvidenceID, scope.UserID).Scan(
+			&reviews,
+			&notices,
+			&nativeActions,
+		),
+	)
 	require.Equal(t, 1, reviews)
 	require.Equal(t, 1, notices)
 	require.Equal(t, 2, nativeActions)
@@ -183,8 +191,8 @@ func TestMiniAppPaymentReviewSessionRequiredOnReplay(t *testing.T) {
 				require.NoError(t, f.H.store.LogoutMiniAppSession(ctx, scope.BotID, session.Bearer, session.Generation))
 			case "expiry":
 				_, err = f.H.store.Pool().
-					Exec(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interva" +
-"l '1 second' WHERE bearer_hash=$1", session.Bearer[:])
+					Exec(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 "+
+						"second' WHERE bearer_hash=$1", session.Bearer[:])
 				require.NoError(t, err)
 			case "key-generation":
 				session.Generation = sha256.Sum256([]byte("different-key"))
@@ -222,10 +230,10 @@ func TestMiniAppPaymentReviewRollbackIsAtomic(t *testing.T) {
 	)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(ctx, "CREATE FUNCTION fail_native_receipt() RETURNS trigger LANGUAGE plpgsql A" +
-"S $$BEGIN RAISE EXCEPTION 'fixture receipt write failure'; END$$;\n CREAT" +
-"E TRIGGER fail_native_receipt BEFORE UPDATE OF result ON shuttle_payment" +
-"_review_calls FOR EACH ROW EXECUTE FUNCTION fail_native_receipt()")
+		Exec(ctx, "CREATE FUNCTION fail_native_receipt() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN "+
+			"RAISE EXCEPTION 'fixture receipt write failure'; END$$;\n"+
+			" CREATE TRIGGER fail_native_receipt BEFORE UPDATE OF result ON "+
+			"shuttle_payment_review_calls FOR EACH ROW EXECUTE FUNCTION fail_native_receipt()")
 	require.NoError(t, err)
 	_, err = f.H.store.CommitMiniAppPaymentReviewWorkspace(ctx, scope, session, "confirm", nativeReviewRequest(w))
 	require.Error(t, err)
@@ -234,13 +242,16 @@ func TestMiniAppPaymentReviewRollbackIsAtomic(t *testing.T) {
 	require.Zero(t, balance.ConfirmedMinor)
 	require.Zero(t, balance.Version)
 	var effects int
-	require.NoError(t, f.H.store.Pool().QueryRow(ctx, "SELECT\n (SELECT count(*) FROM shuttle_payment_reviews WHERE evidence_id=" +
-"$1)+\n (SELECT count(*) FROM shuttle_payment_notifications WHERE evidence" +
-"_id=$1 AND kind='confirmed')+\n (SELECT count(*) FROM shuttle_payment_rev" +
-"iew_calls WHERE actor_id=$2 AND operation_id='confirm')", review.EvidenceID, scope.UserID).Scan(&effects))
+	require.NoError(t, f.H.store.Pool().QueryRow(ctx, "SELECT\n"+
+		" (SELECT count(*) FROM shuttle_payment_reviews WHERE evidence_id=$1)+\n"+
+		" (SELECT count(*) FROM shuttle_payment_notifications WHERE evidence_id=$1 AND "+
+		"kind='confirmed')+\n"+
+		" (SELECT count(*) FROM shuttle_payment_review_calls WHERE actor_id=$2 AND "+
+		"operation_id='confirm')", review.EvidenceID, scope.UserID).Scan(&effects))
 	require.Zero(t, effects)
 	_, err = f.H.store.Pool().
-		Exec(ctx, `DROP TRIGGER fail_native_receipt ON shuttle_payment_review_calls; DROP FUNCTION fail_native_receipt()`)
+		Exec(ctx, "DROP TRIGGER fail_native_receipt ON shuttle_payment_review_calls; DROP FUNCTION "+
+			"fail_native_receipt()")
 	require.NoError(t, err)
 	_, err = f.H.store.CommitMiniAppPaymentReviewWorkspace(ctx, scope, session, "confirm", nativeReviewRequest(w))
 	require.NoError(t, err)
@@ -325,9 +336,9 @@ func TestMiniAppPaymentReviewConcurrentEventsAndLogout(t *testing.T) {
 	require.Eventually(t, func() bool {
 		var count int
 		queryErr := f.H.store.Pool().
-			QueryRow(ctx, "SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() A" +
-"ND application_name=current_setting('application_name') AND wait_event_t" +
-"ype='Lock' AND query LIKE '%FROM shuttle_miniapp_sessions WHERE id=%'").
+			QueryRow(ctx, "SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND "+
+				"application_name=current_setting('application_name') AND wait_event_type='Lock' "+
+				"AND query LIKE '%FROM shuttle_miniapp_sessions WHERE id=%'").
 			Scan(&count)
 		return queryErr == nil && count == 2
 	}, 5*time.Second, 20*time.Millisecond)
@@ -339,9 +350,9 @@ func TestMiniAppPaymentReviewConcurrentEventsAndLogout(t *testing.T) {
 	require.Eventually(t, func() bool {
 		var count int
 		queryErr := f.H.store.Pool().
-			QueryRow(ctx, "SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() A" +
-"ND application_name=current_setting('application_name') AND wait_event_t" +
-"ype='Lock' AND query LIKE '%FROM shuttle_users WHERE id=%FOR UPDATE%'").
+			QueryRow(ctx, "SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND "+
+				"application_name=current_setting('application_name') AND wait_event_type='Lock' "+
+				"AND query LIKE '%FROM shuttle_users WHERE id=%FOR UPDATE%'").
 			Scan(&count)
 		return queryErr == nil && count == 1
 	}, 5*time.Second, 20*time.Millisecond)

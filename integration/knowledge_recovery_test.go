@@ -57,9 +57,9 @@ func TestKnowledgeActionRecoverySeparatesPreparedExpiredAndCompleted(t *testing.
 	require.NoError(t, err)
 	require.Empty(t, cutoff)
 	_, err = store.Pool().
-		Exec(ctx, "UPDATE shuttle_knowledge_preparations SET created_at=clock_timestamp()-i" +
-"nterval '2 seconds',expires_at=clock_timestamp()-interval '1 second' WHE" +
-"RE actor_id=$1 AND operation_id=$2", f.user.UserID, op)
+		Exec(ctx, "UPDATE shuttle_knowledge_preparations SET created_at=clock_timestamp()-interval "+
+			"'2 seconds',expires_at=clock_timestamp()-interval '1 second' WHERE actor_id=$1 "+
+			"AND operation_id=$2", f.user.UserID, op)
 	require.NoError(t, err)
 	status, err = store.KnowledgeAction(ctx, f.user, "suggest", op)
 	require.NoError(t, err)
@@ -73,9 +73,9 @@ func TestKnowledgeActionRecoverySeparatesPreparedExpiredAndCompleted(t *testing.
 	result, err := store.ConfirmKnowledge(ctx, f.user, op, prep.Arguments, prep.ID)
 	require.NoError(t, err)
 	_, err = store.Pool().
-		Exec(ctx, "UPDATE shuttle_knowledge_preparations SET created_at=clock_timestamp()-i" +
-"nterval '2 seconds',expires_at=clock_timestamp()-interval '1 second' WHE" +
-"RE actor_id=$1 AND operation_id=$2", f.user.UserID, op)
+		Exec(ctx, "UPDATE shuttle_knowledge_preparations SET created_at=clock_timestamp()-interval "+
+			"'2 seconds',expires_at=clock_timestamp()-interval '1 second' WHERE actor_id=$1 "+
+			"AND operation_id=$2", f.user.UserID, op)
 	require.NoError(t, err)
 	status, err = store.KnowledgeAction(ctx, f.user, "suggest", op)
 	require.NoError(t, err)

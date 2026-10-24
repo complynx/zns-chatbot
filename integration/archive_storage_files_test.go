@@ -116,9 +116,9 @@ func TestArchiveFileStorageRevocationDuringReadRollsBack(t *testing.T) {
 	require.NoError(
 		t,
 		h.store.Pool().
-			QueryRow(context.Background(), "SELECT (SELECT count(*) FROM shuttle_legacy_archives),(SELECT count(*) F" +
-"ROM shuttle_legacy_archive_operations),(SELECT count(*) FROM shuttle_leg" +
-"acy_archive_chunks)").
+			QueryRow(context.Background(), "SELECT (SELECT count(*) FROM shuttle_legacy_archives),"+
+				"(SELECT count(*) FROM shuttle_legacy_archive_operations),"+
+				"(SELECT count(*) FROM shuttle_legacy_archive_chunks)").
 			Scan(&archives, &operations, &chunks),
 	)
 	require.Zero(t, archives)

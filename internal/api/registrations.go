@@ -30,9 +30,10 @@ type assignmentRequest struct {
 	ID             uuid.UUID `path:"id"`
 	RegistrationID uuid.UUID `path:"registration_id"`
 	Body           struct {
-		OperationID          string `json:"operation_id" minLength:"1" maxLength:"128" pattern:"^[A-Za-z0-9][A-Za-z0-9._:-]*$"`
-		ExpectedVersion      int64  `json:"expected_version" minimum:"1"`
-		ExpectedEventVersion int64  `json:"expected_event_version" minimum:"1"`
+		OperationID string `json:"operation_id" minLength:"1" maxLength:"128" pattern:"^[A-Za-z0-9][A-Za-z0-9._:-]*$"`
+
+		ExpectedVersion      int64 `json:"expected_version" minimum:"1"`
+		ExpectedEventVersion int64 `json:"expected_event_version" minimum:"1"`
 	}
 }
 type registrationListRequest struct {

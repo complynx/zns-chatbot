@@ -546,6 +546,11 @@ func (p *peers) telegram(w http.ResponseWriter, r *http.Request) {
 		respond(w, map[string]any{"ok": true, "result": true})
 		return
 	}
+	p.telegramSendMessage(w, r)
+}
+
+// telegramSendMessage runs under the peer mutex and validates before accepting an effect.
+func (p *peers) telegramSendMessage(w http.ResponseWriter, r *http.Request) {
 	var message telegram.SendMessageRequest
 	if !strings.HasSuffix(r.URL.Path, "/sendMessage") {
 		w.WriteHeader(http.StatusNotFound)
@@ -1189,11 +1194,10 @@ func TestFailedReceiptPersistenceBecomesUnknownWithoutRestart(t *testing.T) {
 	// Inject the critical database write failure after HTTP send succeeds. This
 	// schema-local trigger leaves admission, reservation and reconciliation usable.
 	_, err := h.store.Pool().
-		Exec(context.Background(), "CREATE FUNCTION fail_successful_receipt() RETURNS trigger LANGUAGE plpgs" +
-"ql AS $$ BEGIN IF NEW.state='delivered' THEN RAISE EXCEPTION 'receipt wr" +
-"ite unavailable'; END IF; RETURN NEW; END $$; CREATE TRIGGER receipt_fai" +
-"lure BEFORE UPDATE ON shuttle_outbox FOR EACH ROW EXECUTE FUNCTION fail_" +
-"successful_receipt()")
+		Exec(context.Background(), "CREATE FUNCTION fail_successful_receipt() RETURNS trigger LANGUAGE plpgsql AS "+
+			"$$ BEGIN IF NEW.state='delivered' THEN RAISE EXCEPTION 'receipt write unavailable'; END IF; RETURN NEW; "+
+			"END $$; CREATE TRIGGER receipt_failure BEFORE UPDATE ON shuttle_outbox FOR EACH ROW EXECUTE FUNCTION "+
+			"fail_successful_receipt()")
 	require.NoError(t, err)
 	id := h.submit(t, 14)
 	h.awaitReplies(t, 1)

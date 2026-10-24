@@ -167,7 +167,10 @@ func (s *Server) miniAppMassageBook(w http.ResponseWriter, r *http.Request) {
 		w,
 		r,
 		func(args db.MassageBookingArguments) uuid.UUID { return args.EventID },
-		func(ctx context.Context, session db.MiniAppMassageSession, input miniAppMassageWriteInput[db.MassageBookingArguments], prepare bool) (any, error) {
+		func(ctx context.Context,
+			session db.MiniAppMassageSession,
+			input miniAppMassageWriteInput[db.MassageBookingArguments],
+			prepare bool) (any, error) {
 			if prepare {
 				if input.ProposalID.UUID != uuid.Nil {
 					return s.store.AdoptMiniAppMassageBooking(
@@ -206,7 +209,10 @@ func (s *Server) miniAppMassageCancel(w http.ResponseWriter, r *http.Request) {
 		w,
 		r,
 		func(args db.MassageCancellationArguments) uuid.UUID { return args.EventID },
-		func(ctx context.Context, session db.MiniAppMassageSession, input miniAppMassageWriteInput[db.MassageCancellationArguments], prepare bool) (any, error) {
+		func(ctx context.Context,
+			session db.MiniAppMassageSession,
+			input miniAppMassageWriteInput[db.MassageCancellationArguments],
+			prepare bool) (any, error) {
 			if prepare {
 				if input.ProposalID.UUID != uuid.Nil {
 					return s.store.AdoptMiniAppMassageCancellation(

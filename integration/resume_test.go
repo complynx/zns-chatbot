@@ -120,7 +120,8 @@ func TestLaterShutdownUsesNewResumeOperationForSameRun(t *testing.T) {
 
 func TestExplicitOrUncertainPauseIsNotAutomaticallyResumed(t *testing.T) {
 	t.Parallel()
-	for _, reason := range []string{"client_pause", "provider_retry_exhausted", "authorization_required", "module_discovery_unavailable"} {
+	for _, reason := range []string{"client_pause", "provider_retry_exhausted", "authorization_required",
+		"module_discovery_unavailable"} {
 		t.Run(reason, func(t *testing.T) {
 			t.Parallel()
 			p := newPeers(t)

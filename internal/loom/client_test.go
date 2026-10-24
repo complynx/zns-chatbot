@@ -54,10 +54,10 @@ func TestCreateRunReplaysStableKeyAfterLostReceipt(t *testing.T) {
 		assert.Equal(t, firstBody, string(encoded))
 		fmt.Fprint(
 			w,
-			"{\"run_id\":\"run-1\",\"chat_id\":\"chat-1\",\"status\":\"waiting_input\",\"versio"+
-				"n\":2,\"question\":{\"question_id\":\"q-1\",\"text\":\"Which event?\",\"choices\":"+
-				"[{\"id\":\"event-1\",\"label\":\"Autumn\"}],\"allow_text\":true,\"expires_at\":\"2"+
-				"030-01-01T00:00:00Z\"}}",
+			`{"run_id":"run-1","chat_id":"chat-1","status":"waiting_input","version":2,`+
+				`"question":{"question_id":"q-1","text":"Which event?",`+
+				`"choices":[{"id":"event-1","label":"Autumn"}],"allow_text":true,`+
+				`"expires_at":"2030-01-01T00:00:00Z"}}`,
 		)
 	}))
 	defer server.Close()
@@ -314,11 +314,11 @@ func TestGetRunPreservesResolvedPromptState(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = fmt.Fprint(
 			w,
-			"{\"run_id\":\"run\",\"status\":\"running\",\"question\":{\"question_id\":\"q\",\"t"+
-				"ext\":\"Pick\",\"allow_text\":true,\"expires_at\":\"2026-10-16T10:00:00Z\",\"answe"+
-				"r\":{\"id\":\"input\",\"kind\":\"answer\",\"question_id\":\"q\",\"choice_ids\":[\""+
-				"one\"],\"applied\":true}},\"approval\":{\"approval_id\":\"a\",\"text\":\"Confirm\""+
-				",\"decision\":\"approve\",\"expires_at\":\"2026-10-16T10:00:00Z\"}}",
+			`{"run_id":"run","status":"running","question":{"question_id":"q",`+
+				`"text":"Pick","allow_text":true,"expires_at":"2026-10-16T10:00:00Z",`+
+				`"answer":{"id":"input","kind":"answer","question_id":"q",`+
+				`"choice_ids":["one"],"applied":true}},"approval":{"approval_id":"a",`+
+				`"text":"Confirm","decision":"approve","expires_at":"2026-10-16T10:00:00Z"}}`,
 		)
 	}))
 	defer server.Close()

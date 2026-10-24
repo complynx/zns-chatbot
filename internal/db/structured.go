@@ -31,19 +31,23 @@ func (s *Store) RecentStructuredRequests(
 	}
 	rows, err := tx.Query(
 		ctx,
-		"SELECT coalesce(prior.request->>'structured_command','/name'),prior.crea"+
-			"ted_at,(op.result->>'version')::bigint,prior.snapshot->'registration_ent"+
-			"ry'\nFROM shuttle_tasks current_task JOIN shuttle_tasks prior\n ON prior.c"+
-			"onversation_id=current_task.conversation_id AND prior.user_id=current_ta"+
-			"sk.user_id\n AND prior.seq<current_task.seq\nLEFT JOIN shuttle_profile_ope"+
-			"rations op ON op.user_id=prior.user_id AND op.operation_id=prior.id\n AND"+
-			" prior.snapshot#>>'{profile_change,kind}' IN ('set_name','complete_name'"+
-			",'request_name')\nWHERE current_task.id=$1 AND current_task.user_id=$2\n A"+
-			"ND prior.route='structured' AND prior.state IN ('completed','delivery_un"+
-			"known','delivery_failed','closed')\n AND (prior.request->>'structured_com"+
-			"mand' IN ('/start','/avatar','/pairs','/menu','/profile','/registrations"+
-			"','/register','/orders','/massage','/knowledge','/payment_reviews','/pay"+
-			"ments') OR op.user_id IS NOT NULL)\nORDER BY prior.seq DESC LIMIT 5",
+		"SELECT coalesce(prior.request->>'structured_command','/name'),prior.created_at,"+
+			"(op.result->>'version')::bigint,prior.snapshot->'registration_entry'\n"+
+			"FROM shuttle_tasks current_task JOIN shuttle_tasks prior\n"+
+			" ON prior.conversation_id=current_task.conversation_id AND "+
+			"prior.user_id=current_task.user_id\n"+
+			" AND prior.seq<current_task.seq\n"+
+			"LEFT JOIN shuttle_profile_operations op ON op.user_id=prior.user_id AND "+
+			"op.operation_id=prior.id\n"+
+			" AND prior.snapshot#>>'{profile_change,kind}' IN ('set_name','complete_name',"+
+			"'request_name')\n"+
+			"WHERE current_task.id=$1 AND current_task.user_id=$2\n"+
+			" AND prior.route='structured' AND prior.state IN ('completed','delivery_unknown',"+
+			"'delivery_failed','closed')\n"+
+			" AND (prior.request->>'structured_command' IN ('/start','/avatar','/pairs','/menu',"+
+			"'/profile','/registrations','/register','/orders','/massage','/knowledge',"+
+			"'/payment_reviews','/payments') OR op.user_id IS NOT NULL)\n"+
+			"ORDER BY prior.seq DESC LIMIT 5",
 		taskID,
 		scope.UserID,
 	)

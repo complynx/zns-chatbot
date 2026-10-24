@@ -19,8 +19,8 @@ func avatarDraftOperation(
 	hash []byte,
 ) (*AvatarDraft, error) {
 	var saved, raw []byte
-	err := tx.QueryRow(ctx, "SELECT request_hash,result FROM shuttle_avatar_draft_operations WHERE us" +
-"er_id=$1 AND operation_id=$2", owner, operation).
+	err := tx.QueryRow(ctx, "SELECT request_hash,result FROM shuttle_avatar_draft_operations WHERE user_id=$1 AND "+
+		"operation_id=$2", owner, operation).
 		Scan(&saved, &raw)
 	if err != nil {
 		return nil, err
@@ -42,12 +42,33 @@ func readAvatarDraft(ctx context.Context, tx pgx.Tx, owner, id uuid.UUID, conten
 	var expired pgtype.Timestamptz
 	var source, historyRecord, historyArchive pgtype.UUID
 	var digest, frame, transform, original []byte
-	err = tx.QueryRow(ctx, "SELECT id,source_file_id,source_sha256,mime_type,source_size_bytes,frame" +
-"_sha256,transform,version,created_at,updated_at,CASE WHEN $3 AND origina" +
-"l_expired_at IS NULL AND created_at > $4 THEN original ELSE NULL END,his" +
-"tory_record_id,history_archive_id,original_expired_at FROM shuttle_avata" +
-"r_drafts WHERE user_id=$1 AND id=$2", owner, id, content, now.Add(-policy.Retention)).
-		Scan(&d.ID, &source, &digest, &d.MIMEType, &d.SizeBytes, &frame, &transform, &d.Version, &d.CreatedAt, &d.UpdatedAt, &original, &historyRecord, &historyArchive, &expired)
+	err = tx.QueryRow(
+		ctx,
+		"SELECT id,source_file_id,source_sha256,mime_type,source_size_bytes,frame_sha256,"+
+			"transform,version,created_at,updated_at,CASE WHEN $3 AND original_expired_at IS NULL "+
+			"AND created_at > $4 THEN original ELSE NULL END,history_record_id,history_archive_id,"+
+			"original_expired_at FROM shuttle_avatar_drafts WHERE user_id=$1 AND id=$2",
+		owner,
+		id,
+		content,
+		now.Add(-policy.Retention),
+	).
+		Scan(
+			&d.ID,
+			&source,
+			&digest,
+			&d.MIMEType,
+			&d.SizeBytes,
+			&frame,
+			&transform,
+			&d.Version,
+			&d.CreatedAt,
+			&d.UpdatedAt,
+			&original,
+			&historyRecord,
+			&historyArchive,
+			&expired,
+		)
 	if err != nil {
 		return d, nil, err
 	}
@@ -119,9 +140,9 @@ func (s *Store) ListAvatarDrafts(ctx context.Context, scope ProfileScope) ([]Ava
 	}
 	rows, err := tx.Query(
 		ctx,
-		"SELECT id FROM shuttle_avatar_drafts WHERE user_id=$1 AND (source_file_i" +
-"d IS NOT NULL OR history_record_id IS NOT NULL OR (original_expired_at I" +
-"S NULL AND created_at > $3)) ORDER BY updated_at DESC,id LIMIT $2",
+		"SELECT id FROM shuttle_avatar_drafts WHERE user_id=$1 AND (source_file_id IS NOT NULL "+
+			"OR history_record_id IS NOT NULL OR (original_expired_at IS NULL AND created_at > "+
+			"$3)) ORDER BY updated_at DESC,id LIMIT $2",
 		scope.UserID,
 		MaxAvatarDraftsPerOwner,
 		now.Add(-policy.Retention),

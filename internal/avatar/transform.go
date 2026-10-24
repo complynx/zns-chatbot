@@ -12,10 +12,10 @@ const EditedProcessorVersion = "zinusya-avatar-v2"
 // clockwise rotation about the photo center, then output-frame translation.
 // Uncovered pixels are white. All values are exact JavaScript integers.
 type Transform struct {
-	OffsetXPPM int64 `json:"offset_x_ppm"       minimum:"-65536000000" maximum:"65536000000"`
-	OffsetYPPM int64 `json:"offset_y_ppm"       minimum:"-65536000000" maximum:"65536000000"`
-	ZoomPPM    int64 `json:"zoom_ppm"           minimum:"250000"       maximum:"8000000"`
-	AngleMilli int64 `json:"angle_millidegrees" minimum:"-180000"      maximum:"180000"`
+	OffsetXPPM int64 `json:"offset_x_ppm" minimum:"-65536000000" maximum:"65536000000"`
+	OffsetYPPM int64 `json:"offset_y_ppm" minimum:"-65536000000" maximum:"65536000000"`
+	ZoomPPM    int64 `json:"zoom_ppm" minimum:"250000" maximum:"8000000"`
+	AngleMilli int64 `json:"angle_millidegrees" minimum:"-180000" maximum:"180000"`
 }
 
 func IdentityTransform() Transform { return Transform{ZoomPPM: FramePPM} }

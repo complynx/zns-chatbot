@@ -85,7 +85,7 @@ def reply_markup(value, inline_only=False):
         raise APIError('Bad Request: inline keyboard expected')
     if kind is None:
         return None
-    result = dict(value)
+    result = json.loads(packed(value))
     for key in ('keyboard', 'inline_keyboard', 'remove_keyboard', 'force_reply'):
         if key != kind:
             result.pop(key, None)

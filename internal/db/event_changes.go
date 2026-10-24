@@ -66,14 +66,15 @@ func eventChangeDescription(before *events.Event, args EventChange) (string, err
 	}
 	// Loom permits at most 4000 description bytes; exact parameters stay in Arguments.
 	return fmt.Sprintf(
-		"%s event %s at expected version %d; fully replace this event configurati" +
-"on.\nName (untrusted data): %q\nTimezone: %s; starts_at_local: %s; ends_at" +
-"_local: %s.\nModules: %d -> %d; removed: %d. Registration configured: %t " +
-"-> %t; pricing tiers: %d -> %d; deposit configured: %t -> %t.\nThe comple" +
-"te exact requested parameters are in arguments. Omitted registration/dep" +
-"osit removes that future policy; omitted modules are disabled. This does" +
-" not register users, assign or cancel passes, change frozen pass terms, " +
-"or credit money. Current module access is rechecked at execution.",
+		"%s event %s at expected version %d; fully replace this event configuration.\n"+
+			"Name (untrusted data): %q\n"+
+			"Timezone: %s; starts_at_local: %s; ends_at_local: %s.\n"+
+			"Modules: %d -> %d; removed: %d. Registration configured: %t -> %t; pricing tiers: %d "+
+			"-> %d; deposit configured: %t -> %t.\n"+
+			"The complete exact requested parameters are in arguments. Omitted "+
+			"registration/deposit removes that future policy; omitted modules are disabled. This "+
+			"does not register users, assign or cancel passes, change frozen pass terms, or credit "+
+			"money. Current module access is rechecked at execution.",
 		action,
 		args.ID,
 		args.ExpectedVersion,

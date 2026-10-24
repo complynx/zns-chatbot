@@ -21,7 +21,12 @@ func TestFileReadRefreshesPathAndRejectsOversizeBody(t *testing.T) {
 		if strings.HasSuffix(r.URL.Path, "/getFile") {
 			n := gets.Add(1)
 			_ = json.NewEncoder(w).
-				Encode(map[string]any{"ok": true, "result": map[string]any{"file_id": "file", "file_path": "docs/" + string('a'+n) + ".pdf"}})
+				Encode(
+					map[string]any{
+						"ok":     true,
+						"result": map[string]any{"file_id": "file", "file_path": "docs/" + string('a'+n) + ".pdf"},
+					},
+				)
 			return
 		}
 		_, _ = w.Write([]byte("data"))
@@ -43,7 +48,13 @@ func TestFileDownloadNeverFollowsRedirectOrTraversal(t *testing.T) {
 	var reached atomic.Bool
 	target := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { reached.Store(true) }))
 	t.Cleanup(target.Close)
-	for _, path := range []string{"../secrets", "docs/../../secrets", "docs/%2e%2e/secrets", "https://other.invalid/file", "docs/valid.pdf"} {
+	for _, path := range []string{
+		"../secrets",
+		"docs/../../secrets",
+		"docs/%2e%2e/secrets",
+		"https://other.invalid/file",
+		"docs/valid.pdf",
+	} {
 		t.Run(path, func(t *testing.T) {
 			t.Parallel()
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -78,8 +89,8 @@ func TestFileReadClassifiesOnlyExplicitCloudSizeRefusal(t *testing.T) {
 		{"failure-envelope-on-200", 200, refusal, true},
 		{"other-bad-request", 400, `{"ok":false,"error_code":400,"description":"Bad Request: wrong file_id"}`, false},
 		{"near-match", 400, `{"ok":false,"error_code":400,"description":"Bad Request: file is too big PRIVATE"}`, false},
-		{"rate-limit", 429, "{\"ok\":false,\"error_code\":429,\"description\":\"Bad Request: file is too big" +
-"\",\"parameters\":{\"retry_after\":3}}", false},
+		{"rate-limit", 429, `{"ok":false,"error_code":429,"description":"Bad Request: file is too big",` +
+			`"parameters":{"retry_after":3}}`, false},
 		{"server-error", 500, `{"ok":false,"error_code":500,"description":"Bad Request: file is too big"}`, false},
 		{"incoherent-status", 500, refusal, false},
 		{"missing-ok", 400, `{"error_code":400,"description":"Bad Request: file is too big"}`, false},

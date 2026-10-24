@@ -12,31 +12,14 @@ import (
 // Only exact article and authorized suggestion reads include complete Markdown.
 // Lists return bounded projections, never a page of complete article bodies.
 func (s *Server) registerMiniAppKnowledgeReads() {
-	registerMiniAppKnowledgePost(
-		s,
-		"overview",
-		func(ctx context.Context, scope db.PaymentScope, _ db.MiniAppKnowledgeSession, in knowledgeOverviewArguments) (any, error) {
-			return s.store.KnowledgeOverviewAfter(ctx, scope, in.After)
-		},
-	)
-	registerMiniAppKnowledgePost(
-		s,
-		"capabilities",
-		func(ctx context.Context, scope db.PaymentScope, _ db.MiniAppKnowledgeSession, in knowledgeCapabilitiesArguments) (any, error) {
-			return s.store.KnowledgeCapabilities(ctx, scope, in.EventID)
-		},
-	)
-	registerMiniAppKnowledgePost(
-		s,
-		"moderators",
-		func(ctx context.Context, scope db.PaymentScope, _ db.MiniAppKnowledgeSession, in knowledgeModeratorListArguments) (any, error) {
-			return s.store.KnowledgeModerators(ctx, scope, in.After, in.Limit)
-		},
-	)
+	s.registerMiniAppKnowledgeDirectoryReads()
 	registerMiniAppKnowledgePost(
 		s,
 		"list",
-		func(ctx context.Context, scope db.PaymentScope, _ db.MiniAppKnowledgeSession, in db.KnowledgeListRequest) (any, error) {
+		func(ctx context.Context,
+			scope db.PaymentScope,
+			_ db.MiniAppKnowledgeSession,
+			in db.KnowledgeListRequest) (any, error) {
 			result, err := s.store.ListKnowledge(ctx, scope, in)
 			if err != nil {
 				return nil, err
@@ -56,7 +39,10 @@ func (s *Server) registerMiniAppKnowledgeReads() {
 	registerMiniAppKnowledgePost(
 		s,
 		"search",
-		func(ctx context.Context, scope db.PaymentScope, _ db.MiniAppKnowledgeSession, in knowledge.SearchRequest) (any, error) {
+		func(ctx context.Context,
+			scope db.PaymentScope,
+			_ db.MiniAppKnowledgeSession,
+			in knowledge.SearchRequest) (any, error) {
 			normalized, err := in.Normalize()
 			if err != nil {
 				return nil, err
@@ -83,7 +69,10 @@ func (s *Server) registerMiniAppKnowledgeReads() {
 	registerMiniAppKnowledgePost(
 		s,
 		"read",
-		func(ctx context.Context, scope db.PaymentScope, _ db.MiniAppKnowledgeSession, in KnowledgeArticleArguments) (any, error) {
+		func(ctx context.Context,
+			scope db.PaymentScope,
+			_ db.MiniAppKnowledgeSession,
+			in KnowledgeArticleArguments) (any, error) {
 			article, err := s.store.ReadKnowledge(ctx, scope, in.ArticleID, in.Revision)
 			if err != nil {
 				return nil, err
@@ -97,7 +86,10 @@ func (s *Server) registerMiniAppKnowledgeReads() {
 	registerMiniAppKnowledgePost(
 		s,
 		"revisions",
-		func(ctx context.Context, scope db.PaymentScope, _ db.MiniAppKnowledgeSession, in knowledgeRevisionArguments) (any, error) {
+		func(ctx context.Context,
+			scope db.PaymentScope,
+			_ db.MiniAppKnowledgeSession,
+			in knowledgeRevisionArguments) (any, error) {
 			return s.store.KnowledgeRevisions(ctx, scope, in.ArticleID, in.Before, in.Limit)
 		},
 	)
@@ -108,7 +100,10 @@ func (s *Server) registerMiniAppKnowledgeSuggestions() {
 	registerMiniAppKnowledgePost(
 		s,
 		"suggestion",
-		func(ctx context.Context, scope db.PaymentScope, _ db.MiniAppKnowledgeSession, in knowledgeSuggestionDetailInput) (any, error) {
+		func(ctx context.Context,
+			scope db.PaymentScope,
+			_ db.MiniAppKnowledgeSession,
+			in knowledgeSuggestionDetailInput) (any, error) {
 			suggestion, err := s.store.ReadKnowledgeSuggestion(ctx, scope, in.SuggestionID)
 			if err != nil {
 				return nil, err
@@ -127,7 +122,10 @@ func (s *Server) registerMiniAppKnowledgeSuggestions() {
 		registerMiniAppKnowledgePost(
 			s,
 			path,
-			func(ctx context.Context, scope db.PaymentScope, _ db.MiniAppKnowledgeSession, in knowledgeSuggestionListArguments) (any, error) {
+			func(ctx context.Context,
+				scope db.PaymentScope,
+				_ db.MiniAppKnowledgeSession,
+				in knowledgeSuggestionListArguments) (any, error) {
 				filters := db.KnowledgeSuggestionRequest{
 					Pending: pending,
 					After:   in.After,
@@ -155,4 +153,37 @@ func (s *Server) registerMiniAppKnowledgeSuggestions() {
 
 type knowledgeSuggestionDetailInput struct {
 	SuggestionID uuid.UUID `json:"suggestion_id"`
+}
+
+func (s *Server) registerMiniAppKnowledgeDirectoryReads() {
+	registerMiniAppKnowledgePost(
+		s,
+		"overview",
+		func(ctx context.Context,
+			scope db.PaymentScope,
+			_ db.MiniAppKnowledgeSession,
+			in knowledgeOverviewArguments) (any, error) {
+			return s.store.KnowledgeOverviewAfter(ctx, scope, in.After)
+		},
+	)
+	registerMiniAppKnowledgePost(
+		s,
+		"capabilities",
+		func(ctx context.Context,
+			scope db.PaymentScope,
+			_ db.MiniAppKnowledgeSession,
+			in knowledgeCapabilitiesArguments) (any, error) {
+			return s.store.KnowledgeCapabilities(ctx, scope, in.EventID)
+		},
+	)
+	registerMiniAppKnowledgePost(
+		s,
+		"moderators",
+		func(ctx context.Context,
+			scope db.PaymentScope,
+			_ db.MiniAppKnowledgeSession,
+			in knowledgeModeratorListArguments) (any, error) {
+			return s.store.KnowledgeModerators(ctx, scope, in.After, in.Limit)
+		},
+	)
 }

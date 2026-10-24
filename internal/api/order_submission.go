@@ -45,7 +45,7 @@ type orderDetailArguments struct {
 
 type orderOperationArguments struct {
 	OperationID uuid.UUID             `json:"operation_id"`
-	Kind        db.OrderOperationKind `json:"kind"         enum:"prepare,submit,cancel"`
+	Kind        db.OrderOperationKind `json:"kind" enum:"prepare,submit,cancel"`
 }
 
 // The business bindings are fixed when routes are registered; requests cannot

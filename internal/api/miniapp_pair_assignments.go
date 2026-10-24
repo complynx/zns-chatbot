@@ -27,7 +27,12 @@ type miniAppPairAssignmentInput struct {
 }
 
 func (s *Server) registerMiniAppPairAssignments() {
-	for _, path := range []string{"recent", schemaEvents, "events/{event}/candidates", assignmentProposalsField, "proposals/{proposal}", "operations/{operation}"} {
+	for _, path := range []string{"recent",
+		schemaEvents,
+		"events/{event}/candidates",
+		assignmentProposalsField,
+		"proposals/{proposal}",
+		"operations/{operation}"} {
 		s.public.HandleFunc("GET /app/pair-assignments/"+path, s.miniAppPairAssignmentRead)
 	}
 	s.public.HandleFunc("POST /app/pair-assignments/prepare", s.miniAppPairAssignmentWrite)

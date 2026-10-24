@@ -59,17 +59,24 @@ func (s *Store) RecentMiniAppPaymentReviewActions(
 		return nil, err
 	}
 	defer rollbackLegacyArchive(ctx, tx)
-	rows, err := tx.Query(ctx, "SELECT c.operation_id,w.event_id,w.evidence_id,w.id,w.revision,c.kind,\n " +
-"CASE WHEN c.kind='commit' THEN c.result#>>'{review,evidence,state}' ELSE" +
-" c.result->>'state' END,c.completed_at\n FROM shuttle_tasks task JOIN shu" +
-"ttle_payment_review_calls c ON c.actor_id=task.user_id\n JOIN shuttle_pay" +
-"ment_review_workspaces w ON w.id=c.workspace_id AND w.actor_id=c.actor_i" +
-"d\n JOIN shuttle_events e ON e.id=w.event_id\n WHERE task.id=$1 AND task.u" +
-"ser_id=$2 AND c.source='miniapp' AND c.completed_at<task.created_at\n AND" +
-" e.bot_id=$3 AND e.organization_id=$4 AND 'registrations'=ANY(e.modules)" +
-"\n AND ($5 OR EXISTS(SELECT 1 FROM shuttle_event_authorities a WHERE a.ev" +
-"ent_id=e.id\n AND a.user_id=c.actor_id AND a.role IN ('ambassador','admin" +
-"istrator')))\n ORDER BY c.completed_at DESC,c.operation_id DESC LIMIT 5", taskID, scope.UserID, scope.BotID, scope.Organization, scope.GlobalAdmin)
+	rows, err := tx.Query(
+		ctx,
+		`SELECT c.operation_id,w.event_id,w.evidence_id,w.id,w.revision,c.kind,
+ CASE WHEN c.kind='commit' THEN c.result#>>'{review,evidence,state}' ELSE c.result->>'state' END,c.completed_at
+ FROM shuttle_tasks task JOIN shuttle_payment_review_calls c ON c.actor_id=task.user_id
+ JOIN shuttle_payment_review_workspaces w ON w.id=c.workspace_id AND w.actor_id=c.actor_id
+ JOIN shuttle_events e ON e.id=w.event_id
+ WHERE task.id=$1 AND task.user_id=$2 AND c.source='miniapp' AND c.completed_at<task.created_at
+ AND e.bot_id=$3 AND e.organization_id=$4 AND 'registrations'=ANY(e.modules)
+ AND ($5 OR EXISTS(SELECT 1 FROM shuttle_event_authorities a WHERE a.event_id=e.id
+ AND a.user_id=c.actor_id AND a.role IN ('ambassador','administrator')))
+ ORDER BY c.completed_at DESC,c.operation_id DESC LIMIT 5`,
+		taskID,
+		scope.UserID,
+		scope.BotID,
+		scope.Organization,
+		scope.GlobalAdmin,
+	)
 	if err != nil {
 		return nil, err
 	}

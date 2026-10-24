@@ -23,7 +23,13 @@ const (
 )
 
 func (s *Server) registerMiniAppPassPayments() {
-	for _, path := range []string{"targets", miniAppPassPaymentRecent, "events/{event}/passes/{pass}", "events/{event}/files", "events/{event}/evidence", "events/{event}/evidence/{evidence}", "events/{event}/operations/{operation}"} {
+	for _, path := range []string{"targets",
+		miniAppPassPaymentRecent,
+		"events/{event}/passes/{pass}",
+		"events/{event}/files",
+		"events/{event}/evidence",
+		"events/{event}/evidence/{evidence}",
+		"events/{event}/operations/{operation}"} {
 		s.public.HandleFunc("GET "+participantPaymentPath+path, s.miniAppPassPaymentRead)
 	}
 	s.public.HandleFunc("POST "+participantPaymentPath+"events/{event}/evidence", s.miniAppPassPaymentSubmit)

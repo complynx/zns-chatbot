@@ -79,9 +79,8 @@ func TestMiniAppOrderEvidenceLogoutDuringEventWaitPreventsAllEffects(t *testing.
 	require.Eventually(t, func() bool {
 		var waiting bool
 		readErr := f.H.store.Pool().
-			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
-"ase() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid" +
-")))", blocking.Conn().PgConn().PID()).
+			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND "+
+				"pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid)))", blocking.Conn().PgConn().PID()).
 			Scan(&waiting)
 		return readErr == nil && waiting
 	}, 3*time.Second, 10*time.Millisecond)
@@ -97,9 +96,9 @@ func TestMiniAppOrderEvidenceLogoutDuringEventWaitPreventsAllEffects(t *testing.
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(ctx, "SELECT (SELECT count(*) FROM shuttle_order_evidence),(SELECT count(*) FR" +
-"OM shuttle_order_evidence_operations),(SELECT count(*) FROM shuttle_orde" +
-"r_evidence_notices)").
+			QueryRow(ctx, "SELECT (SELECT count(*) FROM shuttle_order_evidence),(SELECT count(*) FROM "+
+				"shuttle_order_evidence_operations),(SELECT count(*) FROM "+
+				"shuttle_order_evidence_notices)").
 			Scan(&evidence, &receipts, &notices),
 	)
 	require.Zero(t, evidence)

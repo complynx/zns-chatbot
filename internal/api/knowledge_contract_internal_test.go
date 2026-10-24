@@ -84,7 +84,13 @@ func TestKnowledgeDiscoveryUsesCurrentCapabilities(t *testing.T) {
 func TestKnowledgeNormalizedPreparationMatchesVerbInput(t *testing.T) {
 	t.Parallel()
 	id := uuid.New()
-	content, err := (knowledge.Content{Slug: " ZOUK ", Title: " Zouk ", Language: " EN ", Topics: []string{" Dance "}, Body: "# Source\nExact source", Sources: []knowledge.Source{}}).Normalize()
+	content,
+		err := (knowledge.Content{Slug: " ZOUK ",
+		Title:    " Zouk ",
+		Language: " EN ",
+		Topics:   []string{" Dance "},
+		Body:     "# Source\nExact source",
+		Sources:  []knowledge.Source{}}).Normalize()
 	require.NoError(t, err)
 	change := db.KnowledgeChange{Kind: "suggest", Content: &content, Reason: " Add reference ", ExpectedRevision: 0}
 	args := knowledgeEditFromChange(change)

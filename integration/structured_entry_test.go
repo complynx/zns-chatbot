@@ -49,7 +49,19 @@ func TestNativeCommandsWithEmptyCatalogsKeepSendableKeyboards(t *testing.T) {
 	p.loomDown = true
 	h := setup(t, p)
 	seedNamedTelegramUser(t, h)
-	commands := []string{"/start", "/menu", "/profile", "/registrations", "/register", "/orders", "/massage", "/avatar", "/pairs", "/payments", "/knowledge"}
+	commands := []string{
+		"/start",
+		"/menu",
+		"/profile",
+		"/registrations",
+		"/register",
+		"/orders",
+		"/massage",
+		"/avatar",
+		"/pairs",
+		"/payments",
+		"/knowledge",
+	}
 	for n, command := range commands {
 		id := h.submitText(t, int64(92800+n), command)
 		h.await(t, id, "completed")

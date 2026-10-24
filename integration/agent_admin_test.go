@@ -40,7 +40,15 @@ func TestAgentAdministrativeReadsRespectRoleScopeAndRevocation(t *testing.T) {
 	)
 	require.Equal(t, http.StatusOK, code, string(data))
 	require.JSONEq(t, `{"methods":[]}`, string(data))
-	for _, method := range []string{"settings", "tasks", "task", "pair_notifications", "pair_notification", "orders_catalog", "massage_schedule"} {
+	for _, method := range []string{
+		"settings",
+		"tasks",
+		"task",
+		"pair_notifications",
+		"pair_notification",
+		"orders_catalog",
+		"massage_schedule",
+	} {
 		arguments := map[string]any{}
 		if method == "task" || method == "pair_notification" {
 			arguments["id"] = id
@@ -87,7 +95,11 @@ func TestAgentAdministrativeReadsRespectRoleScopeAndRevocation(t *testing.T) {
 		}
 	}
 	for _, required := range []string{"events", "event", "registrations", "assign", "authorities", "authority",
-		"resolve_notification", "notifications", "notification", "pair_notifications", "pair_notification", "settings", "tasks", "task", "orders_catalog", "set_orders_catalog", "massage_schedule", "set_massage_schedule", "close_task", "update_settings", "revoke_user", "user", "user_revocation_receipt", "change_event"} {
+		"resolve_notification", "notifications", "notification", "pair_notifications", "pair_notification",
+		"settings", "tasks", "task", "orders_catalog", "set_orders_catalog",
+		"massage_schedule", "set_massage_schedule", "close_task", "update_settings",
+		"revoke_user", "user", "user_revocation_receipt", "change_event",
+	} {
 		require.True(t, methodIDs[required], "missing administrative tool: %s", required)
 		if !writeMethods[required] {
 			require.Equal(t, "read", methodEffects[required], required)

@@ -284,7 +284,11 @@ func (p sourceATXHeadingParser) Open(
 }
 
 func headingIndex(body string) []Heading {
-	root := parser.New(parser.WithBlockParsers(util.Prioritized[parser.BlockParser](sourceATXHeadingParser{parser.NewATXHeadingParser()}, sourceATXPriority))).
+	root := parser.New(
+		parser.WithBlockParsers(
+			util.Prioritized[parser.BlockParser](sourceATXHeadingParser{parser.NewATXHeadingParser()}, sourceATXPriority),
+		),
+	).
 		ParseStringSource(body)
 	lines := lineStarts(body)
 	headings := make([]Heading, 0)

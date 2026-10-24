@@ -69,8 +69,8 @@ func TestAccountStatusPreservesWaitlistsPaidHistoryAndPendingMoney(t *testing.T)
 	require.Equal(t, payments.TopUp, assigned.Pass.Purpose)
 	confirmExpectationPayment(t, f, 9258, payments.TopUp, 1)
 	_, err = f.H.store.Pool().
-		Exec(ctx, "UPDATE shuttle_events SET starts_at=now()-interval '2 days',ends_at=now(" +
-")-interval '1 day' WHERE id=$1", f.Event.ID)
+		Exec(ctx, "UPDATE shuttle_events SET starts_at=now()-interval '2 days',ends_at=now()-interval "+
+			"'1 day' WHERE id=$1", f.Event.ID)
 	require.NoError(t, err)
 	assigned = find(read(), f.Event.ID)
 	require.True(t, assigned.Pass.Balance.FullyPaid)
@@ -175,7 +175,13 @@ func TestMiniAppAccountAndAgentListShareOwnerStatusWithoutWrites(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(raw, &adminPage))
 	require.Empty(t, adminPage.Result.Events)
-	for _, query := range []string{"?limit=21", "?after=bad", "?limit=1&limit=2", "?user_id=" + f.AdminID.String(), "?after=%zz"} {
+	for _, query := range []string{
+		"?limit=21",
+		"?after=bad",
+		"?limit=1&limit=2",
+		"?user_id=" + f.AdminID.String(),
+		"?after=%zz",
+	} {
 		code, raw, _ = appCall(t, f.H, http.MethodGet, "/app/account"+query, "", session.Token, appTestOrigin)
 		require.Equal(t, http.StatusBadRequest, code, string(raw))
 	}
@@ -234,8 +240,8 @@ WHERE relation='shuttle_passes'::regclass AND NOT granted)`).Scan(&waiting)
 		return queryErr == nil && waiting
 	}, 3*time.Second, 5*time.Millisecond)
 	_, err = f.H.store.Pool().
-		Exec(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interva" +
-"l '1 second' WHERE user_id=$1", f.OwnerID)
+		Exec(ctx, "UPDATE shuttle_miniapp_sessions"+
+			" SET expires_at=clock_timestamp()-interval '1 second' WHERE user_id=$1", f.OwnerID)
 	require.NoError(t, err)
 	require.NoError(t, blocking.Commit(ctx))
 	select {

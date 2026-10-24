@@ -25,7 +25,10 @@ func (input miniAppPaymentReviewInput) change() (payments.ReviewChange, error) {
 		return payments.ReviewChange{}, payments.ErrInvalid
 	}
 	return (payments.ReviewChange{EventID: input.EventID, EvidenceID: input.EvidenceID,
-		ExpectedVersion: *input.ExpectedVersion, Decision: input.Decision, AmountMinor: *input.AmountMinor, Reason: input.Reason}).Normalize()
+		ExpectedVersion: *input.ExpectedVersion,
+		Decision:        input.Decision,
+		AmountMinor:     *input.AmountMinor,
+		Reason:          input.Reason}).Normalize()
 }
 
 type miniAppPaymentSaveInput struct {

@@ -378,7 +378,10 @@ func (s *Store) massageBindingOperation(
 		return result, err
 	}
 	row, err := s.q.WithTx(tx).
-		ReadMassageBindingOperation(ctx, sqlc.ReadMassageBindingOperationParams{ActorID: scope.UserID, OperationID: operation})
+		ReadMassageBindingOperation(
+			ctx,
+			sqlc.ReadMassageBindingOperationParams{ActorID: scope.UserID, OperationID: operation},
+		)
 	if err != nil {
 		return result, err
 	}

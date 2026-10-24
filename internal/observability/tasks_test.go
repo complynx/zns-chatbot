@@ -42,17 +42,17 @@ func TestTaskMetricsCacheAgeAndSuppressFailedSnapshotsUntilRecovery(t *testing.T
 	body := taskMetricsBody(t, telemetry)
 	require.Contains(t, body, "\nzinusya_tasks_collection_success 1\n")
 	require.Contains(t, body, "\nzinusya_tasks_last_success_timestamp_seconds 1000\n")
-	require.Contains(t, body, "zinusya_tasks_unresolved{state=\"accepted\"} 2\n")
+	require.Contains(t, body, `zinusya_tasks_unresolved{state="accepted"} 2`+"\n")
 	rows[0].Count = 900
 	now = start.Add(5 * time.Second)
 	body = taskMetricsBody(t, telemetry)
-	require.Contains(t, body, "zinusya_tasks_unresolved{state=\"accepted\"} 2\n")
-	require.Contains(t, body, "zinusya_tasks_oldest_accepted_age_seconds{state=\"accepted\"} 15\n")
-	require.Contains(t, body, "zinusya_tasks_oldest_accepted_age_seconds{state=\"creating_run\"} 0\n")
-	require.Contains(t, body, "zinusya_tasks_oldest_accepted_age_seconds{state=\"awaiting_user\"} 0\n")
+	require.Contains(t, body, `zinusya_tasks_unresolved{state="accepted"} 2`+"\n")
+	require.Contains(t, body, `zinusya_tasks_oldest_accepted_age_seconds{state="accepted"} 15`+"\n")
+	require.Contains(t, body, `zinusya_tasks_oldest_accepted_age_seconds{state="creating_run"} 0`+"\n")
+	require.Contains(t, body, `zinusya_tasks_oldest_accepted_age_seconds{state="awaiting_user"} 0`+"\n")
 	now = start.Add(25 * time.Second)
 	require.Contains(t, taskMetricsBody(t, telemetry),
-		"zinusya_tasks_oldest_accepted_age_seconds{state=\"creating_run\"} 5\n")
+		`zinusya_tasks_oldest_accepted_age_seconds{state="creating_run"} 5`+"\n")
 	require.Equal(t, 1, calls)
 	failed = true
 	now = start.Add(31 * time.Second)
@@ -72,8 +72,8 @@ func TestTaskMetricsCacheAgeAndSuppressFailedSnapshotsUntilRecovery(t *testing.T
 	body = taskMetricsBody(t, telemetry)
 	require.Contains(t, body, "\nzinusya_tasks_collection_success 1\n")
 	require.Contains(t, body, "\nzinusya_tasks_last_success_timestamp_seconds 1067\n")
-	require.Contains(t, body, "zinusya_tasks_unresolved{state=\"accepted\"} 4\n")
-	require.Contains(t, body, "zinusya_tasks_oldest_accepted_age_seconds{state=\"accepted\"} 3\n")
+	require.Contains(t, body, `zinusya_tasks_unresolved{state="accepted"} 4`+"\n")
+	require.Contains(t, body, `zinusya_tasks_oldest_accepted_age_seconds{state="accepted"} 3`+"\n")
 	require.Equal(t, 3, calls)
 }
 

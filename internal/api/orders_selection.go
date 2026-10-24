@@ -18,10 +18,10 @@ const ordersSelectionPath = "/internal/agent/orders/"
 
 type ordersSelectionArguments struct {
 	EventID                uuid.UUID          `json:"event_id"`
-	ExpectedEventVersion   int64              `json:"expected_event_version"   minimum:"1"`
+	ExpectedEventVersion   int64              `json:"expected_event_version" minimum:"1"`
 	ExpectedCatalogVersion int64              `json:"expected_catalog_version" minimum:"1"`
-	ExpectedDraftVersion   int64              `json:"expected_draft_version"   minimum:"0"`
-	Selections             []orders.Selection `json:"selections"                           maxItems:"100"`
+	ExpectedDraftVersion   int64              `json:"expected_draft_version" minimum:"0"`
+	Selections             []orders.Selection `json:"selections" maxItems:"100"`
 }
 
 func (s *Server) registerOrdersSelection(api huma.API) {

@@ -18,12 +18,12 @@ const registrationDetailsPath = "/internal/agent/registration_details/"
 
 type legalNameArguments struct {
 	ExpectedVersion int64  `json:"expected_version" minimum:"0"`
-	LegalName       string `json:"legal_name"                   minLength:"1" maxLength:"256"`
+	LegalName       string `json:"legal_name" minLength:"1" maxLength:"256"`
 }
 
 type passportNumberArguments struct {
 	ExpectedVersion int64  `json:"expected_version" minimum:"0"`
-	PassportNumber  string `json:"passport_number"              minLength:"1" maxLength:"128"`
+	PassportNumber  string `json:"passport_number" minLength:"1" maxLength:"128"`
 }
 
 type registrationDetailsResponse struct {

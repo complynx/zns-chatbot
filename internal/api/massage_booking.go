@@ -90,7 +90,7 @@ type massageOperationArguments struct {
 }
 
 func (s *Server) registerMassageBooking(api huma.API) {
-	registerAgentPost(api, "agent-pending-massage-proposals", massageBookingPath+"pending",
+	registerAgentPost(api, "agent-pending-massage-proposals", massageBookingPath+agentPending,
 		internalBodyLimit, s.ownPendingMassageProposals)
 
 	registerAgentPost(

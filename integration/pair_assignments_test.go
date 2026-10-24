@@ -67,8 +67,8 @@ func TestPairAssignmentCommitsBothPassesAndReplaysAfterRestart(t *testing.T) {
 	f.H.stop(t)
 	f.H.start(t)
 	_, err = f.H.store.Pool().
-		Exec(ctx, "UPDATE shuttle_pair_preparations SET expires_at=clock_timestamp()-interv" +
-"al '1 second' WHERE proposal_id=$1", prep.ID)
+		Exec(ctx, "UPDATE shuttle_pair_preparations SET expires_at=clock_timestamp()-interval '1 second' WHERE "+
+			"proposal_id=$1", prep.ID)
 	require.NoError(t, err)
 	replay, err := f.H.store.ConfirmPairAssignment(ctx, admin, "assign-pair", args, prep.ID)
 	require.NoError(t, err)

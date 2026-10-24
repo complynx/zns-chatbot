@@ -62,7 +62,13 @@ func TestInstantApprovalShowsHumanQuoteAndRetainsLiteralFallback(t *testing.T) {
 				require.Contains(t, sent[0].Text, "45.00 BYN")
 				require.Contains(t, sent[0].Text, f.Event.Document.Timezone)
 				require.Contains(t, sent[0].Text, "yourself as client and specialist")
-				for _, field := range []string{"event_id", "expected_event_version", "expected_schedule_version", args.EventID.String(), "MODEL TEXT"} {
+				for _, field := range []string{
+					"event_id",
+					"expected_event_version",
+					"expected_schedule_version",
+					args.EventID.String(),
+					"MODEL TEXT",
+				} {
 					require.NotContains(t, sent[0].Text, field)
 				}
 			} else {

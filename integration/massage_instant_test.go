@@ -194,7 +194,8 @@ func TestMassageInstantRechecksCapacityExpiryAndEventVersion(t *testing.T) {
 	require.Len(t, specialistNotices(t, f, booked.ID), 1)
 	require.Equal(t, "cancelled", specialistNotices(t, f, booked.ID)[0].Kind)
 	_, err = f.H.store.Pool().Exec(t.Context(),
-		"UPDATE shuttle_massage_preparations SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1", competing.ID)
+		"UPDATE shuttle_massage_preparations SET expires_at=clock_timestamp()-interval '1 "+
+			"second' WHERE id=$1", competing.ID)
 	require.NoError(t, err)
 	_, err = f.H.store.BookOwnMassageInstant(t.Context(), staff, uuid.New(), competing.ID, args, db.MassageSourceAgent)
 	require.ErrorIs(t, err, db.ErrConflict)

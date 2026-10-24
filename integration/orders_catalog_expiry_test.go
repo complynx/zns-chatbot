@@ -40,8 +40,8 @@ func TestOrdersCatalogExpiresWhileAuthorityCheckWaits(t *testing.T) {
 			prepared := prepareCatalog(t, f, op, change)
 			var cutoff time.Time
 			require.NoError(t, f.H.store.Pool().QueryRow(ctx,
-				"UPDATE shuttle_orders_catalog_preparations SET expires_at=clock_timestam" +
-"p()+interval '2 seconds' WHERE id=$1 RETURNING expires_at",
+				"UPDATE shuttle_orders_catalog_preparations SET expires_at=clock_timestamp()+interval '2 seconds' WHERE "+
+					"id=$1 RETURNING expires_at",
 				prepared.ID).
 				Scan(&cutoff))
 			checked := false

@@ -250,7 +250,11 @@ func TestMassageBindingHTTPAdminReadsResolveOnlyKnownScopedTarget(t *testing.T) 
 		appTestOrigin,
 	)
 	require.Equal(t, http.StatusForbidden, code)
-	for _, input := range []map[string]any{{}, {"user_id": staff.UserID, "telegram_user_id": 11444}, {"telegram_user_id": -1}} {
+	for _, input := range []map[string]any{
+		{},
+		{"user_id": staff.UserID, "telegram_user_id": 11444},
+		{"telegram_user_id": -1},
+	} {
 		code, _, _ = appCall(
 			t,
 			f.H,
@@ -328,8 +332,8 @@ func TestMassageStaffHTTPRejectsCrossEventOriginAndExpiredSession(t *testing.T) 
 	)
 	require.Equal(t, http.StatusBadRequest, code, string(raw))
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interva" +
-"l '1 second' WHERE user_id=$1", session.UserID)
+		Exec(t.Context(), "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 "+
+			"second' WHERE user_id=$1", session.UserID)
 	require.NoError(t, err)
 	code, _, _ = appCall(t, f.H, http.MethodGet, path+"/schedule", "", session.Token, appTestOrigin)
 	require.Equal(t, http.StatusUnauthorized, code)
@@ -431,9 +435,8 @@ func TestMiniAppMassageBindingRejectsLogoutAfterWaitingForEvent(t *testing.T) {
 	require.Eventually(t, func() bool {
 		var waiting bool
 		e := f.H.store.Pool().
-			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
-"ase() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid" +
-")))", blocker.Conn().PgConn().PID()).
+			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND "+
+				"pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid)))", blocker.Conn().PgConn().PID()).
 			Scan(&waiting)
 		return e == nil && waiting
 	}, 3*time.Second, 5*time.Millisecond)

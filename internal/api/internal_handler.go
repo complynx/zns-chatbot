@@ -40,7 +40,8 @@ func (s *Server) servePublic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	source := strings.HasPrefix(r.URL.Path, "/app/avatars/drafts/") &&
-		((r.Method == http.MethodGet && (strings.HasSuffix(r.URL.Path, "/original") || strings.Contains(r.URL.Path, "/preview/"))) ||
+		((r.Method == http.MethodGet &&
+			(strings.HasSuffix(r.URL.Path, "/original") || strings.Contains(r.URL.Path, "/preview/"))) ||
 			(r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/finalize")))
 	if source ||
 		(r.Method == http.MethodPost && (r.URL.Path == "/app/avatars/drafts" || r.URL.Path == "/app/avatars/drafts/upload")) {
@@ -52,7 +53,9 @@ func (s *Server) servePublic(w http.ResponseWriter, r *http.Request) {
 
 func internalReadTimeout(r *http.Request) time.Duration {
 	if (r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/internal/avatar-drafts/")) ||
-		(r.Method == http.MethodPost && (r.URL.Path == avatarPath+"create_draft" || r.URL.Path == avatarPath+avatarRefetchMethod || r.URL.Path == avatarPath+"preview_draft" || r.URL.Path == avatarPath+"finalize_draft")) {
+		(r.Method == http.MethodPost &&
+			(r.URL.Path == avatarPath+"create_draft" || r.URL.Path == avatarPath+avatarRefetchMethod ||
+				r.URL.Path == avatarPath+"preview_draft" || r.URL.Path == avatarPath+"finalize_draft")) {
 		return avatarUploadTimeout
 	}
 	if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/internal/history-avatars/") &&

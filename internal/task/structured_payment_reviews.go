@@ -59,10 +59,10 @@ func (s *Service) structuredPaymentReviews(
 		} else {
 			text = structuredText(
 				ru,
-				"Open the form to inspect proof and prepare a decision. Payment is confir" +
-"med only after your explicit confirmation.",
-				"Открой форму для проверки файла и подготовки решения. Оплата подтверждае" +
-"тся только после твоего явного подтверждения.",
+				"Open the form to inspect proof and prepare a decision. "+
+					"Payment is confirmed only after your explicit confirmation.",
+				"Открой форму для проверки файла и подготовки решения. "+
+					"Оплата подтверждается только после твоего явного подтверждения.",
 			)
 			url = s.options.MiniAppURL + "#payment-review"
 		}

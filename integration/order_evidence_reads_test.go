@@ -38,7 +38,8 @@ func TestOrderEvidenceReceiptLookupPreservesAdmissionAcrossReviewAndRestart(t *t
 	_, err = reopened.OrderEvidenceOperationByID(t.Context(), actor, reviewOp, db.OrderEvidenceSubmissionReceipt)
 	require.ErrorIs(t, err, pgx.ErrNoRows, "Phase must match")
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2", f.Event.ID, f.AmbassadorID)
+		Exec(t.Context(), "DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2", f.Event.ID,
+			f.AmbassadorID)
 	require.NoError(t, err)
 	_, err = reopened.OrderEvidenceOperationByID(t.Context(), actor, reviewOp, db.OrderEvidenceReviewReceipt)
 	require.Error(t, err, "Role loss blocks historical review receipt recovery")
@@ -95,7 +96,8 @@ func TestOrderEvidenceProofAccessIsPurposeScopedAndOrdersOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, evidence, current)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2", f.Event.ID, f.AmbassadorID)
+		Exec(t.Context(), "DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2", f.Event.ID,
+			f.AmbassadorID)
 	require.NoError(t, err)
 	_, err = f.H.store.OrderEvidenceFile(t.Context(), actor, evidence.ID, true)
 	require.Error(t, err)
@@ -113,8 +115,8 @@ func TestOrderEvidenceReadAndRecoveryRequireCurrentModule(t *testing.T) {
 	owner := paymentScope(t, f.H, f.OwnerID, false)
 	actor := paymentScope(t, f.H, f.AmbassadorID, false)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_events SET modules=ARRAY['registrations'],version=version" +
-"+1 WHERE id=$1", f.Event.ID)
+		Exec(t.Context(), "UPDATE shuttle_events SET modules=ARRAY['registrations'],version=version+1 WHERE id=$1",
+			f.Event.ID)
 	require.NoError(t, err)
 	_, err = f.H.store.OrderEvidenceOperationByID(t.Context(), owner, op, db.OrderEvidenceSubmissionReceipt)
 	require.Error(t, err)

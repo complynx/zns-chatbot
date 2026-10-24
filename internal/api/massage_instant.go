@@ -103,25 +103,23 @@ func massageInstantMethod() map[string]any {
 	}, []string{massageSchemaWindowID, massageSchemaSpecialistID, schemaServiceID})
 	method := paymentMethod(
 		"instant",
-		"Reserve only your OWN specialist time after exact human approval of the "+
-			"server's frozen proposal. Read massage_staff.schedule for own alias IDs "+
-			"and configured windows/services. Send current event/schedule versions an"+
-			"d window/own-alias/service IDs; never supply a client or start time. The"+
-			" server selects the current slot, advances once if over five minutes old"+
-			", and freezes it; it never searches later gaps. Current private own bind"+
-			"ing, enabled massage module, binding generation, versions, clock and all"+
-			" occupied capacity are rechecked on apply. No pass or ordinary per-party"+
-			" limit is required; public IDs and admin roles grant no specialist autho"+
-			"rity. Preparation holds no capacity. To continue an existing instant cho"+
-			"ice, pass existing_proposal_id plus its exact instant arguments; prepara"+
-			"tion preserves its original time, proposal and expiry and strips the sel"+
-			"ector from normalized arguments. Require fresh approval of the displayed"+
-			" self reservation and exact local start/end. Revocation/regrant cannot r"+
-			"evive old consent. Recover the same operation/status or massage.operatio"+
-			"n after uncertainty; consumed proposal replay never creates another book"+
-			"ing. Use massage.get/list for owner history and massage.cancel for expli"+
-			"cit owner release. This cannot book for another person, confirm payment "+
-			"or create a refund.",
+		"Reserve only your OWN specialist time after exact human approval of the server's frozen "+
+			"proposal. Read massage_staff.schedule for own alias IDs and configured windows/services. "+
+			"Send current event/schedule versions and window/own-alias/service IDs; "+
+			"never supply a client or start time. The server selects the current slot, advances once "+
+			"if over five minutes old, and freezes it; it never searches later gaps. "+
+			"Current private own binding, enabled massage module, binding generation, versions, clock "+
+			"and all occupied capacity are rechecked on apply. "+
+			"No pass or ordinary per-party limit is required; "+
+			"public IDs and admin roles grant no specialist authority. Preparation holds no capacity. "+
+			"To continue an existing instant choice, pass existing_proposal_id plus its exact instant "+
+			"arguments; preparation preserves its original time, proposal and expiry and strips the "+
+			"selector from normalized arguments. Require fresh approval of the displayed self "+
+			"reservation and exact local start/end. Revocation/regrant cannot revive old consent. "+
+			"Recover the same operation/status or massage.operation after uncertainty; "+
+			"consumed proposal replay never creates another booking. "+
+			"Use massage.get/list for owner history and massage.cancel for explicit owner release. "+
+			"This cannot book for another person, confirm payment or create a refund.",
 		properties,
 		[]string{
 			schemaEventID,

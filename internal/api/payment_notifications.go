@@ -15,16 +15,27 @@ import (
 const schemaNotifications = "notifications"
 
 type notificationListArguments struct {
-	State string    `json:"state,omitempty" enum:"pending,retryable,send_inflight,delivered,delivery_unknown,delivery_failed,delivery_blocked,dismissed"`
+	State string    `json:"state,omitempty"`
 	After uuid.UUID `json:"after,omitempty"`
-	Limit int32     `json:"limit,omitempty"                                                                                                              minimum:"1" maximum:"20"`
+	Limit int32     `json:"limit,omitempty" minimum:"1" maximum:"20"`
 }
+
+// Keep the state enum readable without changing its request validation.
+func (notificationListArguments) TransformSchema(_ huma.Registry, s *huma.Schema) *huma.Schema {
+	s.Properties["state"].Enum = []any{
+		agentPending, notificationStateRetryable, notificationStateInflight, notificationStateDelivered,
+		notificationStateUnknown, notificationStateFailed, notificationStateBlocked, notificationStateDismissed,
+	}
+	return s
+}
+
 type notificationListResult struct {
 	Notifications []db.NotificationSummary `json:"notifications"`
 	Next          *uuid.UUID               `json:"next,omitempty"`
 }
 
 func (s *Server) registerNotificationAPI(api huma.API) {
+	describeNotificationResolutionSchema(api.OpenAPI().Components.Schemas)
 	s.registerPairNotificationAPI(api)
 	s.registerOrderNotificationAPI(api)
 	registerAgentPost(
@@ -107,22 +118,22 @@ func notificationMethods() []map[string]any {
 		notificationResolutionMethod(),
 		administrativeRead(
 			"notifications",
-			"List this deployment's durable payment notification metadata, including " +
-"blocked and unknown delivery outcomes. UUID pages, max/default 20; follo" +
-"w next as after. A Telegram timeout is not proof of non-delivery. Do not" +
-" resend unknown messages blindly.",
+			"List this deployment's durable payment notification metadata, including blocked and "+
+				"unknown delivery outcomes. UUID pages, max/default 20; follow next as after. "+
+				"A Telegram timeout is not proof of non-delivery. "+
+				"Do not resend unknown messages blindly.",
 			map[string]any{
 				schemaState: map[string]any{
 					manifestType: schemaString,
 					schemaEnum: []string{
-						"pending",
-						"retryable",
-						"send_inflight",
-						"delivered",
-						"delivery_unknown",
-						"delivery_failed",
-						"delivery_blocked",
-						"dismissed",
+						agentPending,
+						notificationStateRetryable,
+						notificationStateInflight,
+						notificationStateDelivered,
+						notificationStateUnknown,
+						notificationStateFailed,
+						notificationStateBlocked,
+						notificationStateDismissed,
 					},
 				},
 				schemaAfter: uuidField,
@@ -137,11 +148,11 @@ func notificationMethods() []map[string]any {
 		),
 		administrativeRead(
 			"notification",
-			"Inspect a durable payment notification's frozen business event, recipien" +
-"t, current delivery state/version and Telegram receipt. Current global a" +
-"dministrator authority required. No credentials or downloaded file bytes" +
-". Unknown send remains uncertain; the ledger is independent of notificat" +
-"ion delivery.",
+			"Inspect a durable payment notification's frozen business event, recipient, current "+
+				"delivery state/version and Telegram receipt. "+
+				"Current global administrator authority required. "+
+				"No credentials or downloaded file bytes. Unknown send remains uncertain; "+
+				"the ledger is independent of notification delivery.",
 			map[string]any{"id": uuidField},
 			[]string{"id"},
 			[]string{"id", schemaState, schemaVersion, paymentSchemaReceipt},

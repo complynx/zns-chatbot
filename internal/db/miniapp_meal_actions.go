@@ -36,7 +36,15 @@ func (s *Store) RecentMiniAppMealDraftActions(
 		return nil, err
 	}
 	rows, err := s.q.WithTx(tx).
-		RecentMiniAppMealDraftActions(ctx, sqlc.RecentMiniAppMealDraftActionsParams{ID: taskID, UserID: scope.UserID, BotID: scope.BotID, OrganizationID: scope.Organization})
+		RecentMiniAppMealDraftActions(
+			ctx,
+			sqlc.RecentMiniAppMealDraftActionsParams{
+				ID:             taskID,
+				UserID:         scope.UserID,
+				BotID:          scope.BotID,
+				OrganizationID: scope.Organization,
+			},
+		)
 	if err != nil {
 		return nil, err
 	}

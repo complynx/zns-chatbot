@@ -155,7 +155,12 @@ func (s *Server) agentPrepareOrderReviewCommit(
 		Preconditions assignmentPreconditions    `json:"preconditions"`
 		Description   string                     `json:"description"`
 		ExpiresAt     time.Time                  `json:"expires_at"`
-	}{agentPrepared, in.Body.OperationID, prepared.Arguments, assignmentPreconditions{ProposalID: prepared.ID}, orderReviewPrepareDescription(prepared), prepared.ExpiresAt}
+	}{agentPrepared,
+		in.Body.OperationID,
+		prepared.Arguments,
+		assignmentPreconditions{ProposalID: prepared.ID},
+		orderReviewPrepareDescription(prepared),
+		prepared.ExpiresAt}
 	return boundedOrderEvidenceJSON(out)
 }
 

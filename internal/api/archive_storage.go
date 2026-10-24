@@ -109,7 +109,9 @@ func (s *Server) prepareArchive(
 	out.Body.Status, out.Body.OperationID, out.Body.Arguments = agentPrepared, in.Body.OperationID, prepared.Arguments
 	out.Body.Preconditions.ProposalID = prepared.ID
 	out.Body.ExpiresAt = prepared.ExpiresAt
-	out.Body.Description = "Store the exact legacy archive SHA-256 " + prepared.Arguments.SHA256 + "; no history, users or payments will be applied."
+	out.Body.Description = "Store the exact legacy archive SHA-256 " +
+		prepared.Arguments.SHA256 +
+		"; no history, users or payments will be applied."
 	return out, nil
 }
 

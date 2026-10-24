@@ -121,7 +121,12 @@ func TestCapacityRejectsInvalidSelectionsAndAggregateOverflow(t *testing.T) {
 	t.Parallel()
 	d := capacityCatalog()
 	selection := orders.Selection{OfferID: "lunch", ItemID: "soup", Quantity: 1}
-	for _, rows := range [][]orders.Selection{nil, {selection, selection}, {{OfferID: "missing", ItemID: "soup", Quantity: 1}}, {{OfferID: "lunch", ItemID: "soup", Quantity: 0}}} {
+	for _, rows := range [][]orders.Selection{
+		nil,
+		{selection, selection},
+		{{OfferID: "missing", ItemID: "soup", Quantity: 1}},
+		{{OfferID: "lunch", ItemID: "soup", Quantity: 0}},
+	} {
 		_, err := orders.CapacityRequirements(d, rows)
 		require.ErrorIs(t, err, orders.ErrSelection)
 	}

@@ -103,8 +103,20 @@ func TestMealModesUseFixedComboAndIndividualPrices(t *testing.T) {
 		"no lunch":         {&orders.LunchChoice{Mode: orders.LunchNone}, 0},
 		"empty individual": {&orders.LunchChoice{Mode: orders.LunchIndividual, IndividualIDs: []string{}}, 0},
 		"individual":       {&orders.LunchChoice{Mode: orders.LunchIndividual, IndividualIDs: []string{"main", "soup"}}, 375},
-		"without soup":     {&orders.LunchChoice{Mode: orders.LunchComboWithoutSoup, MainID: "main", SideID: "side", SaladID: "salad"}, 555},
-		"with soup":        {&orders.LunchChoice{Mode: orders.LunchComboWithSoup, SoupID: "soup", MainID: "main", SideID: "side", SaladID: "salad"}, 665},
+		"without soup": {
+			&orders.LunchChoice{Mode: orders.LunchComboWithoutSoup, MainID: "main", SideID: "side", SaladID: "salad"},
+			555,
+		},
+		"with soup": {
+			&orders.LunchChoice{
+				Mode:    orders.LunchComboWithSoup,
+				SoupID:  "soup",
+				MainID:  "main",
+				SideID:  "side",
+				SaladID: "salad",
+			},
+			665,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -127,17 +139,35 @@ func TestMealModesUseFixedComboAndIndividualPrices(t *testing.T) {
 func TestMealDraftRejectsMalformedComposition(t *testing.T) {
 	t.Parallel()
 	for name, choice := range map[string]orders.MealDayChoice{
-		"foreign day":                {DayID: "elsewhere"},
-		"foreign item":               {DayID: "day_one", Lunch: &orders.LunchChoice{Mode: orders.LunchIndividual, IndividualIDs: []string{"missing"}}},
-		"dinner item in lunch":       {DayID: "day_one", Lunch: &orders.LunchChoice{Mode: orders.LunchIndividual, IndividualIDs: []string{"tea"}}},
-		"lunch item in dinner":       {DayID: "day_one", DinnerIDs: []string{"soup"}},
-		"duplicate item":             {DayID: "day_one", DinnerIDs: []string{"tea", "tea"}},
-		"wrong category":             {DayID: "day_one", Lunch: &orders.LunchChoice{Mode: orders.LunchComboWithSoup, SoupID: "main"}},
-		"no-lunch with components":   {DayID: "day_one", Lunch: &orders.LunchChoice{Mode: orders.LunchNone, MainID: "main"}},
-		"individual with combo":      {DayID: "day_one", Lunch: &orders.LunchChoice{Mode: orders.LunchIndividual, SaladID: "salad"}},
-		"combo with individual":      {DayID: "day_one", Lunch: &orders.LunchChoice{Mode: orders.LunchComboWithSoup, IndividualIDs: []string{"main"}}},
-		"without soup includes soup": {DayID: "day_one", Lunch: &orders.LunchChoice{Mode: orders.LunchComboWithoutSoup, SoupID: "soup"}},
-		"unknown mode":               {DayID: "day_one", Lunch: &orders.LunchChoice{Mode: "unknown"}},
+		"foreign day": {DayID: "elsewhere"},
+		"foreign item": {
+			DayID: "day_one",
+			Lunch: &orders.LunchChoice{Mode: orders.LunchIndividual, IndividualIDs: []string{"missing"}},
+		},
+		"dinner item in lunch": {
+			DayID: "day_one",
+			Lunch: &orders.LunchChoice{Mode: orders.LunchIndividual, IndividualIDs: []string{"tea"}},
+		},
+		"lunch item in dinner": {DayID: "day_one", DinnerIDs: []string{"soup"}},
+		"duplicate item":       {DayID: "day_one", DinnerIDs: []string{"tea", "tea"}},
+		"wrong category": {
+			DayID: "day_one",
+			Lunch: &orders.LunchChoice{Mode: orders.LunchComboWithSoup, SoupID: "main"},
+		},
+		"no-lunch with components": {DayID: "day_one", Lunch: &orders.LunchChoice{Mode: orders.LunchNone, MainID: "main"}},
+		"individual with combo": {
+			DayID: "day_one",
+			Lunch: &orders.LunchChoice{Mode: orders.LunchIndividual, SaladID: "salad"},
+		},
+		"combo with individual": {
+			DayID: "day_one",
+			Lunch: &orders.LunchChoice{Mode: orders.LunchComboWithSoup, IndividualIDs: []string{"main"}},
+		},
+		"without soup includes soup": {
+			DayID: "day_one",
+			Lunch: &orders.LunchChoice{Mode: orders.LunchComboWithoutSoup, SoupID: "soup"},
+		},
+		"unknown mode": {DayID: "day_one", Lunch: &orders.LunchChoice{Mode: "unknown"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -182,16 +212,26 @@ func TestMealChoicesHaveStableSetOrderAndNoInputMutation(t *testing.T) {
 func TestMealCatalogValidatesExplicitServicesAndMoney(t *testing.T) {
 	t.Parallel()
 	for name, change := range map[string]func(*orders.MealCatalog){
-		"duplicate day":         func(d *orders.MealCatalog) { d.Days = append(d.Days, d.Days[0]) },
-		"no service":            func(d *orders.MealCatalog) { d.Days[0].Lunch = nil; d.Days[0].Dinner = nil },
-		"duplicate item":        func(d *orders.MealCatalog) { s := &d.Days[0].Lunch.Service; s.Items = append(s.Items, s.Items[0]) },
-		"invalid category":      func(d *orders.MealCatalog) { d.Days[0].Lunch.Service.Items[0].Category = "magic" },
-		"combo category absent": func(d *orders.MealCatalog) { d.Days[0].Lunch.Service.Items = d.Days[0].Lunch.Service.Items[1:] },
-		"negative combo":        func(d *orders.MealCatalog) { d.Days[0].Lunch.Combos.WithSoupMinor = -1 },
-		"unsafe price":          func(d *orders.MealCatalog) { d.Days[0].Dinner.Items[0].PriceMinor = orders.MaxPrice + 1 },
-		"no translation":        func(d *orders.MealCatalog) { d.Days[0].Name.RU = "" },
-		"no date":               func(d *orders.MealCatalog) { d.Days[0].Lunch.Service.StartsAt = time.Time{} },
-		"bad end":               func(d *orders.MealCatalog) { d.Days[0].Lunch.Service.EndsAt = d.Days[0].Lunch.Service.StartsAt },
+		"duplicate day": func(d *orders.MealCatalog) { d.Days = append(d.Days, d.Days[0]) },
+		"no service":    func(d *orders.MealCatalog) { d.Days[0].Lunch = nil; d.Days[0].Dinner = nil },
+		"duplicate item": func(d *orders.MealCatalog) {
+			s := &d.Days[0].Lunch.Service
+			s.Items = append(
+				s.Items,
+				s.Items[0],
+			)
+		},
+		"invalid category": func(d *orders.MealCatalog) { d.Days[0].Lunch.Service.Items[0].Category = "magic" },
+		"combo category absent": func(d *orders.MealCatalog) {
+			d.Days[0].Lunch.Service.Items = d.Days[0].Lunch.Service.Items[1:]
+		},
+		"negative combo": func(d *orders.MealCatalog) { d.Days[0].Lunch.Combos.WithSoupMinor = -1 },
+		"unsafe price":   func(d *orders.MealCatalog) { d.Days[0].Dinner.Items[0].PriceMinor = orders.MaxPrice + 1 },
+		"no translation": func(d *orders.MealCatalog) { d.Days[0].Name.RU = "" },
+		"no date":        func(d *orders.MealCatalog) { d.Days[0].Lunch.Service.StartsAt = time.Time{} },
+		"bad end": func(d *orders.MealCatalog) {
+			d.Days[0].Lunch.Service.EndsAt = d.Days[0].Lunch.Service.StartsAt
+		},
 		"bad sales": func(d *orders.MealCatalog) {
 			d.Days[0].Lunch.Service.SalesClosesAt = d.Days[0].Lunch.Service.SalesOpensAt
 		},

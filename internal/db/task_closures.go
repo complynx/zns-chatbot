@@ -132,10 +132,10 @@ func (s *Store) PrepareTaskClosure(
 		Arguments: args,
 		ExpiresAt: now.Add(taskClosurePreparationTTL),
 		Description: fmt.Sprintf(
-			"Close local task %s for account %s, observed state %s, version %d. Reaso"+
-				"n: %s. Stop local processing and block pending/retryable delivery; prese"+
-				"rve uncertain evidence. This does not establish the external outcome, re"+
-				"try delivery, cancel a remote Loom run or change money.",
+			"Close local task %s for account %s, observed state %s, version %d. Reason: %s. Stop "+
+				"local processing and block pending/retryable delivery; preserve uncertain evidence. "+
+				"This does not establish the external outcome, retry delivery, cancel a remote Loom "+
+				"run or change money.",
 			task.ID,
 			task.UserID,
 			task.State,

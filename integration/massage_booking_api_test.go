@@ -213,8 +213,12 @@ func TestMassageBookingAgentHTTPBoundsHistoryWithoutSkippingRecords(t *testing.T
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(ctx, "UPDATE shuttle_events SET name=$2,version=version+1 WHERE id=$1 RETURNIN" +
-"G version", f.Event.ID, strings.Repeat("😀", 256)).
+			QueryRow(
+				ctx,
+				"UPDATE shuttle_events SET name=$2,version=version+1 WHERE id=$1 RETURNING version",
+				f.Event.ID,
+				strings.Repeat("😀", 256),
+			).
 			Scan(&f.Event.Version),
 	)
 	schedule.ExpectedEventVersion = f.Event.Version

@@ -101,8 +101,8 @@ func TestMiniAppOrderSessionIsRequiredBeforeReceiptReplay(t *testing.T) {
 				require.NoError(t, f.H.store.LogoutMiniAppSession(ctx, scope.BotID, session.Bearer, session.Generation))
 			case "expiry":
 				_, err = f.H.store.Pool().
-					Exec(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interva" +
-"l '1 second' WHERE bearer_hash=$1", session.Bearer[:])
+					Exec(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 "+
+						"second' WHERE bearer_hash=$1", session.Bearer[:])
 				require.NoError(t, err)
 			case "generation":
 				session.Generation = sha256.Sum256([]byte("other-native-order-key"))
@@ -155,9 +155,8 @@ func TestMiniAppOrderRechecksSessionAfterEventLockWait(t *testing.T) {
 	require.Eventually(t, func() bool {
 		var waiting bool
 		e := f.H.store.Pool().
-			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
-"ase() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid" +
-")))", blocking.Conn().PgConn().PID()).
+			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND "+
+				"pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid)))", blocking.Conn().PgConn().PID()).
 			Scan(&waiting)
 		return e == nil && waiting
 	}, 3*time.Second, 5*time.Millisecond)
@@ -189,11 +188,11 @@ func TestMiniAppOrderReceiptFailureRollsBackEffectAndSourceHistory(t *testing.T)
 	prepared, err := f.H.store.PrepareMiniAppOrderSubmission(ctx, deployment, session, operation, args)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(ctx, "CREATE FUNCTION fail_native_order_receipt() RETURNS trigger LANGUAGE plp" +
-"gsql AS $$ BEGIN RAISE EXCEPTION 'synthetic native receipt failure'; END" +
-" $$;\n CREATE TRIGGER fail_native_order_receipt BEFORE INSERT ON shuttle_" +
-"order_operations FOR EACH ROW WHEN (NEW.source='miniapp' AND NEW.kind='s" +
-"ubmit') EXECUTE FUNCTION fail_native_order_receipt()")
+		Exec(ctx, "CREATE FUNCTION fail_native_order_receipt() RETURNS trigger LANGUAGE plpgsql AS "+
+			"$$ BEGIN RAISE EXCEPTION 'synthetic native receipt failure'; END $$;\n"+
+			" CREATE TRIGGER fail_native_order_receipt BEFORE INSERT ON "+
+			"shuttle_order_operations FOR EACH ROW WHEN (NEW.source='miniapp' AND "+
+			"NEW.kind='submit') EXECUTE FUNCTION fail_native_order_receipt()")
 	require.NoError(t, err)
 	_, err = f.H.store.SubmitMiniAppOrder(ctx, deployment, session, operation, args, prepared.ID)
 	require.ErrorContains(t, err, "synthetic native receipt failure")
@@ -211,8 +210,8 @@ func TestMiniAppOrderReceiptFailureRollsBackEffectAndSourceHistory(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), saved.Version)
 	_, err = f.H.store.Pool().
-		Exec(ctx, "DROP TRIGGER fail_native_order_receipt ON shuttle_order_operations; DROP" +
-" FUNCTION fail_native_order_receipt()")
+		Exec(ctx, "DROP TRIGGER fail_native_order_receipt ON shuttle_order_operations; DROP FUNCTION "+
+			"fail_native_order_receipt()")
 	require.NoError(t, err)
 	_, err = f.H.store.SubmitMiniAppOrder(ctx, deployment, session, operation, args, prepared.ID)
 	require.NoError(t, err)

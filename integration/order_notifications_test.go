@@ -78,7 +78,8 @@ func TestOrderNoticeStorePersistsAttemptAndNeverAutomaticallyRetriesUnknown(t *t
 
 func TestOrderNoticeStoreRechecksCurrentAccessBeforeReservation(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"authority", "module", "owner_revoked", "recipient_revoked", "pass_unassigned", "subject", "deployment"} {
+	for _, scenario := range []string{"authority", "module", "owner_revoked", "recipient_revoked",
+		"pass_unassigned", "subject", "deployment"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			f, owner, notice := pendingOrderNotice(t)
@@ -87,8 +88,8 @@ func TestOrderNoticeStoreRechecksCurrentAccessBeforeReservation(t *testing.T) {
 			actor := paymentScope(t, f.H, owner.UserID, false)
 			if scenario == "authority" || scenario == "recipient_revoked" {
 				require.NoError(t, f.H.store.Pool().QueryRow(t.Context(),
-					"SELECT id FROM shuttle_order_evidence_notices WHERE evidence_id=$1 AND r" +
-"ecipient_id=$2", notice.EvidenceID, f.AmbassadorID).
+					"SELECT id FROM shuttle_order_evidence_notices WHERE evidence_id=$1 AND recipient_id=$2",
+					notice.EvidenceID, f.AmbassadorID).
 					Scan(&id))
 				actor = paymentScope(t, f.H, f.AmbassadorID, false)
 			}
@@ -98,17 +99,18 @@ func TestOrderNoticeStoreRechecksCurrentAccessBeforeReservation(t *testing.T) {
 			switch scenario {
 			case "authority":
 				_, err = f.H.store.Pool().
-					Exec(t.Context(), "DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2", notice.Evidence.EventID, actor.UserID)
+					Exec(t.Context(), "DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2",
+						notice.Evidence.EventID, actor.UserID)
 			case "module":
 				_, err = f.H.store.Pool().
-					Exec(t.Context(), "UPDATE shuttle_events SET modules=array_remove(modules,'orders') WHERE i" +
-"d=$1", notice.Evidence.EventID)
+					Exec(t.Context(), "UPDATE shuttle_events SET modules=array_remove(modules,'orders') WHERE id=$1",
+						notice.Evidence.EventID)
 			case "owner_revoked", "recipient_revoked":
 				err = f.H.store.RevokeUser(t.Context(), actor.UserID, true)
 			case "pass_unassigned":
 				_, err = f.H.store.Pool().
-					Exec(t.Context(), "UPDATE shuttle_registrations SET state='waitlisted' WHERE event_id=$1 AN" +
-"D user_id=$2", notice.Evidence.EventID, actor.UserID)
+					Exec(t.Context(), "UPDATE shuttle_registrations SET state='waitlisted' WHERE event_id=$1 AND user_id=$2",
+						notice.Evidence.EventID, actor.UserID)
 			case "subject":
 				actor.Subject = "another-subject"
 			case "deployment":
@@ -136,8 +138,8 @@ func TestOrderNoticeStoreKeepsSoldTermsAndSuppressesSupersededAdmission(t *testi
 	f, owner, notice := pendingOrderNotice(t)
 	scope := db.EventScope{BotID: owner.BotID, Organization: owner.Organization}
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_events SET name='Changed later',timezone='Asia/Tokyo' WHE" +
-"RE id=$1", notice.Evidence.EventID)
+		Exec(t.Context(), "UPDATE shuttle_events SET name='Changed later',timezone='Asia/Tokyo' WHERE id=$1",
+			notice.Evidence.EventID)
 	require.NoError(t, err)
 	_, _, decision := reviewOrderEvidence(t, f, notice.Evidence, db.OrderEvidenceConfirmed)
 	_, _, err = f.H.store.OrderNotificationRecipient(t.Context(), scope, notice.ID)
@@ -150,8 +152,8 @@ func TestOrderNoticeStoreKeepsSoldTermsAndSuppressesSupersededAdmission(t *testi
 	require.Equal(t, db.OrderEvidencePending, blocked.Evidence.State)
 	var id uuid.UUID
 	require.NoError(t, f.H.store.Pool().QueryRow(t.Context(),
-		"SELECT id FROM shuttle_order_evidence_notices WHERE evidence_id=$1 AND r" +
-"ecipient_id=$2 AND kind='confirmed'", notice.EvidenceID, owner.UserID).
+		"SELECT id FROM shuttle_order_evidence_notices WHERE evidence_id=$1 AND recipient_id=$2 AND "+
+			"kind='confirmed'", notice.EvidenceID, owner.UserID).
 		Scan(&id))
 	confirmed, err := f.H.store.OrderNotification(t.Context(), scope, id)
 	require.NoError(t, err)

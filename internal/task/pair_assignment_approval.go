@@ -89,9 +89,11 @@ func fullPairAssignmentApproval(
 	if len(view.Preparation.Quotes) != 0 && len(view.Preparation.Quotes) != 2 {
 		return "", errors.New("invalid pair approval quote count")
 	}
-	title, leader, follower, terms := "Assign both passes?", "Leader (current display identity)", "Follower (current display identity)", "Original terms"
+	title, leader, follower, terms := "Assign both passes?", "Leader (current display identity)",
+		"Follower (current display identity)", "Original terms"
 	if language == "ru" {
-		title, leader, follower, terms = "Назначить оба пасса?", "Лидер (текущее отображаемое имя)", "Фолловер (текущее отображаемое имя)", "Исходные условия"
+		title, leader, follower, terms = "Назначить оба пасса?", "Лидер (текущее отображаемое имя)",
+			"Фолловер (текущее отображаемое имя)", "Исходные условия"
 	}
 	var body strings.Builder
 	writeParticipant := func(label string, person db.PairAssignmentParticipant) {
@@ -126,8 +128,8 @@ func fullPairAssignmentApproval(
 		if language == "ru" {
 			title = "Это назначение уже выполнено. Продолжение сверит исходный результат и не назначит пассы повторно."
 		} else {
-			title = "This assignment was already completed. Continue to reconcile the origina" +
-"l result; this does not assign passes again."
+			title = "This assignment was already completed. Continue to reconcile the original result; " +
+				"this does not assign passes again."
 		}
 	}
 

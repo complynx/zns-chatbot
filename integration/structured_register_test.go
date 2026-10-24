@@ -183,8 +183,8 @@ func TestStructuredRegisterRecoversCommittedReceiptAfterChoiceExpiry(t *testing.
 	require.NoError(t, err)
 	// Model a successful commit before its task checkpoint, then the deadline passing.
 	_, err = h.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_tasks SET snapshot=jsonb_set(snapshot,'{registration_entr" +
-"y,expires_at}',to_jsonb($2::text)) WHERE id=$1", prompt, time.Now().Add(-time.Second).UTC().Format(time.RFC3339Nano))
+		Exec(t.Context(), "UPDATE shuttle_tasks SET snapshot=jsonb_set(snapshot,'{registration_entry,expires_at}',"+
+			"to_jsonb($2::text)) WHERE id=$1", prompt, time.Now().Add(-time.Second).UTC().Format(time.RFC3339Nano))
 	require.NoError(t, err)
 	h.stop(t)
 	h.start(t)
@@ -261,9 +261,16 @@ func TestStructuredRegisterExpiryIsCheckedAfterOwnerLock(t *testing.T) {
 	defer func() { _ = lock.Rollback(t.Context()) }()
 	_, err = lock.Exec(t.Context(), "SELECT id FROM shuttle_users WHERE id=$1 FOR UPDATE", userID)
 	require.NoError(t, err)
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
-	expiry := time.Now().UTC().Add(100 * time.Millisecond)
+	// Observe through a separate connection so worker pool contention cannot hide the owner lock.
+	observer, err := pgx.ConnectConfig(ctx, h.store.Pool().Config().ConnConfig.Copy())
+	require.NoError(t, err)
+	defer func() { _ = observer.Close(t.Context()) }()
+	var observed time.Time
+	require.NoError(t, observer.QueryRow(ctx, "SELECT clock_timestamp()").Scan(&observed))
+	expiry := observed.Add(5 * time.Second)
+	ownerPID := int64(lock.Conn().PgConn().PID())
 	done := make(chan error, 1)
 	go func() {
 		_, writeErr := h.store.RegisterPresented(
@@ -276,19 +283,21 @@ func TestStructuredRegisterExpiryIsCheckedAfterOwnerLock(t *testing.T) {
 		)
 		done <- writeErr
 	}()
+	var blockedBeforeExpiry bool
 	require.Eventually(t, func() bool {
 		var waiting bool
-		queryErr := h.store.Pool().
-			QueryRow(t.Context(), "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
-"ase() AND wait_event_type='Lock' AND query LIKE '%shuttle_users%')").
-			Scan(&waiting)
+		queryErr := observer.QueryRow(ctx,
+			"SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE pid<>pg_backend_pid() AND "+
+				"$1::integer=ANY(pg_blocking_pids(pid))),clock_timestamp()<$2", ownerPID, expiry).
+			Scan(&waiting, &blockedBeforeExpiry)
 		return queryErr == nil && waiting
-	}, 3*time.Second, 5*time.Millisecond)
+	}, 10*time.Second, 5*time.Millisecond)
+	require.True(t, blockedBeforeExpiry, "Registration must wait for the owner lock before its choice expires")
 	require.Eventually(t, func() bool {
 		var expired bool
-		queryErr := h.store.Pool().QueryRow(t.Context(), "SELECT clock_timestamp()>=$1", expiry).Scan(&expired)
+		queryErr := observer.QueryRow(ctx, "SELECT clock_timestamp()>=$1", expiry).Scan(&expired)
 		return queryErr == nil && expired
-	}, time.Second, 5*time.Millisecond)
+	}, 10*time.Second, 5*time.Millisecond)
 	require.NoError(t, lock.Commit(t.Context()))
 	select {
 	case writeErr := <-done:

@@ -35,7 +35,8 @@ func TestMassageScheduleRejectsExpiredStaleAndFailedAuthorizationWithoutPublishi
 	_, err = f.H.store.ChangeMassageSchedule(ctx, admin, op, uuid.New(), a, check)
 	require.ErrorIs(t, err, db.ErrConflict)
 	_, err = f.H.store.Pool().Exec(ctx,
-		"UPDATE shuttle_massage_schedule_preparations SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1", p.ID)
+		"UPDATE shuttle_massage_schedule_preparations SET "+
+			"expires_at=clock_timestamp()-interval '1 second' WHERE id=$1", p.ID)
 	require.NoError(t, err)
 	_, err = f.H.store.ChangeMassageSchedule(ctx, admin, op, p.ID, a, check)
 	require.ErrorIs(t, err, db.ErrConflict)
@@ -97,7 +98,8 @@ func TestMassageSchedulePersistsExactApprovalAndOriginalReceipt(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(2), second.Version)
 	_, err = f.H.store.Pool().Exec(ctx,
-		"UPDATE shuttle_massage_schedule_preparations SET expires_at=clock_timestamp()-interval '1 hour' WHERE id=$1", p.ID)
+		"UPDATE shuttle_massage_schedule_preparations SET "+
+			"expires_at=clock_timestamp()-interval '1 hour' WHERE id=$1", p.ID)
 	require.NoError(t, err)
 	replay, err := f.H.store.ChangeMassageSchedule(ctx, admin, op, p.ID, a, check)
 	require.NoError(t, err)

@@ -59,8 +59,8 @@ func TestArchiveStorageCancelledCommitRollsBackWithOnePoolConnection(t *testing.
 	require.NoError(
 		t,
 		single.Pool().
-			QueryRow(retryCtx, "SELECT (SELECT count(*) FROM shuttle_legacy_archives),(SELECT count(*) F" +
-"ROM shuttle_legacy_archive_chunks)").
+			QueryRow(retryCtx, "SELECT (SELECT count(*) FROM shuttle_legacy_archives),"+
+				"(SELECT count(*) FROM shuttle_legacy_archive_chunks)").
 			Scan(&archives, &chunks),
 	)
 	require.Zero(t, archives)
@@ -86,8 +86,8 @@ func TestArchiveFileExpiredProposalReturnsTerminalRejectionWithoutTelegramRead(t
 	}
 	r.ProposalID = prepareStoredArchive(t, h, admin, r.OperationID, r.Arguments)
 	_, err := h.store.Pool().
-		Exec(context.Background(), "UPDATE shuttle_legacy_archive_preparations SET expires_at=clock_timestam" +
-"p()-interval '1 hour' WHERE id=$1", r.ProposalID)
+		Exec(context.Background(), "UPDATE shuttle_legacy_archive_preparations"+
+			" SET expires_at=clock_timestamp()-interval '1 hour' WHERE id=$1", r.ProposalID)
 	require.NoError(t, err)
 	code, data := storeArchiveFile(t, h, admin, r)
 	require.Equal(t, http.StatusOK, code, string(data))

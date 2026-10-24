@@ -137,11 +137,17 @@ func (s *Server) knowledgeList(
 		return nil, err
 	}
 	args := in.Body.Arguments
-	normalized, err := (knowledge.SearchRequest{Collection: args.Collection, EventID: args.EventID, Language: args.Language, Topic: args.Topic, Limit: args.Limit, Queries: []string{"browse"}}).Normalize()
+	normalized, err := (knowledge.SearchRequest{Collection: args.Collection,
+		EventID:  args.EventID,
+		Language: args.Language,
+		Topic:    args.Topic,
+		Limit:    args.Limit,
+		Queries:  []string{"browse"}}).Normalize()
 	if err != nil {
 		return nil, knowledgeError(err)
 	}
-	args.Collection, args.Language, args.Topic, args.Limit = normalized.Collection, normalized.Language, normalized.Topic, normalized.Limit
+	args.Collection, args.Language, args.Topic, args.Limit =
+		normalized.Collection, normalized.Language, normalized.Topic, normalized.Limit
 	result, err := s.store.ListKnowledge(ctx, scope, args)
 	if err != nil {
 		return nil, knowledgeError(err)

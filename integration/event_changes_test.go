@@ -256,9 +256,9 @@ func TestEventChangeExpiryIncludesBlockedUpdateAndCreation(t *testing.T) {
 			} else {
 				require.NoError(
 					t,
-					holder.QueryRow(ctx, "INSERT INTO shuttle_events(id,bot_id,organization_id,name,timezone,start" +
-"s_at,ends_at,modules)\nVALUES($1,123,'org','temporary','Europe/Minsk',$2," +
-"$3,ARRAY['registrations']) RETURNING pg_backend_pid()", args.ID, args.Document.StartsAt, args.Document.EndsAt).
+					holder.QueryRow(ctx, "INSERT INTO shuttle_events(id,bot_id,organization_id,name,timezone,starts_at,"+
+						"ends_at,modules)\nVALUES($1,123,'org','temporary','Europe/Minsk',$2,$3,"+
+						"ARRAY['registrations']) RETURNING pg_backend_pid()", args.ID, args.Document.StartsAt, args.Document.EndsAt).
 						Scan(&pid),
 				)
 			}

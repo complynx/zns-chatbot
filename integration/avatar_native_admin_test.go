@@ -254,7 +254,12 @@ func TestAvatarNativeAdminHTTPRequiresAuthorityAndExplicitConfirmation(t *testin
 	f.p.adminRole = false
 	f.p.mu.Unlock()
 	f.h.iam.Invalidate(scope.Subject)
-	for _, path := range []string{"/pending", "/deliveries/" + n.ID.String(), "/proposals/" + prep.ID.String(), "/operations/" + op.String()} {
+	for _, path := range []string{
+		"/pending",
+		"/deliveries/" + n.ID.String(),
+		"/proposals/" + prep.ID.String(),
+		"/operations/" + op.String(),
+	} {
 		code, raw = avatarAdminAppCall(t, f, session, http.MethodGet, path, nil)
 		require.Equal(t, http.StatusForbidden, code, string(raw))
 	}
@@ -286,8 +291,8 @@ func TestAvatarNativeAdminExpiryWhileWaitingRollsBackConfirmation(t *testing.T) 
 	_, err = blocker.Exec(t.Context(), "SELECT id FROM shuttle_avatar_deliveries WHERE id=$1 FOR UPDATE", n.ID)
 	require.NoError(t, err)
 	_, err = f.h.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()+interva" +
-"l '3 seconds' WHERE user_id=$1", scope.UserID)
+		Exec(t.Context(), "UPDATE shuttle_miniapp_sessions"+
+			" SET expires_at=clock_timestamp()+interval '3 seconds' WHERE user_id=$1", scope.UserID)
 	require.NoError(t, err)
 	done := make(chan error, 1)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
@@ -306,8 +311,9 @@ func TestAvatarNativeAdminExpiryWhileWaitingRollsBackConfirmation(t *testing.T) 
 	require.Eventually(t, func() bool {
 		var expired bool
 		e := f.h.store.Pool().
-			QueryRow(t.Context(), "SELECT expires_at<=clock_timestamp() FROM shuttle_miniapp_sessions WHERE" +
-" user_id=$1", scope.UserID).
+			QueryRow(t.Context(),
+				"SELECT expires_at<=clock_timestamp() FROM shuttle_miniapp_sessions WHERE user_id=$1",
+				scope.UserID).
 			Scan(&expired)
 		return e == nil && expired
 	}, 5*time.Second, 20*time.Millisecond)
@@ -451,8 +457,8 @@ func TestAvatarNativeAdminPrepareRechecksDeadlineAfterWaiting(t *testing.T) {
 	require.NoError(t, err)
 	limited, pid := avatarAdminSingleConnection(t, f)
 	_, err = f.h.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_avatar_delivery_resolutions SET expires_at=clock_timestam" +
-"p()+interval '3 seconds' WHERE proposal_id=$1", prep.ID)
+		Exec(t.Context(), "UPDATE shuttle_avatar_delivery_resolutions"+
+			" SET expires_at=clock_timestamp()+interval '3 seconds' WHERE proposal_id=$1", prep.ID)
 	require.NoError(t, err)
 	blocker, err := f.h.store.Pool().Begin(t.Context())
 	require.NoError(t, err)
@@ -480,8 +486,8 @@ func TestAvatarNativeAdminPrepareRechecksDeadlineAfterWaiting(t *testing.T) {
 	require.Eventually(t, func() bool {
 		var expired bool
 		e := f.h.store.Pool().
-			QueryRow(t.Context(), "SELECT expires_at<=clock_timestamp() FROM shuttle_avatar_delivery_resolu" +
-"tions WHERE proposal_id=$1", prep.ID).
+			QueryRow(t.Context(), "SELECT expires_at<=clock_timestamp() FROM shuttle_avatar_delivery_resolutions"+
+				" WHERE proposal_id=$1", prep.ID).
 			Scan(&expired)
 		return e == nil && expired
 	}, 5*time.Second, 20*time.Millisecond)
@@ -491,8 +497,9 @@ func TestAvatarNativeAdminPrepareRechecksDeadlineAfterWaiting(t *testing.T) {
 	require.NoError(
 		t,
 		f.h.store.Pool().
-			QueryRow(t.Context(), "SELECT count(*) FROM shuttle_miniapp_avatar_resolution_actions WHERE pro" +
-"posal_id=$1", prep.ID).
+			QueryRow(t.Context(),
+				"SELECT count(*) FROM shuttle_miniapp_avatar_resolution_actions WHERE proposal_id=$1",
+				prep.ID).
 			Scan(&count),
 	)
 	require.Zero(t, count)

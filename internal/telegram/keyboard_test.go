@@ -31,8 +31,14 @@ func TestSendSavedReplyKeyboardsAndRemoval(t *testing.T) {
 		&telegram.ReplyKeyboardMarkup{Keyboard: [][]telegram.KeyboardButton{{{Text: "/menu"}}}},
 		&telegram.ReplyKeyboardRemove{RemoveKeyboard: true},
 		&telegram.ForceReply{ForceReply: true},
-		&telegram.InlineKeyboardMarkup{InlineKeyboard: [][]telegram.InlineKeyboardButton{{{Text: "Form", WebApp: &telegram.WebAppInfo{URL: "https://app.example/app/"}}}}},
-		&telegram.InlineKeyboardMarkup{InlineKeyboard: [][]telegram.InlineKeyboardButton{{{Text: "Legacy", CallbackData: "fixture"}}}},
+		&telegram.InlineKeyboardMarkup{
+			InlineKeyboard: [][]telegram.InlineKeyboardButton{
+				{{Text: "Form", WebApp: &telegram.WebAppInfo{URL: "https://app.example/app/"}}},
+			},
+		},
+		&telegram.InlineKeyboardMarkup{
+			InlineKeyboard: [][]telegram.InlineKeyboardButton{{{Text: "Legacy", CallbackData: "fixture"}}},
+		},
 	} {
 		raw, marshalErr := json.Marshal(telegram.SendMessageRequest{ChatID: 7, Text: "Saved", ReplyMarkup: markup})
 		require.NoError(t, marshalErr)

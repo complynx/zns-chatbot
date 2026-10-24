@@ -15,7 +15,10 @@ func TestAvatarBrowserPolicyDefaultsAndSmallerBudgets(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(10_000_000_000), policy.LimitBytes)
 	require.Equal(t, 90*24*time.Hour, policy.Retention)
-	policy, err = (db.Settings{AvatarBrowserStorageLimitBytes: 1000, AvatarBrowserRetentionSeconds: 60}).AvatarBrowserPolicy()
+	policy, err = (db.Settings{
+		AvatarBrowserStorageLimitBytes: 1000,
+		AvatarBrowserRetentionSeconds:  60,
+	}).AvatarBrowserPolicy()
 	require.NoError(t, err)
 	require.Equal(t, int64(1000), policy.LimitBytes)
 	require.Equal(t, time.Minute, policy.Retention)

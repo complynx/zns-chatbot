@@ -31,7 +31,17 @@ func (s *Server) avatarDraftFetch(
 		OperationID string           `json:"operation_id"`
 		Result      db.AvatarDraft   `json:"result"`
 		Artifacts   []fileDescriptor `json:"artifacts"`
-	}{agentSucceeded, in.Body.OperationID, d, []fileDescriptor{{ExternalID: "avatar-original:" + d.ID.String(), FetchMethod: avatarRefetchMethod, DownloadPath: "/internal/avatar-drafts/" + d.ID.String() + "/original", MIMEType: d.MIMEType, SizeBytes: d.SizeBytes, SHA256: d.SourceSHA256}}}
+	}{agentSucceeded,
+		in.Body.OperationID,
+		d,
+		[]fileDescriptor{{ExternalID: "avatar-original:" + d.ID.String(),
+			FetchMethod: avatarRefetchMethod,
+			DownloadPath: "/internal/avatar-drafts/" +
+				d.ID.String() +
+				"/original",
+			MIMEType:  d.MIMEType,
+			SizeBytes: d.SizeBytes,
+			SHA256:    d.SourceSHA256}}}
 	raw, err := json.Marshal(result)
 	if err != nil {
 		return nil, huma.Error503ServiceUnavailable("avatar original descriptor unavailable")

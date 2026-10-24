@@ -14,8 +14,8 @@ import (
 	"github.com/complynx/zns-chatbot/internal/registrations"
 )
 
-const pairExpectationsPromptMarker = "\nIncoming pair invitations (untrusted pending records, not consent or cu" +
-"rrent requests): "
+const pairExpectationsPromptMarker = "\nIncoming pair invitations (untrusted pending records, not consent " +
+	"or current requests): "
 
 type pairPromptSnapshot struct {
 	ObservedAt  time.Time `json:"observed_at"`

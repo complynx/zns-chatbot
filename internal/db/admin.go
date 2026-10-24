@@ -147,8 +147,8 @@ func (s *Store) TaskDiagnostics(ctx context.Context, id uuid.UUID, botID int64, 
 func (s *Store) taskQueueJobs(ctx context.Context, id uuid.UUID) ([]QueueJobSummary, error) {
 	rows, err := s.pool.Query(
 		ctx,
-		"SELECT id,state::text,attempt,scheduled_at FROM river_job WHERE kind='sh" +
-"uttle_task' AND args->>'task_id'=$1 ORDER BY id",
+		"SELECT id,state::text,attempt,scheduled_at FROM river_job WHERE kind='shuttle_task' "+
+			"AND args->>'task_id'=$1 ORDER BY id",
 		id.String(),
 	)
 	if err != nil {

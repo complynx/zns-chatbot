@@ -20,12 +20,12 @@ type orderEvidenceListArguments struct {
 	EventID uuid.UUID `json:"event_id"`
 	OrderID uuid.UUID `json:"order_id,omitempty"`
 	After   uuid.UUID `json:"after,omitempty"`
-	Limit   int32     `json:"limit,omitempty"    minimum:"1" maximum:"20"`
+	Limit   int32     `json:"limit,omitempty" minimum:"1" maximum:"20"`
 }
 
 type orderEvidenceOperationArguments struct {
 	OperationID uuid.UUID                     `json:"operation_id"`
-	Kind        db.OrderEvidenceOperationKind `json:"kind"         enum:"submit,review"`
+	Kind        db.OrderEvidenceOperationKind `json:"kind" enum:"submit,review"`
 }
 
 func orderEvidenceRoute(method string) huma.Operation {

@@ -61,7 +61,8 @@ func (s *Server) registerKnowledge(api huma.API) {
 			"agent-knowledge-"+name,
 			knowledgePath+name,
 			internalBodyLimit,
-			func(ctx context.Context, in *agentReadRequest[knowledgeSuggestionListArguments]) (*agentReadResponse[knowledgeSuggestionListView], error) {
+			func(ctx context.Context,
+				in *agentReadRequest[knowledgeSuggestionListArguments]) (*agentReadResponse[knowledgeSuggestionListView], error) {
 				return s.knowledgeSuggestions(ctx, in, pending)
 			},
 		)

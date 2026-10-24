@@ -21,21 +21,50 @@ func TestFileSourceFailuresDistinguishRefusalAndRecoverOnFreshRead(t *testing.T)
 		status, download, want int
 		detail                 string
 	}{
-		{"invalid-id", "{\"ok\":false,\"error_code\":400,\"description\":\"Bad Request: invalid file_id" +
-			"\"}", 400, 0, 404, "file_unavailable"},
-		{"invalid-id-on-200", "{\"ok\":false,\"error_code\":400,\"description\":\"Bad Request: invalid file_id" +
-			"\"}", 200, 0, 404, "file_unavailable"},
-		{"near-match", "{\"ok\":false,\"error_code\":400,\"description\":\"Bad Request: invalid file_id" +
-			" PRIVATE\"}", 400, 0, 503, "Telegram file unavailable"},
-		{"source-denied", `{"ok":false,"error_code":403,"description":"Forbidden: PRIVATE"}`, 403, 0, 424, "file_source_access_denied"},
-		{"source-denied-on-200", `{"ok":false,"error_code":403,"description":"Forbidden: PRIVATE"}`, 200, 0, 424, "file_source_access_denied"},
-		{"service-credentials", `{"ok":false,"error_code":401,"description":"Unauthorized PRIVATE"}`, 401, 0, 503, "Telegram file unavailable"},
-		{"ambiguous", "{\"ok\":false,\"error_code\":400,\"description\":\"Bad Request: wrong file_id o" +
-			"r the file is temporarily unavailable\"}", 400, 0, 503, "Telegram file unavailable"},
-		{"rate-limited", `{"ok":false,"error_code":429,"parameters":{"retry_after":3}}`, 429, 0, 503, "Telegram file unavailable"},
+		{"invalid-id",
+			"{\"ok\":false,\"error_code\":400,\"description\":\"Bad Request: invalid file_id\"}",
+			400,
+			0,
+			404,
+			"file_unavailable"},
+
+		{"invalid-id-on-200", "{\"ok\":false,\"error_code\":400,\"description\":\"Bad Request: invalid " +
+			"file_id\"}", 200, 0, 404, "file_unavailable"},
+		{"near-match", "{\"ok\":false,\"error_code\":400,\"description\":\"Bad Request: invalid file_id " +
+			"PRIVATE\"}", 400, 0, 503, "Telegram file unavailable"},
+		{"source-denied",
+			`{"ok":false,"error_code":403,"description":"Forbidden: PRIVATE"}`,
+			403,
+			0,
+			424,
+			"file_source_access_denied"},
+
+		{"source-denied-on-200",
+			`{"ok":false,"error_code":403,"description":"Forbidden: PRIVATE"}`,
+			200,
+			0,
+			424,
+			"file_source_access_denied"},
+
+		{"service-credentials",
+			`{"ok":false,"error_code":401,"description":"Unauthorized PRIVATE"}`,
+			401,
+			0,
+			503,
+			"Telegram file unavailable"},
+
+		{"ambiguous", "{\"ok\":false,\"error_code\":400,\"description\":\"Bad Request: wrong file_id or the " +
+			"file is temporarily unavailable\"}", 400, 0, 503, "Telegram file unavailable"},
+		{"rate-limited",
+			`{"ok":false,"error_code":429,"parameters":{"retry_after":3}}`,
+			429,
+			0,
+			503,
+			"Telegram file unavailable"},
+
 		{"malformed-denial", `PRIVATE`, 403, 0, 503, "Telegram file unavailable"},
-		{"incoherent-invalid-id", "{\"ok\":false,\"error_code\":400,\"description\":\"Bad Request: invalid file_id" +
-			"\"}", 500, 0, 503, "Telegram file unavailable"},
+		{"incoherent-invalid-id", "{\"ok\":false,\"error_code\":400,\"description\":\"Bad Request: invalid " +
+			"file_id\"}", 500, 0, 503, "Telegram file unavailable"},
 		{"download-missing", "", 0, 404, 503, "Telegram file unavailable"},
 		{"download-denied", "", 0, 403, 424, "file_source_access_denied"},
 	} {

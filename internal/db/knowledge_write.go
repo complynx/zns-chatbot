@@ -214,9 +214,8 @@ func kbDescription(c KnowledgeChange, t kbTarget) string {
 	switch c.Kind {
 	case kbSetModerator:
 		return fmt.Sprintf(
-			"Set knowledge moderator %s to enabled=%t at assignment version %d. Reaso" +
-"n (untrusted text): %q. This controls general and historical knowledge e" +
-"diting and review.",
+			"Set knowledge moderator %s to enabled=%t at assignment version %d. Reason (untrusted "+
+				"text): %q. This controls general and historical knowledge editing and review.",
 			c.ModeratorUserID,
 			*c.ModeratorEnabled,
 			c.ExpectedModeratorVersion,
@@ -228,9 +227,9 @@ func kbDescription(c KnowledgeChange, t kbTarget) string {
 			action = "Reject"
 		}
 		return fmt.Sprintf(
-			"%s suggestion %s by another user for article %s at revision %d. Proposed" +
-" title (untrusted text): %q. Decision reason (untrusted text): %q. Appro" +
-"val publishes the exact suggested content; rejection changes no article.",
+			"%s suggestion %s by another user for article %s at revision %d. Proposed title "+
+				"(untrusted text): %q. Decision reason (untrusted text): %q. Approval publishes the "+
+				"exact suggested content; rejection changes no article.",
 			action,
 			c.SuggestionID,
 			t.suggestion.ArticleID,
@@ -254,9 +253,9 @@ func kbDescription(c KnowledgeChange, t kbTarget) string {
 			effect = "Submit exact content for independent moderator review; do not publish"
 		}
 		return fmt.Sprintf(
-			"%s in %s: article %s, expected revision %d. Title (untrusted text): %q. " +
-"Language: %s. Body: %d bytes; sources: %d. Reason (untrusted text): %q. " +
-"The complete content remains in the exact arguments.",
+			"%s in %s: article %s, expected revision %d. Title (untrusted text): %q. Language: %s. "+
+				"Body: %d bytes; sources: %d. Reason (untrusted text): %q. The complete content "+
+				"remains in the exact arguments.",
 			effect,
 			collection,
 			c.ArticleID,

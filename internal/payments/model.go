@@ -31,10 +31,10 @@ type Submission struct {
 	EventID       uuid.UUID `json:"event_id"`
 	PassID        uuid.UUID `json:"pass_id"`
 	FileID        uuid.UUID `json:"file_id"`
-	AmountMinor   int64     `json:"amount_minor"   minimum:"1" maximum:"9007199254740991"`
+	AmountMinor   int64     `json:"amount_minor" minimum:"1" maximum:"9007199254740991"`
 	Currency      string    `json:"currency"`
 	CurrencyScale int32     `json:"currency_scale" minimum:"0" maximum:"4"`
-	Purpose       string    `json:"purpose"                                               enum:"initial,top_up"`
+	Purpose       string    `json:"purpose" enum:"initial,top_up"`
 }
 
 func (s Submission) Valid() bool {
@@ -66,9 +66,9 @@ type ReviewChange struct {
 	EventID         uuid.UUID `json:"event_id"`
 	EvidenceID      uuid.UUID `json:"evidence_id"`
 	ExpectedVersion int64     `json:"expected_version" minimum:"0"`
-	Decision        string    `json:"decision"                     enum:"confirmed,rejected"`
-	AmountMinor     int64     `json:"amount_minor"     minimum:"0"                           maximum:"9007199254740991"`
-	Reason          string    `json:"reason"                                                                            maxLength:"512"`
+	Decision        string    `json:"decision" enum:"confirmed,rejected"`
+	AmountMinor     int64     `json:"amount_minor" minimum:"0" maximum:"9007199254740991"`
+	Reason          string    `json:"reason" maxLength:"512"`
 }
 
 func (c ReviewChange) Normalize() (ReviewChange, error) {

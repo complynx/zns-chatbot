@@ -202,7 +202,10 @@ func TestMassageSpecialistDeliveryScopesAndConcurrentReservations(t *testing.T) 
 	booking, _ := bookMassage(t, f, owner, massageBookingArgs(f, schedule, 0))
 	id := specialistNotices(t, f, booking.ID)[0].ID
 	scope := paymentScope(t, f.H, staff.UserID, false)
-	for _, foreign := range []db.EventScope{{BotID: scope.BotID + 1, Organization: scope.Organization}, {BotID: scope.BotID, Organization: "foreign"}} {
+	for _, foreign := range []db.EventScope{
+		{BotID: scope.BotID + 1, Organization: scope.Organization},
+		{BotID: scope.BotID, Organization: "foreign"},
+	} {
 		_, err := f.H.store.MassageSpecialistNotification(t.Context(), foreign, id)
 		require.ErrorIs(t, err, pgx.ErrNoRows)
 		_, err = f.H.store.MassageSpecialistNotificationRecipient(t.Context(), foreign, id)

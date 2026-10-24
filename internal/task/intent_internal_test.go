@@ -93,7 +93,8 @@ func TestOperationCallbacksStayBoundedAndBindExactPrompt(t *testing.T) {
 	if promptKey(q) == old {
 		t.Fatal("prompt change did not invalidate callback")
 	}
-	for _, bad := range []string{"q:invalid:12345678:0", fmt.Sprintf("q:%s:invalid:0", id), fmt.Sprintf("q:%s:12345678:-1", id), fmt.Sprintf("a:%s:12345678:yes", id)} {
+	for _, bad := range []string{"q:invalid:12345678:0", fmt.Sprintf("q:%s:invalid:0", id),
+		fmt.Sprintf("q:%s:12345678:-1", id), fmt.Sprintf("a:%s:12345678:yes", id)} {
 		u.CallbackQuery.Data = bad
 		raw, _ = json.Marshal(u)
 		if _, err = normalize(u, raw); err == nil {

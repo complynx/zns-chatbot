@@ -17,8 +17,8 @@ func TestDatabasePoolMetricsAreScopedAndNeedNoDatabaseConnection(t *testing.T) {
 	ctx := context.Background()
 	for _, maximum := range []string{"2", "3"} {
 		pool, err := pgxpool.New(ctx,
-			"postgres://metrics_user:private_metrics_password@127.0.0.1:1/private_metrics_database"+
-				"?sslmode=disable&pool_max_conns="+maximum,
+			"postgres://metrics_user:private_metrics_password@127.0.0.1:1/private_metrics_database?"+
+				"sslmode=disable&pool_max_conns="+maximum,
 		)
 		require.NoError(t, err)
 		t.Cleanup(pool.Close)

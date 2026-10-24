@@ -160,11 +160,13 @@ func massageReminderText(n db.MassageReminder, language string) (string, error) 
 		return "", errors.New("invalid massage reminder currency scale")
 	}
 	specialist, service := terms.SpecialistName.EN, terms.ServiceName.EN
-	heading, startLabel, serviceLabel, specialistLabel, priceLabel, referenceLabel := "Massage booking reminder", "Start", "Service", "Specialist", "Price", "Booking"
+	heading, startLabel, serviceLabel, specialistLabel, priceLabel, referenceLabel := "Massage booking reminder",
+		"Start", "Service", "Specialist", "Price", "Booking"
 	advance, final := " (advance)", " (final)"
 	if language == "ru" {
 		specialist, service = terms.SpecialistName.RU, terms.ServiceName.RU
-		heading, startLabel, serviceLabel, specialistLabel, priceLabel, referenceLabel = "Напоминание о записи на массаж", "Начало", "Услуга", "Специалист", "Стоимость", "Запись"
+		heading, startLabel, serviceLabel, specialistLabel, priceLabel, referenceLabel =
+			"Напоминание о записи на массаж", "Начало", "Услуга", "Специалист", "Стоимость", "Запись"
 		advance, final = " (предварительное)", " (заключительное)"
 	}
 	switch n.Kind {

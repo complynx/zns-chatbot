@@ -88,7 +88,9 @@ func TestDepositPolicyRejectsInvalidConfigurationWithoutChangingEvent(t *testing
 	path := "/internal/admin/events/" + event.ID.String()
 	for _, policy := range []map[string]any{
 		{"minimum_minor": 12346, "minimum_bps": 0}, {"minimum_minor": 0, "minimum_bps": 10001},
-		{"minimum_minor": 0}, {"minimum_minor": nil, "minimum_bps": 0}, {"minimum_minor": 0, "minimum_bps": 0, "unknown": true},
+		{"minimum_minor": 0},
+		{"minimum_minor": nil, "minimum_bps": 0},
+		{"minimum_minor": 0, "minimum_bps": 0, "unknown": true},
 	} {
 		doc["deposit"] = policy
 		code, _ := adminRequest(

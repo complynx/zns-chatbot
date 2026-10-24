@@ -138,13 +138,13 @@ func (s *Server) taskClosureStatus(
 func taskClosureMethod() map[string]any {
 	method := administrativeRead(
 		"close_task",
-		"Close an uncertain local task only after inspecting its diagnostics and " +
-"external result. Requires current global administrator authority and exa" +
-"ct approval of task ID, version and reason. Stops local processing and b" +
-"locks pending/retryable deliveries while preserving uncertainty evidence" +
-". Does not prove an external outcome, retry delivery, cancel a remote Lo" +
-"om run or change money. Reconcile the same operation after a lost respon" +
-"se; never infer success from not_found or replace it blindly.",
+		"Close an uncertain local task only after inspecting its diagnostics and external result. "+
+			"Requires current global administrator authority and exact approval of task ID, version "+
+			"and reason. Stops local processing and blocks pending/retryable deliveries while "+
+			"preserving uncertainty evidence. Does not prove an external outcome, retry delivery, "+
+			"cancel a remote Loom run or change money. "+
+			"Reconcile the same operation after a lost response; "+
+			"never infer success from not_found or replace it blindly.",
 		map[string]any{
 			schemaTaskID:          map[string]any{manifestType: schemaString, schemaFormat: schemaUUID},
 			schemaExpectedVersion: map[string]any{manifestType: schemaInteger, schemaMinimum: 1},

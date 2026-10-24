@@ -64,13 +64,18 @@ func TestRetiredPromptDistinguishesAnswersFromUnansweredExpiry(t *testing.T) {
 		run      loom.Run
 		answered bool
 	}{
-		{"answered question", "question:dialog-v1:q", loom.Run{Question: &loom.Question{Answer: &loom.InputRequest{Kind: "steering"}}}, true},
+		{"answered question", "question:dialog-v1:q",
+			loom.Run{Question: &loom.Question{Answer: &loom.InputRequest{Kind: "steering"}}}, true},
 		{"approved action", "approval:dialog-v1:a", loom.Run{Approval: &loom.Approval{Decision: "approve"}}, true},
 		{"rejected action", "approval:dialog-v1:a", loom.Run{Approval: &loom.Approval{Decision: "reject"}}, true},
-		{"expired question", "question:dialog-v1:q", loom.Run{Question: &loom.Question{ExpiresAt: time.Now().Add(-time.Minute)}}, false},
-		{"expired approval", "approval:dialog-v1:a", loom.Run{Approval: &loom.Approval{ExpiresAt: time.Now().Add(-time.Minute)}}, false},
-		{"expired question after resolved approval", "question:dialog-v1:q", loom.Run{Question: &loom.Question{}, Approval: &loom.Approval{Decision: "approve"}}, false},
-		{"expired approval after answered question", "approval:dialog-v1:a", loom.Run{Question: &loom.Question{Answer: &loom.InputRequest{}}, Approval: &loom.Approval{}}, false},
+		{"expired question", "question:dialog-v1:q",
+			loom.Run{Question: &loom.Question{ExpiresAt: time.Now().Add(-time.Minute)}}, false},
+		{"expired approval", "approval:dialog-v1:a",
+			loom.Run{Approval: &loom.Approval{ExpiresAt: time.Now().Add(-time.Minute)}}, false},
+		{"expired question after resolved approval", "question:dialog-v1:q", loom.Run{Question: &loom.Question{},
+			Approval: &loom.Approval{Decision: "approve"}}, false},
+		{"expired approval after answered question", "approval:dialog-v1:a",
+			loom.Run{Question: &loom.Question{Answer: &loom.InputRequest{}}, Approval: &loom.Approval{}}, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()

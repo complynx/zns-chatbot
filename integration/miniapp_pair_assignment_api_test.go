@@ -273,7 +273,13 @@ func TestMiniAppPairAssignmentHTTPRequiresCurrentAuthorityAndProtectsForeignProp
 	f.H.peers.adminRole = false
 	f.H.peers.mu.Unlock()
 	f.H.iam.Invalidate(f.admin.Subject)
-	for _, path := range []string{"/events", "/proposals", "/recent", "/events/" + f.EventID.String() + "/candidates", "/operations/private-pair"} {
+	for _, path := range []string{
+		"/events",
+		"/proposals",
+		"/recent",
+		"/events/" + f.EventID.String() + "/candidates",
+		"/operations/private-pair",
+	} {
 		code, raw = pairAssignmentAppCall(t, f, f.session, http.MethodGet, path, nil)
 		require.Equal(t, http.StatusForbidden, code, string(raw))
 	}
@@ -352,14 +358,24 @@ func TestMiniAppPairAssignmentHTTPStrictJSONAndExplicitConsent(t *testing.T) {
 		}
 		delete(prepare, field)
 	}
-	for _, extra := range []map[string]any{{}, {"proposal_id": prep.ID}, {"confirmed": true}, {"proposal_id": prep.ID, "confirmed": false}, {"proposal_id": prep.ID, "confirmed": true, "resume_proposal_id": nil}} {
+	for _, extra := range []map[string]any{
+		{},
+		{"proposal_id": prep.ID},
+		{"confirmed": true},
+		{"proposal_id": prep.ID, "confirmed": false},
+		{"proposal_id": prep.ID, "confirmed": true, "resume_proposal_id": nil},
+	} {
 		input := map[string]any{"operation_id": "strict-pair", "arguments": f.args}
 		maps.Copy(input, extra)
 		code, raw := pairAssignmentAppCall(t, f, f.session, http.MethodPost, "/confirm", input)
 		require.Equal(t, http.StatusBadRequest, code, string(raw))
 	}
 	valid, _ := json.Marshal(prepare)
-	for _, body := range []string{string(valid) + ` {}`, strings.TrimSuffix(string(valid), "}") + `,"unknown":true}`, `{"operation_id":"` + strings.Repeat("x", 70000) + `"}`} {
+	for _, body := range []string{
+		string(valid) + ` {}`,
+		strings.TrimSuffix(string(valid), "}") + `,"unknown":true}`,
+		`{"operation_id":"` + strings.Repeat("x", 70000) + `"}`,
+	} {
 		code, raw, _ := appCall(
 			t,
 			f.H,
@@ -429,9 +445,8 @@ func TestMiniAppPairAssignmentHTTPRevocationDuringEventWaitPreventsEffects(t *te
 			require.Eventually(t, func() bool {
 				var waiting bool
 				readErr := f.H.store.Pool().
-					QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
-"ase() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid" +
-")))", blocking.Conn().PgConn().PID()).
+					QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND "+
+						"pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid)))", blocking.Conn().PgConn().PID()).
 					Scan(&waiting)
 				return readErr == nil && waiting
 			}, 3*time.Second, 10*time.Millisecond)

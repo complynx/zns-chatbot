@@ -61,19 +61,35 @@ type DeliveryReceipt struct {
 	ResponseElapsedSeconds *float64
 }
 type Settings struct {
-	AvatarBrowserStorageLimitBytes      int64  `json:"avatar_browser_storage_limit_bytes,omitempty"       doc:"Global browser avatar original budget in bytes; zero uses 10000000000 (10 GB). Range 1 to 10000000000. Lowering stops admission without evicting unexpired originals."`
-	AvatarBrowserRetentionSeconds       int    `json:"avatar_browser_retention_seconds,omitempty"         doc:"Browser avatar source lifetime from upload; zero uses 7776000 (90 days). Range 60 to 7776000. Lowering also expires existing sources; completed JPEGs and receipts remain."`
-	MassageNotifyClientPriorLongSeconds int    `json:"massage_notify_client_prior_long_seconds,omitempty" doc:"Long massage reminder lead in nonnegative 32-bit seconds; zero uses 3600. Changes reschedule pending/retryable reminders."`
-	MassageNotifyClientPriorSeconds     int    `json:"massage_notify_client_prior_seconds,omitempty"      doc:"Short massage reminder lead in nonnegative 32-bit seconds; zero uses 600. Changes reschedule pending/retryable reminders."`
-	MassageMaxBookingsPerWindow         int    `json:"massage_max_bookings_per_window,omitempty"          doc:"Ordinary-owner massage booking limit per configured party window; zero uses the legacy default 3. Range 1 to 100."`
-	AuthCacheTTLSeconds                 int    `json:"auth_cache_ttl_seconds"`
-	DefaultLanguage                     string `json:"default_language"`
-	MaxParallelTasks                    int    `json:"max_parallel_tasks"                                 doc:"Worker concurrency; changes apply after application restart."`
-	QuestionTimeoutSeconds              int    `json:"question_timeout_seconds"                           doc:"Reserved for future expectations. Does not change current Loom prompt expiry."`
-	NameExpectationSeconds              int    `json:"name_expectation_seconds,omitempty"                 doc:"Name request lifetime in seconds; zero uses 7200. Range 60 to 86400."`
-	MiniAppMaxAgeSeconds                int    `json:"mini_app_max_age_seconds,omitempty"                 doc:"Telegram login proof maximum age; zero uses 300 seconds. Range 30 to 900."`
-	MiniAppPendingSeconds               int    `json:"mini_app_pending_seconds,omitempty"                 doc:"Login reconciliation window; zero uses 120 seconds. Range 30 to 300."`
-	MiniAppSessionSeconds               int    `json:"mini_app_session_seconds,omitempty"                 doc:"Absolute browser session lifetime; zero uses 900 seconds. Range 60 to 3600. Existing sessions do not extend."`
+	// Global browser avatar original budget in bytes; zero uses 10000000000 (10 GB). Range 1 to 10000000000.
+	// Lowering stops admission without evicting unexpired originals.
+	AvatarBrowserStorageLimitBytes int64 `json:"avatar_browser_storage_limit_bytes,omitempty"`
+	// Browser avatar source lifetime from upload; zero uses 7776000 (90 days). Range 60 to 7776000. Lowering also
+	// expires existing sources; completed JPEGs and receipts remain.
+	AvatarBrowserRetentionSeconds int `json:"avatar_browser_retention_seconds,omitempty"`
+	// Long massage reminder lead in nonnegative 32-bit seconds; zero uses 3600. Changes reschedule pending/retryable
+	// reminders.
+	MassageNotifyClientPriorLongSeconds int `json:"massage_notify_client_prior_long_seconds,omitempty"`
+	// Short massage reminder lead in nonnegative 32-bit seconds; zero uses 600. Changes reschedule pending/retryable
+	// reminders.
+	MassageNotifyClientPriorSeconds int `json:"massage_notify_client_prior_seconds,omitempty"`
+	// Ordinary-owner massage booking limit per configured party window; zero uses the legacy default 3. Range 1 to
+	// 100.
+	MassageMaxBookingsPerWindow int    `json:"massage_max_bookings_per_window,omitempty"`
+	AuthCacheTTLSeconds         int    `json:"auth_cache_ttl_seconds"`
+	DefaultLanguage             string `json:"default_language"`
+	// Worker concurrency; changes apply after application restart.
+	MaxParallelTasks int `json:"max_parallel_tasks"`
+	// Reserved for future expectations. Does not change current Loom prompt expiry.
+	QuestionTimeoutSeconds int `json:"question_timeout_seconds"`
+	// Name request lifetime in seconds; zero uses 7200. Range 60 to 86400.
+	NameExpectationSeconds int `json:"name_expectation_seconds,omitempty"`
+	// Telegram login proof maximum age; zero uses 300 seconds. Range 30 to 900.
+	MiniAppMaxAgeSeconds int `json:"mini_app_max_age_seconds,omitempty"`
+	// Login reconciliation window; zero uses 120 seconds. Range 30 to 300.
+	MiniAppPendingSeconds int `json:"mini_app_pending_seconds,omitempty"`
+	// Absolute browser session lifetime; zero uses 900 seconds. Range 60 to 3600. Existing sessions do not extend.
+	MiniAppSessionSeconds int `json:"mini_app_session_seconds,omitempty"`
 }
 type VersionedSettings struct {
 	Version  int64    `json:"version"`

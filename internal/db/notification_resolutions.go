@@ -29,12 +29,13 @@ const massageSpecialistNotificationKind = "massage_specialist"
 
 // NotificationResolution changes delivery only; it cannot modify a payment.
 type NotificationResolution struct {
-	NotificationKind string    `json:"notification_kind,omitempty" enum:"payment,pair,order,massage,massage_specialist,knowledge"`
-	EventID          uuid.UUID `json:"event_id,omitempty"`
-	NotificationID   uuid.UUID `json:"notification_id"`
-	ExpectedVersion  int64     `json:"expected_version"                                                                           minimum:"1"`
-	Action           string    `json:"action"                      enum:"retry,dismiss"`
-	Reason           string    `json:"reason"                                                                                                 minLength:"1" maxLength:"512"`
+	NotificationKind string `json:"notification_kind,omitempty"`
+
+	EventID         uuid.UUID `json:"event_id,omitempty"`
+	NotificationID  uuid.UUID `json:"notification_id"`
+	ExpectedVersion int64     `json:"expected_version" minimum:"1"`
+	Action          string    `json:"action" enum:"retry,dismiss"`
+	Reason          string    `json:"reason" minLength:"1" maxLength:"512"`
 }
 
 type NotificationPreparation struct {
@@ -66,7 +67,13 @@ func normalizedNotificationResolution(
 	if !paymentScopeValid(scope, op) ||
 		(args.EventID == uuid.Nil && args.NotificationKind != knowledgeNotificationKind) ||
 		args.NotificationID == uuid.Nil ||
-		(args.NotificationKind != "" && args.NotificationKind != "payment" && args.NotificationKind != pairNotificationKind && args.NotificationKind != orderNotificationKind && args.NotificationKind != massageNotificationKind && args.NotificationKind != massageSpecialistNotificationKind && args.NotificationKind != knowledgeNotificationKind) ||
+		(args.NotificationKind != "" &&
+			args.NotificationKind != "payment" &&
+			args.NotificationKind != pairNotificationKind &&
+			args.NotificationKind != orderNotificationKind &&
+			args.NotificationKind != massageNotificationKind &&
+			args.NotificationKind != massageSpecialistNotificationKind &&
+			args.NotificationKind != knowledgeNotificationKind) ||
 		args.ExpectedVersion < 1 ||
 		len(args.Reason) == 0 ||
 		len(args.Reason) > payments.MaxReasonLength ||
@@ -302,9 +309,9 @@ func (s *Store) PrepareNotificationResolution(
 		Arguments: args,
 		ExpiresAt: now.Time.Add(paymentPreparationTTL),
 		Description: fmt.Sprintf(
-			"%s notification %s for recipient %s%s, state %s, version %d. Reason: %s." +
-" No payment changes. Dismiss does not prove delivery. Retry rechecks rec" +
-"ipient access before sending.",
+			"%s notification %s for recipient %s%s, state %s, version %d. Reason: %s. No payment "+
+				"changes. Dismiss does not prove delivery. Retry rechecks recipient access before "+
+				"sending.",
 			args.Action,
 			n.ID,
 			n.RecipientID,
@@ -315,8 +322,8 @@ func (s *Store) PrepareNotificationResolution(
 		),
 	}
 	if args.Action == notificationRetry && n.State == deliveryUnknown {
-		result.Description += " Telegram may already have received this message. Retry can send a dupli" +
-"cate. Check its receipt and the chat first; retry only as a last resort."
+		result.Description += " Telegram may already have received this message. Retry can send a duplicate. Check " +
+			"its receipt and the chat first; retry only as a last resort."
 	}
 	if args.NotificationKind == knowledgeNotificationKind {
 		result.Description = "Knowledge delivery only; no publication or moderation changes. " + result.Description
@@ -331,8 +338,8 @@ func (s *Store) PrepareNotificationResolution(
 		result.Description = "Massage reminder delivery only; no booking or payment changes. " + result.Description
 	}
 	if args.NotificationKind == massageSpecialistNotificationKind {
-		result.Description = "Massage specialist notification delivery only; captured grant and prefer" +
-"ence generations are retained. No booking or payment changes. " + result.Description
+		result.Description = "Massage specialist notification delivery only; captured grant and preference " +
+			"generations are retained. No booking or payment changes. " + result.Description
 	}
 	document, err := json.Marshal(result)
 	if err != nil {

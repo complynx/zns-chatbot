@@ -105,8 +105,8 @@ func TestOrderNotificationProcessCrashQuarantinesUncertainSend(t *testing.T) {
 	var jobID int64
 	var crashedAttempt int
 	require.NoError(t, f.H.store.Pool().QueryRow(t.Context(),
-		"SELECT id,attempt FROM river_job WHERE kind='zinusya_order_notification'" +
-" AND args->>'notification_id'=$1 AND state='running'",
+		"SELECT id,attempt FROM river_job WHERE kind='zinusya_order_notification' AND args->>'notification_id'=$1 "+
+			"AND state='running'",
 		original.ID.String()).
 		Scan(&jobID, &crashedAttempt))
 	require.NoError(t, child.Process.Kill())
@@ -151,7 +151,8 @@ func TestOrderNotificationProcessCrashQuarantinesUncertainSend(t *testing.T) {
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(t.Context(), "SELECT count(*) FROM shuttle_order_evidence_reviews WHERE evidence_id=$1", original.EvidenceID).
+			QueryRow(t.Context(), "SELECT count(*) FROM shuttle_order_evidence_reviews WHERE evidence_id=$1",
+				original.EvidenceID).
 			Scan(&reviews),
 	)
 	require.Zero(t, reviews)

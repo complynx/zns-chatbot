@@ -33,20 +33,22 @@ func (s *Store) RecentMiniAppOrderEvidenceActions(
 	if err = lockProfileOwner(ctx, tx, scope, false); err != nil {
 		return nil, err
 	}
-	rows, err := tx.Query(ctx, "SELECT a.operation_id,op.event_id,(op.result->>'order_id')::uuid,\n (op.r" +
-"esult->>'id')::uuid,op.result->>'state',a.completed_at,ev.order_kind\n FR" +
-"OM shuttle_tasks task JOIN shuttle_miniapp_order_evidence_actions a ON a" +
-".user_id=task.user_id\n JOIN shuttle_order_evidence_operations op ON op.u" +
-"ser_id=a.user_id AND op.operation_id=a.operation_id AND op.kind=a.kind\n " +
-"JOIN shuttle_order_evidence ev ON ev.id=(op.result->>'id')::uuid AND ev." +
-"event_id=op.event_id AND ev.user_id=op.user_id\n JOIN shuttle_events e ON" +
-" e.id=op.event_id\n JOIN shuttle_registrations r ON r.event_id=e.id AND r" +
-".user_id=a.user_id AND r.state='assigned'\n JOIN shuttle_passes p ON p.re" +
-"gistration_id=r.id\n WHERE task.id=$1 AND task.user_id=$2 AND a.completed" +
-"_at<task.created_at\n AND e.bot_id=$3 AND e.organization_id=$4 AND (CASE " +
-"ev.order_kind WHEN 'service' THEN 'orders' WHEN 'meal' THEN 'meals' END)" +
-"=ANY(e.modules)\n ORDER BY a.completed_at DESC,a.operation_id DESC LIMIT " +
-"5", taskID, scope.UserID, scope.BotID, scope.Organization)
+	rows, err := tx.Query(ctx, "SELECT a.operation_id,op.event_id,(op.result->>'order_id')::uuid,\n"+
+		" (op.result->>'id')::uuid,op.result->>'state',a.completed_at,ev.order_kind\n"+
+		" FROM shuttle_tasks task JOIN shuttle_miniapp_order_evidence_actions a ON "+
+		"a.user_id=task.user_id\n"+
+		" JOIN shuttle_order_evidence_operations op ON op.user_id=a.user_id AND "+
+		"op.operation_id=a.operation_id AND op.kind=a.kind\n"+
+		" JOIN shuttle_order_evidence ev ON ev.id=(op.result->>'id')::uuid AND "+
+		"ev.event_id=op.event_id AND ev.user_id=op.user_id\n"+
+		" JOIN shuttle_events e ON e.id=op.event_id\n"+
+		" JOIN shuttle_registrations r ON r.event_id=e.id AND r.user_id=a.user_id AND "+
+		"r.state='assigned'\n"+
+		" JOIN shuttle_passes p ON p.registration_id=r.id\n"+
+		" WHERE task.id=$1 AND task.user_id=$2 AND a.completed_at<task.created_at\n"+
+		" AND e.bot_id=$3 AND e.organization_id=$4 AND (CASE ev.order_kind WHEN 'service' THEN "+
+		"'orders' WHEN 'meal' THEN 'meals' END)=ANY(e.modules)\n"+
+		" ORDER BY a.completed_at DESC,a.operation_id DESC LIMIT 5", taskID, scope.UserID, scope.BotID, scope.Organization)
 	if err != nil {
 		return nil, err
 	}

@@ -18,7 +18,7 @@ type adminTaskListRequest struct {
 
 	State string    `query:"state" maxLength:"64"`
 	After uuid.UUID `query:"after"`
-	Limit int32     `query:"limit"                default:"50" minimum:"1" maximum:"100"`
+	Limit int32     `query:"limit" default:"50" minimum:"1" maximum:"100"`
 }
 
 type adminTaskListResponse struct {

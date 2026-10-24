@@ -165,8 +165,8 @@ func TestPairAssignmentAdoptionAPIRejectsForeignChangedExpiredAndUnconfirmed(t *
 	require.Equal(t, http.StatusOK, code, string(raw))
 	require.Contains(t, string(raw), `"status":"rejected"`)
 	_, err = f.H.store.Pool().Exec(t.Context(),
-		"UPDATE shuttle_pair_preparations SET expires_at=clock_timestamp()-interv" +
-"al '1 second' WHERE proposal_id=$1", original.ID)
+		"UPDATE shuttle_pair_preparations SET expires_at=clock_timestamp()-interval '1 second' WHERE "+
+			"proposal_id=$1", original.ID)
 	require.NoError(t, err)
 	code, raw = pairAdoptionPrepare(t, f, token, "expired-adopt", args, original.ID)
 	require.Equal(t, http.StatusConflict, code, string(raw))

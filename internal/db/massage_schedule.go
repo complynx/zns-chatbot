@@ -435,7 +435,10 @@ func (s *Store) MassageScheduleOperation(
 		return result, err
 	}
 	row, err := s.q.WithTx(tx).
-		ReadMassageScheduleOperation(ctx, sqlc.ReadMassageScheduleOperationParams{UserID: scope.UserID, OperationID: operation})
+		ReadMassageScheduleOperation(
+			ctx,
+			sqlc.ReadMassageScheduleOperationParams{UserID: scope.UserID, OperationID: operation},
+		)
 	if err != nil {
 		return result, err
 	}

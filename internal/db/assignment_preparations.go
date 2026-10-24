@@ -235,9 +235,8 @@ func describeAssignmentPreparation(
 		return "", err
 	}
 	description := fmt.Sprintf(
-		"Assign an unpaid %s pass to Telegram user %d for %s (event %s). Price %s" +
-" %s. Payment window: %d seconds after assignment, capped at %s. No payme" +
-"nt is recorded.",
+		"Assign an unpaid %s pass to Telegram user %d for %s (event %s). Price %s %s. Payment "+
+			"window: %d seconds after assignment, capped at %s. No payment is recorded.",
 		role,
 		telegramID,
 		event.Document.Name,

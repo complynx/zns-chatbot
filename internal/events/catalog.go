@@ -22,11 +22,11 @@ var ErrInvalid = errors.New("invalid event configuration")
 type Document struct {
 	Deposit      *registrations.DepositPolicy `json:"deposit,omitempty"`
 	Registration *registrations.Rules         `json:"registration,omitempty"`
-	Name         string                       `json:"name"                   minLength:"1" maxLength:"256"`
-	Timezone     string                       `json:"timezone"               minLength:"1" maxLength:"128"`
+	Name         string                       `json:"name" minLength:"1" maxLength:"256"`
+	Timezone     string                       `json:"timezone" minLength:"1" maxLength:"128"`
 	StartsAt     time.Time                    `json:"starts_at"`
 	EndsAt       time.Time                    `json:"ends_at"`
-	Modules      []string                     `json:"modules"                                              maxItems:"100" uniqueItems:"true"`
+	Modules      []string                     `json:"modules" maxItems:"100" uniqueItems:"true"`
 }
 
 type Event struct {

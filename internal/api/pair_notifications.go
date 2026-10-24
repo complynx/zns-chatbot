@@ -78,9 +78,9 @@ func pairNotificationMethods() []map[string]any {
 	return []map[string]any{
 		administrativeRead(
 			"pair_notifications",
-			"List this deployment's pair invitation delivery metadata and receipts wi" +
-"th current global administrator authority. Default/max page 20; follow n" +
-"ext as after. Unknown delivery is not proof of non-delivery.",
+			"List this deployment's pair invitation delivery metadata and receipts with current global "+
+				"administrator authority. Default/max page 20; follow next as after. "+
+				"Unknown delivery is not proof of non-delivery.",
 			map[string]any{
 				schemaState: map[string]any{manifestType: schemaString},
 				schemaAfter: uuidField,
@@ -95,11 +95,11 @@ func pairNotificationMethods() []map[string]any {
 		),
 		administrativeRead(
 			"pair_notification",
-			"Inspect a pair invitation notification's recipient, state/version, attem" +
-"pt ID, Telegram receipt and current event/invitation context. Use resolv" +
-"e_notification with notification_kind=pair for an exact, audited retry o" +
-"r dismissal; unknown retry may duplicate a message. Never repeat the inv" +
-"itation business action to resend a notification.",
+			"Inspect a pair invitation notification's recipient, state/version, attempt ID, Telegram "+
+				"receipt and current event/invitation context. "+
+				"Use resolve_notification with notification_kind=pair for an exact, audited retry or "+
+				"dismissal; unknown retry may duplicate a message. "+
+				"Never repeat the invitation business action to resend a notification.",
 			map[string]any{"id": uuidField},
 			[]string{"id"},
 			[]string{"id", schemaState, schemaVersion, paymentSchemaReceipt},

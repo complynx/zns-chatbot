@@ -219,8 +219,8 @@ func (s *Store) PrepareAuthority(
 		Arguments: c,
 		ExpiresAt: now.Time.Add(authorityPreparationTTL),
 		Description: fmt.Sprintf(
-			"Set event %s authority for local user %s to %s (current version %d). Thi" +
-"s grants or revokes access to this event only.",
+			"Set event %s authority for local user %s to %s (current version %d). This grants or "+
+				"revokes access to this event only.",
 			c.EventID,
 			c.UserID,
 			c.Role,

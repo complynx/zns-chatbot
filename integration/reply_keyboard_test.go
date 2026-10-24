@@ -56,7 +56,8 @@ func deliveredReplyKeyboard(row db.Delivery) bool {
 
 func TestConversationKeyboardAndTypedTextHaveIdenticalSteeringSemantics(t *testing.T) {
 	t.Parallel()
-	for _, text := range []string{"Approve", "No", "Cancel", "Yes, but only for one person", "How much will it cost?", "/cancel"} {
+	for _, text := range []string{"Approve", "No", "Cancel", "Yes, but only for one person",
+		"How much will it cost?", "/cancel"} {
 		t.Run(text, func(t *testing.T) {
 			t.Parallel()
 			p := newPeers(t)
@@ -218,12 +219,12 @@ func TestReplyKeyboardCleanupStillRunsAfterNewPlainTaskStarts(t *testing.T) {
 	})
 	// Hold the terminal outbox reservation after Save clears the old active task.
 	_, err = h.store.Pool().
-		Exec(t.Context(), fmt.Sprintf("CREATE FUNCTION hold_keyboard_cleanup() RETURNS trigger LANGUAGE plpgsql" +
-" AS $$ BEGIN\n IF NEW.state='send_inflight' AND NEW.payload#>>'{reply_mar" +
-"kup,remove_keyboard}'='true' THEN\n PERFORM pg_advisory_lock(hashtextexte" +
-"nded('%s',0));PERFORM pg_advisory_unlock(hashtextextended('%s',0));END I" +
-"F;\n RETURN NEW;END $$;CREATE TRIGGER hold_keyboard_cleanup BEFORE UPDATE" +
-" ON shuttle_outbox FOR EACH ROW EXECUTE FUNCTION hold_keyboard_cleanup()", id, id))
+		Exec(t.Context(), fmt.Sprintf("CREATE FUNCTION hold_keyboard_cleanup() RETURNS trigger LANGUAGE plpgsql "+
+			"AS $$ BEGIN\n IF NEW.state='send_inflight' AND NEW.payload#>>'{reply_markup,remove_keyboard}'='true' "+
+			"THEN\n PERFORM pg_advisory_lock(hashtextextended('%s',0));PERFORM "+
+			"pg_advisory_unlock(hashtextextended('%s',0));END IF;\n RETURN NEW;END $$;CREATE TRIGGER "+
+			"hold_keyboard_cleanup BEFORE UPDATE ON shuttle_outbox FOR EACH ROW EXECUTE FUNCTION "+
+			"hold_keyboard_cleanup()", id, id))
 	require.NoError(t, err)
 	answer := h.submitText(t, 92702, label)
 	h.await(t, answer, "completed")
@@ -231,8 +232,8 @@ func TestReplyKeyboardCleanupStillRunsAfterNewPlainTaskStarts(t *testing.T) {
 	require.Eventually(t, func() bool {
 		var waiting bool
 		queryErr := h.store.Pool().
-			QueryRow(t.Context(), "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pi" +
-"ds(pid)))", blockerPID).
+			QueryRow(t.Context(), "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)))",
+				blockerPID).
 			Scan(&waiting)
 		return queryErr == nil && waiting
 	}, 5*time.Second, 10*time.Millisecond)

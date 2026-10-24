@@ -40,7 +40,8 @@ func TestOrderEvidenceAPIReadsCurrentStateAndOriginalReceipts(t *testing.T) {
 		Exec(t.Context(), "UPDATE shuttle_events SET modules=ARRAY['orders'],version=version+1 WHERE id=$1", f.Event.ID)
 	require.NoError(t, err)
 	detail := map[string]any{"event_id": f.Event.ID, "evidence_id": admitted.ID}
-	for _, tc := range []struct{ token, method string }{{f.Owner, "evidence"}, {f.Ambassador, "evidence_for_review"}, {f.Admin, "evidence_for_review"}} {
+	for _, tc := range []struct{ token, method string }{{f.Owner, "evidence"}, {f.Ambassador,
+		"evidence_for_review"}, {f.Admin, "evidence_for_review"}} {
 		code, raw := orderEvidenceRead(t, f, tc.token, tc.method, detail)
 		require.Equal(t, http.StatusOK, code, string(raw))
 		var out orderWireResult[db.OrderPaymentEvidence]
@@ -57,7 +58,8 @@ func TestOrderEvidenceAPIReadsCurrentStateAndOriginalReceipts(t *testing.T) {
 		op     uuid.UUID
 		kind   db.OrderEvidenceOperationKind
 		result db.OrderPaymentEvidence
-	}{{f.Owner, op, db.OrderEvidenceSubmissionReceipt, admitted}, {f.Ambassador, reviewOp, db.OrderEvidenceReviewReceipt, confirmed}} {
+	}{{f.Owner, op, db.OrderEvidenceSubmissionReceipt, admitted}, {f.Ambassador, reviewOp,
+		db.OrderEvidenceReviewReceipt, confirmed}} {
 		code, raw = orderEvidenceRead(
 			t,
 			f,
@@ -83,7 +85,8 @@ func TestOrderEvidenceAPIReadsCurrentStateAndOriginalReceipts(t *testing.T) {
 	require.Contains(t, string(raw), `"status":"not_found"`)
 	require.NotContains(t, string(raw), confirmed.ID.String())
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2", f.Event.ID, f.AmbassadorID)
+		Exec(t.Context(), "DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2", f.Event.ID,
+			f.AmbassadorID)
 	require.NoError(t, err)
 	code, raw = orderEvidenceRead(
 		t,
@@ -230,7 +233,8 @@ func checkOrderEvidenceFileRevocation(t *testing.T, audience, method string) {
 				Exec(t.Context(), "UPDATE shuttle_users SET revoked=true WHERE id=$1", f.OwnerID)
 		} else {
 			_, hookErr = f.H.store.Pool().
-				Exec(t.Context(), "DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2", f.Event.ID, f.AmbassadorID)
+				Exec(t.Context(), "DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2", f.Event.ID,
+					f.AmbassadorID)
 		}
 		done <- hookErr
 	}
@@ -288,7 +292,8 @@ func TestOrderEvidenceAPIDiscoveryTracksOrdersAuthority(t *testing.T) {
 		}
 	}
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2", f.Event.ID, f.AmbassadorID)
+		Exec(t.Context(), "DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2", f.Event.ID,
+			f.AmbassadorID)
 	require.NoError(t, err)
 	code, raw := adminRequest(t, f.H, f.Ambassador, http.MethodPost, orderEvidenceAPI+"discover", nil)
 	require.Equal(t, http.StatusOK, code, string(raw))

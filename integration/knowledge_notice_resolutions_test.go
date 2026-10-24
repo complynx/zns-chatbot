@@ -112,10 +112,14 @@ func TestKnowledgeNoticeResolutionHTTPPreservesBusinessAndOriginalReceipt(t *tes
 			}
 			// Receipt replay stays immutable after expiry and a later delivery generation.
 			_, err := f.h.store.Pool().
-				Exec(t.Context(), "UPDATE shuttle_notification_resolutions SET expires_at=clock_timestamp()" +
-"-interval '1 second' WHERE operation_id=$1", op)
+				Exec(t.Context(), "UPDATE shuttle_notification_resolutions SET expires_at=clock_timestamp()-interval "+
+					"'1 second' WHERE operation_id=$1", op)
 			require.NoError(t, err)
-			for _, path := range []string{notificationResolutionAPI, notificationResolutionAPI + "/status", notificationResolutionAPI + "/reconcile"} {
+			for _, path := range []string{
+				notificationResolutionAPI,
+				notificationResolutionAPI + "/status",
+				notificationResolutionAPI + "/reconcile",
+			} {
 				request := body
 				if path != notificationResolutionAPI {
 					request = map[string]any{"protocol_version": 1, "operation_id": op}
@@ -144,9 +148,9 @@ func TestKnowledgeNoticeResolutionHTTPPreservesBusinessAndOriginalReceipt(t *tes
 			require.NoError(
 				t,
 				f.h.store.Pool().
-					QueryRow(t.Context(), "SELECT (SELECT count(*) FROM shuttle_knowledge_suggestions WHERE state='" +
-"pending'),(SELECT count(*) FROM shuttle_knowledge_operations),(SELECT co" +
-"unt(*) FROM shuttle_knowledge_articles)").
+					QueryRow(t.Context(), "SELECT (SELECT count(*) FROM shuttle_knowledge_suggestions WHERE state='pending'),"+
+						"(SELECT count(*) FROM shuttle_knowledge_operations),(SELECT count(*) FROM "+
+						"shuttle_knowledge_articles)").
 					Scan(&suggestions, &operations, &articles),
 			)
 			require.Equal(t, 1, suggestions)
@@ -181,8 +185,8 @@ func TestKnowledgeNoticeResolutionRejectsChangedExpiredAndRevokedTargets(t *test
 	_, err = f.h.store.PrepareNotificationResolution(t.Context(), f.admin, uuid.NewString(), changed)
 	require.Error(t, err)
 	_, err = f.h.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_notification_resolutions SET expires_at=clock_timestamp()" +
-"-interval '1 second' WHERE operation_id=$1", op)
+		Exec(t.Context(), "UPDATE shuttle_notification_resolutions SET expires_at=clock_timestamp()-interval "+
+			"'1 second' WHERE operation_id=$1", op)
 	require.NoError(t, err)
 	_, err = f.h.store.ResolveNotification(t.Context(), f.admin, op, args, prep.ID)
 	require.ErrorIs(t, err, db.ErrConflict)
@@ -314,7 +318,12 @@ func denyKnowledgeResolutionToOrdinaryActors(t *testing.T, f knowledgeFixture, b
 	t.Helper()
 	for _, actor := range []db.PaymentScope{f.user, f.moderator} {
 		denied := knowledgeResolutionToken(f, actor)
-		for _, path := range []string{notificationResolutionAPI + "/prepare", notificationResolutionAPI, notificationResolutionAPI + "/status", "/internal/agent/administration/knowledge_notification"} {
+		for _, path := range []string{
+			notificationResolutionAPI + "/prepare",
+			notificationResolutionAPI,
+			notificationResolutionAPI + "/status",
+			"/internal/agent/administration/knowledge_notification",
+		} {
 			request := body
 			switch path {
 			case notificationResolutionAPI + "/prepare":

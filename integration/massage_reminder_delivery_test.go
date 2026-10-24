@@ -144,7 +144,12 @@ func TestMassageReminderDeliveryUsesLanguageSnapshotAndDoesNotStartLoom(t *testi
 	f, owner, n := dueMassageReminder(t)
 	p := f.H.peers
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_users SET profile=$2 WHERE id=$1", owner.UserID, json.RawMessage(`{"language_code":"uk"}`))
+		Exec(
+			t.Context(),
+			"UPDATE shuttle_users SET profile=$2 WHERE id=$1",
+			owner.UserID,
+			json.RawMessage(`{"language_code":"uk"}`),
+		)
 	require.NoError(t, err)
 	// Make both logical reminders due without coalescing them.
 	settings, err := f.H.store.Settings(t.Context())
@@ -294,8 +299,8 @@ func TestMassageReminderDeliveryRechecksLocalChangesAfterIAMWait(t *testing.T) {
 				require.Eventually(t, func() bool {
 					var count int
 					readErr := f.H.store.Pool().
-						QueryRow(t.Context(), "SELECT count(*) FROM river_job WHERE kind='zinusya_massage_reminder' AND" +
-" state='completed'").
+						QueryRow(t.Context(), "SELECT count(*) FROM river_job WHERE kind='zinusya_massage_reminder' AND "+
+							"state='completed'").
 						Scan(&count)
 					return readErr == nil && count > 0
 				}, 8*time.Second, 25*time.Millisecond)
@@ -349,11 +354,12 @@ func TestMassageReminderFailedReceiptWriteBecomesUnknownWithoutAnotherSend(t *te
 	t.Parallel()
 	f, _, n := dueMassageReminder(t)
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), "CREATE FUNCTION fail_reminder_delivered_receipt() RETURNS trigger LANGUA" +
-"GE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic reminder delivered rec" +
-"eipt failure'; END $$;\nCREATE TRIGGER fail_reminder_delivered_receipt BE" +
-"FORE UPDATE ON shuttle_massage_reminders FOR EACH ROW WHEN (NEW.state = " +
-"'delivered') EXECUTE FUNCTION fail_reminder_delivered_receipt()")
+		Exec(t.Context(), "CREATE FUNCTION fail_reminder_delivered_receipt() RETURNS trigger LANGUAGE "+
+			"plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic reminder delivered receipt "+
+			"failure'; END $$;\n"+
+			"CREATE TRIGGER fail_reminder_delivered_receipt BEFORE UPDATE ON "+
+			"shuttle_massage_reminders FOR EACH ROW WHEN (NEW.state = 'delivered') EXECUTE "+
+			"FUNCTION fail_reminder_delivered_receipt()")
 	require.NoError(t, err)
 	f.H.start(t)
 	unknown := awaitMassageReminder(t, f, n.ID, "delivery_unknown")

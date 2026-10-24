@@ -22,7 +22,13 @@ func TestMealEvidenceUsesArrivalDeadlineDespiteDelayedProcessing(t *testing.T) {
 		{"meal_timely", OrderKindMeal, due.Add(-time.Second), due.Add(-time.Second), OrderEvidencePending},
 		{"meal_at_deadline", OrderKindMeal, due, due.Add(time.Hour), OrderEvidenceNeedsDecision},
 		{"meal_late", OrderKindMeal, due.Add(time.Second), due.Add(time.Hour), OrderEvidenceNeedsDecision},
-		{"service_processing_cutoff_preserved", OrderKindService, due.Add(-time.Second), due.Add(time.Hour), OrderEvidenceNeedsDecision},
+		{
+			"service_processing_cutoff_preserved",
+			OrderKindService,
+			due.Add(-time.Second),
+			due.Add(time.Hour),
+			OrderEvidenceNeedsDecision,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

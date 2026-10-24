@@ -4,6 +4,22 @@ const detailsOperationID = "operation_id"
 const detailsLegalNameLimit = 256
 const detailsPassportLimit = 128
 
+const (
+	registrationDetailsReadDescription = "Read only presence flags and version of your legal registration details. " +
+		"These are separate from the profile name. Saved passport values are not returned or added to " +
+		"general agent context."
+
+	registrationPassportDescription = "Save only the passport/document number explicitly supplied for this registration " +
+		"purpose. Do not repeat it in replies or unrelated context. " +
+		"A chat submission already enters ordinary Telegram/Loom history; " +
+		"dedicated storage and receipts protect their own copies. Read current version first. " +
+		"Does not register or confirm payment."
+
+	registrationDetailsOperationDescription = "Recover a historical redacted result using arguments.operation_id, " +
+		"or the original envelope operation_id on the status endpoint. " +
+		"Missing status is unknown: retain the same operation ID and exact arguments after uncertainty."
+)
+
 func registrationDetailsModule() map[string]any {
 	version := map[string]any{manifestType: schemaInteger, schemaMinimum: 0}
 	uuidField := map[string]any{manifestType: schemaString, schemaFormat: schemaUUID}
@@ -45,23 +61,22 @@ func registrationDetailsModule() map[string]any {
 			manifestDisclosure:   false,
 		}
 		if write {
-			item[manifestEffect], item[manifestStatusPath], item[manifestDedupWindow] = effectWrite, registrationDetailsPath+"operation", agentRegistrationDedupSeconds
+			item[manifestEffect], item[manifestStatusPath], item[manifestDedupWindow] =
+				effectWrite, registrationDetailsPath+"operation", agentRegistrationDedupSeconds
 		}
 		return item
 	}
 	get := method(
 		"get",
-		"Read only presence flags and version of your legal registration details." +
-" These are separate from the profile name. Saved passport values are not" +
-" returned or added to general agent context.",
+		registrationDetailsReadDescription,
 		input(map[string]any{}),
 		false,
 	)
 	name := method(
 		"set_legal_name",
-		"Save the legal name explicitly supplied by the user for registration; ne" +
-"ver copy the Telegram or profile name without explicit intent. Read curr" +
-"ent details version first. Does not register or assign a pass.",
+		"Save the legal name explicitly supplied by the user for registration; "+
+			"never copy the Telegram or profile name without explicit intent. "+
+			"Read current details version first. Does not register or assign a pass.",
 		input(
 			map[string]any{
 				schemaExpectedVersion: version,
@@ -78,11 +93,7 @@ func registrationDetailsModule() map[string]any {
 	)
 	passport := method(
 		"set_passport_number",
-		"Save only the passport/document number explicitly supplied for this regi" +
-"stration purpose. Do not repeat it in replies or unrelated context. A ch" +
-"at submission already enters ordinary Telegram/Loom history; dedicated s" +
-"torage and receipts protect their own copies. Read current version first" +
-". Does not register or confirm payment.",
+		registrationPassportDescription,
 		input(
 			map[string]any{
 				schemaExpectedVersion: version,
@@ -99,10 +110,7 @@ func registrationDetailsModule() map[string]any {
 	)
 	operation := method(
 		"operation",
-		"Recover a historical redacted result using arguments.operation_id, or th" +
-"e original envelope operation_id on the status endpoint. Missing status " +
-"is unknown: retain the same operation ID and exact arguments after uncer" +
-"tainty.",
+		registrationDetailsOperationDescription,
 		input(map[string]any{detailsOperationID: uuidField}, detailsOperationID),
 		false,
 	)

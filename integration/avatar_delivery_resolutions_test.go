@@ -95,8 +95,8 @@ func TestAvatarResolutionDismissesRevokedOwnerAndFencesOldAttempt(t *testing.T) 
 	require.ErrorIs(t, f.h.store.FinishAvatarDelivery(ctx, n, "delivered", json.RawMessage(`{}`), 0), db.ErrConflict)
 	// Exact replay does not depend on current recipient identity or proposal time.
 	_, err = f.h.store.Pool().
-		Exec(ctx, "UPDATE shuttle_avatar_delivery_resolutions SET expires_at=clock_timestam" +
-"p()-interval '1 hour' WHERE operation_id=$1", op)
+		Exec(ctx, "UPDATE shuttle_avatar_delivery_resolutions"+
+			" SET expires_at=clock_timestamp()-interval '1 hour' WHERE operation_id=$1", op)
 	require.NoError(t, err)
 	replay, err := f.h.store.ResolveAvatarDelivery(ctx, scope, op, a, proposal.ID)
 	require.NoError(t, err)
@@ -138,8 +138,8 @@ func TestAvatarResolutionRejectsExpiryStaleCASAndLiveAttempt(t *testing.T) {
 	proposal, err := f.h.store.PrepareAvatarDeliveryResolution(ctx, scope, op, a)
 	require.NoError(t, err)
 	_, err = f.h.store.Pool().
-		Exec(ctx, "UPDATE shuttle_avatar_delivery_resolutions SET expires_at=clock_timestam" +
-"p()-interval '1 second' WHERE operation_id=$1", op)
+		Exec(ctx, "UPDATE shuttle_avatar_delivery_resolutions"+
+			" SET expires_at=clock_timestamp()-interval '1 second' WHERE operation_id=$1", op)
 	require.NoError(t, err)
 	_, err = f.h.store.ResolveAvatarDelivery(ctx, scope, op, a, proposal.ID)
 	require.ErrorIs(t, err, db.ErrConflict)

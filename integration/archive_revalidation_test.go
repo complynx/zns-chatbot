@@ -41,16 +41,16 @@ func TestStoredArchiveRevalidationChecksActualBytesAndCurrentAdmin(t *testing.T)
 	require.NotContains(t, string(data), "PRIVATE_ARCHIVE_NAME")
 	foreign := uuid.New()
 	_, err = h.store.Pool().
-		Exec(context.Background(), "INSERT INTO shuttle_legacy_archives(id,bot_id,organization_id,sha256,siz" +
-"e_bytes,validation,created_by) VALUES($1,124,'org',$2,$3,'{}',$4)", foreign, digest, len(raw), ownerID)
+		Exec(context.Background(), "INSERT INTO shuttle_legacy_archives(id,bot_id,organization_id,sha256,size_bytes,"+
+			"validation,created_by) VALUES($1,124,'org',$2,$3,'{}',$4)", foreign, digest, len(raw), ownerID)
 	require.NoError(t, err)
 	code, _ = agentAdminRead(t, h, admin, "validate_stored_archive", map[string]any{"archive_id": foreign})
 	require.Equal(t, http.StatusNotFound, code)
 	bad := append([]byte(nil), raw...)
 	bad[len(bad)-8] ^= 1
 	_, err = h.store.Pool().
-		Exec(context.Background(), "UPDATE shuttle_legacy_archive_chunks SET content=$1 WHERE archive_id=$2 " +
-"AND ordinal=0", bad, stored.ArchiveID)
+		Exec(context.Background(), "UPDATE shuttle_legacy_archive_chunks SET content=$1"+
+			" WHERE archive_id=$2 AND ordinal=0", bad, stored.ArchiveID)
 	require.NoError(t, err)
 	code, _ = agentAdminRead(t, h, admin, "validate_stored_archive", args)
 	require.Equal(t, http.StatusBadRequest, code)

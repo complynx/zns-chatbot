@@ -115,13 +115,19 @@ PRIMARY KEY(source_instance,collection_name,source_key)) ON COMMIT DROP`); err !
 	if err = historyConflicts(ctx, tx, scope); err != nil {
 		return HistoryApplyReceipt{}, err
 	}
-	inserted, err := tx.Exec(ctx, "INSERT INTO shuttle_legacy_history_records\n(id,bot_id,organization_id,so" +
-"urce_instance,collection_name,source_key,source_role,\nowner_telegram_id," +
-"canonical_hash,projection_version,projection,first_archive_id,first_line" +
-")\nSELECT id,$1,$2,source_instance,collection_name,source_key,source_role" +
-",owner_telegram_id,\ncanonical_hash,$3,projection,$4,source_line FROM pg_" +
-"temp.zinusya_history_stage\nON CONFLICT(bot_id,organization_id,source_ins" +
-"tance,collection_name,source_key) DO NOTHING", scope.BotID, scope.Organization, legacyimport.ProjectionVersion, archive.ID)
+	inserted, err := tx.Exec(
+		ctx,
+		`INSERT INTO shuttle_legacy_history_records
+(id,bot_id,organization_id,source_instance,collection_name,source_key,source_role,
+owner_telegram_id,canonical_hash,projection_version,projection,first_archive_id,first_line)
+SELECT id,$1,$2,source_instance,collection_name,source_key,source_role,owner_telegram_id,
+canonical_hash,$3,projection,$4,source_line FROM pg_temp.zinusya_history_stage
+ON CONFLICT(bot_id,organization_id,source_instance,collection_name,source_key) DO NOTHING`,
+		scope.BotID,
+		scope.Organization,
+		legacyimport.ProjectionVersion,
+		archive.ID,
+	)
 	if err != nil {
 		return HistoryApplyReceipt{}, err
 	}
@@ -162,13 +168,17 @@ AND h.source_instance=s.source_instance AND h.collection_name=s.collection_name 
 
 func historyConflicts(ctx context.Context, tx pgx.Tx, scope ProfileScope) error {
 	var conflict bool
-	err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_temp.zinusya_history_stage s\nJOIN shuttle" +
-"_legacy_history_records h ON h.bot_id=$1 AND h.organization_id=$2\nAND h." +
-"source_instance=s.source_instance AND h.collection_name=s.collection_nam" +
-"e AND h.source_key=s.source_key\nWHERE h.source_role IS DISTINCT FROM s.s" +
-"ource_role OR h.owner_telegram_id IS DISTINCT FROM s.owner_telegram_id\nO" +
-"R h.canonical_hash IS DISTINCT FROM s.canonical_hash OR h.projection_ver" +
-"sion IS DISTINCT FROM $3::text)", scope.BotID, scope.Organization, legacyimport.ProjectionVersion).Scan(&conflict)
+	err := tx.QueryRow(
+		ctx,
+		`SELECT EXISTS(SELECT 1 FROM pg_temp.zinusya_history_stage s
+JOIN shuttle_legacy_history_records h ON h.bot_id=$1 AND h.organization_id=$2
+AND h.source_instance=s.source_instance AND h.collection_name=s.collection_name AND h.source_key=s.source_key
+WHERE h.source_role IS DISTINCT FROM s.source_role OR h.owner_telegram_id IS DISTINCT FROM s.owner_telegram_id
+OR h.canonical_hash IS DISTINCT FROM s.canonical_hash OR h.projection_version IS DISTINCT FROM $3::text)`,
+		scope.BotID,
+		scope.Organization,
+		legacyimport.ProjectionVersion,
+	).Scan(&conflict)
 	if err != nil {
 		return err
 	}

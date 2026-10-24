@@ -53,7 +53,7 @@ type knowledgeFindArguments struct {
 type knowledgeRevisionArguments struct {
 	ArticleID uuid.UUID `json:"article_id"`
 	Before    int64     `json:"before,omitempty" minimum:"0"`
-	Limit     int       `json:"limit,omitempty"  minimum:"1" maximum:"20"`
+	Limit     int       `json:"limit,omitempty" minimum:"1" maximum:"20"`
 }
 type knowledgeSuggestionArguments struct {
 	knowledge.ReadRequest
@@ -63,26 +63,26 @@ type knowledgeSuggestionArguments struct {
 type knowledgeSuggestionListArguments struct {
 	EventID *uuid.UUID `json:"event_id,omitempty"`
 	After   uuid.UUID  `json:"after,omitempty"`
-	Limit   int        `json:"limit,omitempty"    minimum:"1" maximum:"20"`
+	Limit   int        `json:"limit,omitempty" minimum:"1" maximum:"20"`
 }
 type knowledgeEditArguments struct {
 	ArticleID        uuid.UUID         `json:"article_id,omitempty"`
-	ExpectedRevision int64             `json:"expected_revision"    minimum:"0"`
+	ExpectedRevision int64             `json:"expected_revision" minimum:"0"`
 	EventID          *uuid.UUID        `json:"event_id,omitempty"`
 	Content          knowledge.Content `json:"content"`
-	Reason           string            `json:"reason"                           minLength:"1" maxLength:"1000"`
+	Reason           string            `json:"reason" minLength:"1" maxLength:"1000"`
 }
 type knowledgeReviewArguments struct {
 	SuggestionID     uuid.UUID `json:"suggestion_id"`
 	ExpectedRevision int64     `json:"expected_revision" minimum:"0"`
-	Decision         string    `json:"decision"                      enum:"approve,reject"`
-	Reason           string    `json:"reason"                                              minLength:"1" maxLength:"1000"`
+	Decision         string    `json:"decision" enum:"approve,reject"`
+	Reason           string    `json:"reason" minLength:"1" maxLength:"1000"`
 }
 type knowledgeModeratorArguments struct {
 	ModeratorUserID          uuid.UUID `json:"moderator_user_id"`
 	ModeratorEnabled         bool      `json:"moderator_enabled"`
 	ExpectedModeratorVersion int64     `json:"expected_moderator_version" minimum:"0"`
-	Reason                   string    `json:"reason"                                 minLength:"1" maxLength:"1000"`
+	Reason                   string    `json:"reason" minLength:"1" maxLength:"1000"`
 }
 
 type knowledgeArticleView struct {

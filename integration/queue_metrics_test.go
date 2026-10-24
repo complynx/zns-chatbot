@@ -22,7 +22,8 @@ func TestQueueMetricsUseDueDeadlinesAndOwnedKindsInConfiguredSchema(t *testing.T
 	h := setup(t, newPeers(t))
 	h.stop(t)
 	ctx := context.Background()
-	for _, kind := range []string{"shuttle_task", "zinusya_payment_notification", "zinusya_pair_notification", "zinusya_order_notification", "zinusya_massage_specialist_notice"} {
+	for _, kind := range []string{"shuttle_task", "zinusya_payment_notification", "zinusya_pair_notification",
+		"zinusya_order_notification", "zinusya_massage_specialist_notice"} {
 		for _, state := range []string{"available", "scheduled", "retryable"} {
 			_, err := h.store.Pool().
 				Exec(ctx, `INSERT INTO river_job(kind,state,max_attempts,args,created_at,scheduled_at)

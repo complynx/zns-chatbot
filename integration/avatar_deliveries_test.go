@@ -57,8 +57,8 @@ func enqueueAvatarDuplicate(t *testing.T, f avatarDraftFixture, id uuid.UUID, ve
 	require.NoError(
 		t,
 		f.h.store.Pool().
-			QueryRow(t.Context(), "INSERT INTO river_job(kind,args,queue,state,max_attempts) VALUES('zinusy" +
-"a_avatar_delivery',$1,'default','available',25) RETURNING id", raw).
+			QueryRow(t.Context(), "INSERT INTO river_job(kind,args,queue,state,max_attempts) "+
+				"VALUES('zinusya_avatar_delivery',$1,'default','available',25) RETURNING id", raw).
 			Scan(&job),
 	)
 	return job
@@ -154,8 +154,8 @@ func TestAvatarDeliveryDuplicateJobCannotChangeLiveAttempt(t *testing.T) {
 	require.Eventually(t, func() bool {
 		var postponed bool
 		err := f.h.store.Pool().
-			QueryRow(t.Context(), "SELECT attempted_at IS NOT NULL AND state IN ('available','scheduled') F" +
-"ROM river_job WHERE id=$1", duplicate).
+			QueryRow(t.Context(), "SELECT attempted_at IS NOT NULL AND state IN ('available','scheduled')"+
+				" FROM river_job WHERE id=$1", duplicate).
 			Scan(&postponed)
 		return err == nil && postponed
 	}, 2*time.Second, 10*time.Millisecond)
@@ -274,8 +274,8 @@ func TestAvatarDeliverySafeRetryCannotBeFinishedByStaleAttempt(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, jobs)
 	_, err = f.h.store.Pool().
-		Exec(ctx, "UPDATE shuttle_avatar_deliveries SET next_attempt_at=clock_timestamp()-i" +
-"nterval '1 second' WHERE id=$1", n.ID)
+		Exec(ctx, "UPDATE shuttle_avatar_deliveries"+
+			" SET next_attempt_at=clock_timestamp()-interval '1 second' WHERE id=$1", n.ID)
 	require.NoError(t, err)
 	next, _, err := f.h.store.ReserveAvatarDelivery(ctx, f.scope, n.ID, n.Version, uuid.New())
 	require.NoError(t, err)

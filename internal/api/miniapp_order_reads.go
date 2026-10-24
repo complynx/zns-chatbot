@@ -65,7 +65,7 @@ func (s *Server) miniAppSubmittedOrder(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	order, err := uuid.Parse(r.PathValue("order"))
+	order, err := uuid.Parse(r.PathValue(schemaOrder))
 	if err != nil || order == uuid.Nil {
 		miniAppHTTPError(w, http.StatusBadRequest, "invalid submitted order")
 		return

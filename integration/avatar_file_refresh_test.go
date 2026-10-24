@@ -102,7 +102,12 @@ func TestAvatarFileRefreshOriginalPreviewAndFinalized(t *testing.T) {
 		code, raw = refreshImage(t, f.h, foreign, "avatars", ref)
 		require.Equal(t, http.StatusNotFound, code, string(raw))
 	}
-	for _, locator := range []string{"avatar-original:" + uuid.Nil.String(), "avatar-preview:" + d.ID.String() + ":0", "avatar-preview:" + d.ID.String() + ":01", finalized.ExternalID + ":extra"} {
+	for _, locator := range []string{
+		"avatar-original:" + uuid.Nil.String(),
+		"avatar-preview:" + d.ID.String() + ":0",
+		"avatar-preview:" + d.ID.String() + ":01",
+		finalized.ExternalID + ":extra",
+	} {
 		code, raw = refreshImage(
 			t,
 			f.h,

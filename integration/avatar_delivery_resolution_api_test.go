@@ -182,8 +182,8 @@ func TestAvatarResolutionAPIRequiresExactUnexpiredProposal(t *testing.T) {
 	require.Contains(t, string(raw), `"status":"rejected"`)
 	body["arguments"] = a
 	_, err := f.h.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_avatar_delivery_resolutions SET expires_at=clock_timestam" +
-"p()-interval '1 second' WHERE operation_id=$1", op)
+		Exec(t.Context(), "UPDATE shuttle_avatar_delivery_resolutions"+
+			" SET expires_at=clock_timestamp()-interval '1 second' WHERE operation_id=$1", op)
 	require.NoError(t, err)
 	code, raw = adminRequest(t, f.h, token, http.MethodPost, avatarResolutionAPI, body)
 	require.Equal(t, http.StatusOK, code, string(raw))

@@ -113,11 +113,11 @@ func lockProfileOwner(ctx context.Context, tx pgx.Tx, scope ProfileScope, write 
 	if scope.BotID <= 0 || scope.Organization == "" || scope.Subject == "" || scope.UserID == uuid.Nil {
 		return pgx.ErrNoRows
 	}
-	query := "SELECT id FROM shuttle_users WHERE id=$1 AND bot_id=$2 AND zitadel_org=$" +
-"3 AND zitadel_subject=$4 AND NOT revoked FOR SHARE"
+	query := "SELECT id FROM shuttle_users WHERE id=$1 AND bot_id=$2 AND zitadel_org=$3 AND " +
+		"zitadel_subject=$4 AND NOT revoked FOR SHARE"
 	if write {
-		query = "SELECT id FROM shuttle_users WHERE id=$1 AND bot_id=$2 AND zitadel_org=$" +
-"3 AND zitadel_subject=$4 AND NOT revoked FOR UPDATE"
+		query = "SELECT id FROM shuttle_users WHERE id=$1 AND bot_id=$2 AND zitadel_org=$3 AND " +
+			"zitadel_subject=$4 AND NOT revoked FOR UPDATE"
 	}
 	var id uuid.UUID
 	return tx.QueryRow(ctx, query, scope.UserID, scope.BotID, scope.Organization, scope.Subject).Scan(&id)
@@ -127,10 +127,22 @@ func readProfile(ctx context.Context, tx pgx.Tx, userID uuid.UUID) (UserProfile,
 	p := UserProfile{UserID: userID, BotLanguage: profileLanguageAuto}
 	var id pgtype.UUID
 	var created, expires pgtype.Timestamptz
-	err := tx.QueryRow(ctx, "SELECT version,full_name,bot_language,expectation_id,expectation_created" +
-"_at,expectation_expires_at,first_name,last_name,name_source,first_name_l" +
-"atin,last_name_latin FROM shuttle_user_profiles WHERE user_id=$1", userID).
-		Scan(&p.Version, &p.FullName, &p.BotLanguage, &id, &created, &expires, &p.FirstName, &p.LastName, &p.NameSource, &p.FirstNameLatin, &p.LastNameLatin)
+	err := tx.QueryRow(ctx, "SELECT version,full_name,bot_language,expectation_id,expectation_created_at,"+
+		"expectation_expires_at,first_name,last_name,name_source,first_name_latin,"+
+		"last_name_latin FROM shuttle_user_profiles WHERE user_id=$1", userID).
+		Scan(
+			&p.Version,
+			&p.FullName,
+			&p.BotLanguage,
+			&id,
+			&created,
+			&expires,
+			&p.FirstName,
+			&p.LastName,
+			&p.NameSource,
+			&p.FirstNameLatin,
+			&p.LastNameLatin,
+		)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return p, err
 	}
@@ -276,9 +288,9 @@ func mutateProfile(ctx context.Context, tx pgx.Tx, userID uuid.UUID, mutation Pr
 		return p, err
 	}
 	if nameChanged {
-		_, err = tx.Exec(ctx, "INSERT INTO shuttle_profile_name_sync(user_id,desired_version) VALUES($1" +
-",$2)\nON CONFLICT(user_id) DO UPDATE SET desired_version=EXCLUDED.desired" +
-"_version,next_attempt_at=clock_timestamp(),updated_at=clock_timestamp()",
+		_, err = tx.Exec(ctx, "INSERT INTO shuttle_profile_name_sync(user_id,desired_version) VALUES($1,$2)\n"+
+			"ON CONFLICT(user_id) DO UPDATE SET desired_version=EXCLUDED.desired_version,"+
+			"next_attempt_at=clock_timestamp(),updated_at=clock_timestamp()",
 			userID, p.Version)
 		if err != nil {
 			return p, err
@@ -294,8 +306,8 @@ func replayProfileOperation(
 	digest []byte,
 ) (UserProfile, error) {
 	var hash, receipt []byte
-	err := tx.QueryRow(ctx, "SELECT request_hash,result FROM shuttle_profile_operations WHERE user_id" +
-"=$1 AND operation_id=$2", userID, operationID).
+	err := tx.QueryRow(ctx, "SELECT request_hash,result FROM shuttle_profile_operations WHERE user_id=$1 AND "+
+		"operation_id=$2", userID, operationID).
 		Scan(&hash, &receipt)
 	if err != nil {
 		return UserProfile{}, err
@@ -313,7 +325,8 @@ func applyProfileMutation(ctx context.Context, tx pgx.Tx, p *UserProfile, m Prof
 	case profileSetName:
 		latinChanged := applyProfileLatin(p, m)
 		changed := p.FullName != m.FullName || p.NameExpectation != nil ||
-			(m.FirstName != "" && (p.FirstName != m.FirstName || p.LastName != m.LastName || p.NameSource != profileNameSourceUser)) || latinChanged
+			(m.FirstName != "" && (p.FirstName != m.FirstName || p.LastName != m.LastName ||
+				p.NameSource != profileNameSourceUser)) || latinChanged
 		p.FullName, p.NameExpectation = m.FullName, nil
 		applyProfileNameComponents(p, m)
 		return changed, nil
@@ -381,14 +394,14 @@ func saveProfile(ctx context.Context, tx pgx.Tx, p UserProfile) error {
 	}
 	_, err := tx.Exec(
 		ctx,
-		"INSERT INTO shuttle_user_profiles(user_id,version,full_name,bot_language" +
-",expectation_id,expectation_created_at,expectation_expires_at,first_name" +
-",last_name,name_source) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLI" +
-"CT(user_id) DO UPDATE SET version=EXCLUDED.version,full_name=EXCLUDED.fu" +
-"ll_name,bot_language=EXCLUDED.bot_language,expectation_id=EXCLUDED.expec" +
-"tation_id,expectation_created_at=EXCLUDED.expectation_created_at,expecta" +
-"tion_expires_at=EXCLUDED.expectation_expires_at,first_name=EXCLUDED.firs" +
-"t_name,last_name=EXCLUDED.last_name,name_source=EXCLUDED.name_source",
+		"INSERT INTO shuttle_user_profiles(user_id,version,full_name,bot_language,"+
+			"expectation_id,expectation_created_at,expectation_expires_at,first_name,last_name,"+
+			"name_source) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(user_id) DO UPDATE "+
+			"SET version=EXCLUDED.version,full_name=EXCLUDED.full_name,"+
+			"bot_language=EXCLUDED.bot_language,expectation_id=EXCLUDED.expectation_id,"+
+			"expectation_created_at=EXCLUDED.expectation_created_at,"+
+			"expectation_expires_at=EXCLUDED.expectation_expires_at,first_name=EXCLUDED.first_name,"+
+			"last_name=EXCLUDED.last_name,name_source=EXCLUDED.name_source",
 		p.UserID,
 		p.Version,
 		p.FullName,
@@ -433,8 +446,12 @@ func (s *Store) ProfileOperation(ctx context.Context, scope ProfileScope, operat
 		return UserProfile{}, err
 	}
 	var receipt []byte
-	if err = tx.QueryRow(ctx, "SELECT result FROM shuttle_profile_operations WHERE user_id=$1 AND opera" +
-"tion_id=$2", scope.UserID, operationID).
+	if err = tx.QueryRow(
+		ctx,
+		"SELECT result FROM shuttle_profile_operations WHERE user_id=$1 AND operation_id=$2",
+		scope.UserID,
+		operationID,
+	).
 		Scan(&receipt); err != nil {
 		return UserProfile{}, err
 	}
@@ -452,9 +469,9 @@ func (s *Store) ProfileLanguageByTelegram(
 ) (string, error) {
 	var language string
 	var revoked bool
-	err := s.pool.QueryRow(ctx, "SELECT coalesce(p.bot_language,'auto'),u.revoked FROM shuttle_users u LE" +
-"FT JOIN shuttle_user_profiles p ON p.user_id=u.id WHERE u.bot_id=$1 AND " +
-"u.tg_user_id=$2 AND (u.zitadel_org=$3 OR u.zitadel_org='')", botID, telegramID, organization).
+	err := s.pool.QueryRow(ctx, "SELECT coalesce(p.bot_language,'auto'),u.revoked FROM shuttle_users u LEFT JOIN "+
+		"shuttle_user_profiles p ON p.user_id=u.id WHERE u.bot_id=$1 AND u.tg_user_id=$2 AND "+
+		"(u.zitadel_org=$3 OR u.zitadel_org='')", botID, telegramID, organization).
 		Scan(&language, &revoked)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return profileLanguageAuto, nil

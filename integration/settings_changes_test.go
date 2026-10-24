@@ -114,7 +114,9 @@ func TestSettingsChangeConcurrentConfirmationAndOriginalReceiptAfterNewerSetting
 
 func TestSettingsChangeRejectsInvalidChangedStaleAndExpiredApprovals(t *testing.T) {
 	t.Parallel()
-	for _, test := range []string{"changed-document", "changed-version", "wrong-proposal", "expired", "stale", "invalid-language", "invalid-ttl", "invalid-miniapp", "invalid-reminder-negative", "invalid-reminder-overflow", "missing-version"} {
+	for _, test := range []string{"changed-document", "changed-version", "wrong-proposal", "expired", "stale",
+		"invalid-language", "invalid-ttl", "invalid-miniapp", "invalid-reminder-negative",
+		"invalid-reminder-overflow", "missing-version"} {
 		t.Run(test, func(t *testing.T) {
 			t.Parallel()
 			h, scope, args := settingsChangeFixture(t)

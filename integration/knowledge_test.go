@@ -450,7 +450,10 @@ func TestKnowledgeEventEditorCannotUseAnotherEventOrAmbassadorRole(t *testing.T)
 		require.NoError(t, err)
 		ids = append(ids, event.ID)
 	}
-	for _, assignment := range []db.AuthorityChange{{EventID: ids[0], UserID: f.eventAdmin.UserID, Role: db.AuthorityAdministrator}, {EventID: ids[0], UserID: f.other.UserID, Role: db.AuthorityAmbassador}} {
+	for _, assignment := range []db.AuthorityChange{
+		{EventID: ids[0], UserID: f.eventAdmin.UserID, Role: db.AuthorityAdministrator},
+		{EventID: ids[0], UserID: f.other.UserID, Role: db.AuthorityAmbassador},
+	} {
 		_, err := f.h.store.ChangeAuthority(
 			t.Context(),
 			f.admin.EventScope,

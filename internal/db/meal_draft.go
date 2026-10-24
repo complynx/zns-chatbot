@@ -108,7 +108,16 @@ func mealRequestIDs(ids []string) ([]string, error) {
 // of the service-orders toggle; assigned unpaid passes retain access.
 func authorizeMealDraft(ctx context.Context, tx pgx.Tx, scope ProfileScope, event uuid.UUID) error {
 	allowed, err := sqlc.New(tx).
-		UserModuleAvailable(ctx, sqlc.UserModuleAvailableParams{ID: event, BotID: scope.BotID, OrganizationID: scope.Organization, ID_2: scope.UserID, Column5: orderModuleMeals})
+		UserModuleAvailable(
+			ctx,
+			sqlc.UserModuleAvailableParams{
+				ID:             event,
+				BotID:          scope.BotID,
+				OrganizationID: scope.Organization,
+				ID_2:           scope.UserID,
+				Column5:        orderModuleMeals,
+			},
+		)
 	if err != nil {
 		return err
 	}

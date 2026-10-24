@@ -68,8 +68,16 @@ func TestMassageSpecialistSoonDeliveryCapturesOnlyDueScopedActiveEvents(t *testi
 	raw, err := json.Marshal(booking.Snapshot)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_massage_bookings SET starts_at=$2,treatment_ends_at=$3,oc" +
-"cupancy_ends_at=$4,snapshot=$5 WHERE id=$1", booking.ID, terms.StartsAt, terms.TreatmentEndsAt, terms.OccupancyEndsAt, raw)
+		Exec(
+			t.Context(),
+			"UPDATE shuttle_massage_bookings SET starts_at=$2,treatment_ends_at=$3,"+
+				"occupancy_ends_at=$4,snapshot=$5 WHERE id=$1",
+			booking.ID,
+			terms.StartsAt,
+			terms.TreatmentEndsAt,
+			terms.OccupancyEndsAt,
+			raw,
+		)
 	require.NoError(t, err)
 	require.NoError(
 		t,
@@ -80,7 +88,13 @@ func TestMassageSpecialistSoonDeliveryCapturesOnlyDueScopedActiveEvents(t *testi
 	)
 	require.Len(t, specialistNotices(t, f, booking.ID), 1)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_events SET starts_at=$2,ends_at=$3 WHERE id=$1", f.Event.ID, now.Add(-time.Hour), now.Add(-time.Minute))
+		Exec(
+			t.Context(),
+			"UPDATE shuttle_events SET starts_at=$2,ends_at=$3 WHERE id=$1",
+			f.Event.ID,
+			now.Add(-time.Hour),
+			now.Add(-time.Minute),
+		)
 	require.NoError(t, err)
 	require.NoError(t, f.H.store.CreateDueMassageSpecialistNotifications(t.Context(), scope))
 	require.Len(t, specialistNotices(t, f, booking.ID), 1, "Ended events never backfill reminders")
@@ -132,7 +146,14 @@ func TestMassageSpecialistSoonDeliveryHonorsPreferenceAtDueAndDoesNotRevive(t *t
 
 func TestMassageSpecialistSoonDeliveryRechecksCapturedAuthorityAndCancellation(t *testing.T) {
 	t.Parallel()
-	for _, change := range []string{"next_reenable", "bookings_reenable", "regrant", "revoked_user", "cancelled", "ended"} {
+	for _, change := range []string{
+		"next_reenable",
+		"bookings_reenable",
+		"regrant",
+		"revoked_user",
+		"cancelled",
+		"ended",
+	} {
 		t.Run(change, func(t *testing.T) {
 			t.Parallel()
 			f, staff, booking, binding := soonSelfBooking(t)
@@ -169,8 +190,11 @@ func TestMassageSpecialistSoonDeliveryRechecksCapturedAuthorityAndCancellation(t
 				cancelMassageForTest(t, f, staff, booking)
 			case "ended":
 				_, err = f.H.store.Pool().
-					Exec(t.Context(), "UPDATE shuttle_events SET ends_at=clock_timestamp()-interval '1 second' " +
-"WHERE id=$1", f.Event.ID)
+					Exec(
+						t.Context(),
+						"UPDATE shuttle_events SET ends_at=clock_timestamp()-interval '1 second' WHERE id=$1",
+						f.Event.ID,
+					)
 				require.NoError(t, err)
 			}
 			reserved, err := f.H.store.ReserveMassageSpecialistNotification(
@@ -260,7 +284,12 @@ func TestMassageSpecialistSoonWorkerDeliversSelfReservationWithoutLoom(t *testin
 			t.Parallel()
 			f, staff, booking, _ := soonSelfBooking(t)
 			_, err := f.H.store.Pool().
-				Exec(t.Context(), "UPDATE shuttle_users SET profile=$2 WHERE id=$1", staff.UserID, json.RawMessage(`{"language_code":"`+language+`"}`))
+				Exec(
+					t.Context(),
+					"UPDATE shuttle_users SET profile=$2 WHERE id=$1",
+					staff.UserID,
+					json.RawMessage(`{"language_code":"`+language+`"}`),
+				)
 			require.NoError(t, err)
 			f.H.peers.mu.Lock()
 			f.H.peers.loomDown = true

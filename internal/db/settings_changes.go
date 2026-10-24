@@ -93,18 +93,18 @@ func settingsChangeDescription(before VersionedSettings, after Settings) (string
 		return "", err
 	}
 	return fmt.Sprintf(
-		"Replace application-wide runtime settings at version %d. This replaces t"+
-			"he full document, not one event or organization. Stored and effective va"+
-			"lues:\n%s\nMassage reminder lead changes reschedule pending/retryable remi"+
-			"nders and preserve retry delays; sent, unknown and inflight reminders ar"+
-			"e unchanged. Browser source retention applies to existing uploads from t"+
-			"heir creation time; expired bytes are irrecoverable, while draft metadat"+
-			"a, receipts and completed JPEGs remain. Lowering the storage budget bloc"+
-			"ks new uploads without quota-driven eviction. Worker concurrency applies"+
-			" after application restart. Question timeout is reserved and does not ch"+
-			"ange current Loom prompt expiry. Current IAM cache TTL is synchronized i"+
-			"n this process; other processes are not coordinated. Startup configurati"+
-			"on and secrets are unchanged.",
+		"Replace application-wide runtime settings at version %d. This replaces the full "+
+			"document, not one event or organization. Stored and effective values:\n"+
+			"%s\n"+
+			"Massage reminder lead changes reschedule pending/retryable reminders and preserve "+
+			"retry delays; sent, unknown and inflight reminders are unchanged. Browser source "+
+			"retention applies to existing uploads from their creation time; expired bytes are "+
+			"irrecoverable, while draft metadata, receipts and completed JPEGs remain. Lowering "+
+			"the storage budget blocks new uploads without quota-driven eviction. Worker "+
+			"concurrency applies after application restart. Question timeout is reserved and does "+
+			"not change current Loom prompt expiry. Current IAM cache TTL is synchronized in this "+
+			"process; other processes are not coordinated. Startup configuration and secrets are "+
+			"unchanged.",
 		before.Version,
 		documents,
 	), nil

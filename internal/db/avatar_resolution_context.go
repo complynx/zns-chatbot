@@ -36,7 +36,16 @@ func (s *Store) HasNativeAvatarResolutionContext(
 		return false, err
 	}
 	return s.q.WithTx(tx).
-		HasNativeAvatarResolutionContext(ctx, sqlc.HasNativeAvatarResolutionContextParams{UserID: scope.UserID, TaskID: taskID, BotID: scope.BotID, OrganizationID: scope.Organization, Actor: scope.Subject})
+		HasNativeAvatarResolutionContext(
+			ctx,
+			sqlc.HasNativeAvatarResolutionContextParams{
+				UserID:         scope.UserID,
+				TaskID:         taskID,
+				BotID:          scope.BotID,
+				OrganizationID: scope.Organization,
+				Actor:          scope.Subject,
+			},
+		)
 }
 
 // RecentNativeAvatarResolutionActions requires current global administrator

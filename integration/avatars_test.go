@@ -162,7 +162,18 @@ func avatarOutputSchemas(t *testing.T, f avatarFixture) map[string]*huma.Schema 
 			}
 		}
 	}
-	for _, method := range []string{"generate", "get", "fetch", "operation", "create_draft", "save_draft", "draft", "drafts", "draft_operation", "fetch_original"} {
+	for _, method := range []string{
+		"generate",
+		"get",
+		"fetch",
+		"operation",
+		"create_draft",
+		"save_draft",
+		"draft",
+		"drafts",
+		"draft_operation",
+		"fetch_original",
+	} {
 		require.Contains(t, schemas, method)
 	}
 	return schemas

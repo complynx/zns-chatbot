@@ -57,10 +57,10 @@ func (s *Server) storeArchiveUpload(w http.ResponseWriter, r *http.Request) {
 func archiveStorageMethod() map[string]any {
 	method := administrativeRead(
 		"store_archive",
-		"Store an exact approved caller-owned legacy archive durably. Requires so"+
-			"urce_file_id and SHA-256. No live users, history or payments are applied"+
-			". Reconcile unknown outcomes using the same operation ID; never upload a"+
-			"gain with a fresh operation to resolve uncertainty.",
+		"Store an exact approved caller-owned legacy archive durably. "+
+			"Requires source_file_id and SHA-256. No live users, history or payments are applied. "+
+			"Reconcile unknown outcomes using the same operation ID; "+
+			"never upload again with a fresh operation to resolve uncertainty.",
 		map[string]any{
 			schemaSourceFileID: map[string]any{manifestType: schemaString, schemaFormat: schemaUUID},
 			schemaSHA256:       map[string]any{manifestType: schemaString, schemaPattern: schemaSHA256Pattern},

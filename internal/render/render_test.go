@@ -151,7 +151,14 @@ func TestValidateRejectsInvalidEntities(t *testing.T) {
 }
 
 func FuzzRender(f *testing.F) {
-	for _, value := range []string{"😀 **nested _text_**", "```\n&amp;", "[x](tg://user?id=7)", "<div>**x**</div>", strings.Repeat("😀", 2100), "**a `x` b**"} {
+	for _, value := range []string{
+		"😀 **nested _text_**",
+		"```\n&amp;",
+		"[x](tg://user?id=7)",
+		"<div>**x**</div>",
+		strings.Repeat("😀", 2100),
+		"**a `x` b**",
+	} {
 		f.Add(value)
 	}
 	f.Fuzz(func(t *testing.T, markdown string) {

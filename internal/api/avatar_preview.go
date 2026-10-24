@@ -160,7 +160,15 @@ func (s *Server) avatarDraftPreview(
 		OperationID string                `json:"operation_id"`
 		Result      avatarPreviewMetadata `json:"result"`
 		Artifacts   []fileDescriptor      `json:"artifacts"`
-	}{agentSucceeded, in.Body.OperationID, avatarPreviewInfo(d, r), []fileDescriptor{{ExternalID: "avatar-preview:" + d.ID.String() + ":" + strconv.FormatInt(d.Version, 10), FetchMethod: avatarRefetchMethod, DownloadPath: avatarPreviewPath(d), MIMEType: mimeJPEG, SizeBytes: int64(len(r.JPEG)), SHA256: r.SHA256}}}
+	}{agentSucceeded,
+		in.Body.OperationID,
+		avatarPreviewInfo(d, r),
+		[]fileDescriptor{{ExternalID: "avatar-preview:" + d.ID.String() + ":" + strconv.FormatInt(d.Version, 10),
+			FetchMethod:  avatarRefetchMethod,
+			DownloadPath: avatarPreviewPath(d),
+			MIMEType:     mimeJPEG,
+			SizeBytes:    int64(len(r.JPEG)),
+			SHA256:       r.SHA256}}}
 	raw, err := json.Marshal(result)
 	if err != nil {
 		return nil, huma.Error503ServiceUnavailable("avatar preview descriptor unavailable")

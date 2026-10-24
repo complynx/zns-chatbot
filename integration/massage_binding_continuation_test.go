@@ -83,8 +83,8 @@ func TestMassageBindingNewOperationsContinueOneProposalAcrossInterfaces(t *testi
 			revoke.ExpectedVersion = 1
 			require.False(t, bindingChange(t, f, actor, revoke).Active)
 			_, err = f.H.store.Pool().
-				Exec(t.Context(), "UPDATE shuttle_massage_binding_operations SET expires_at=clock_timestamp" +
-"()-interval '1 second' WHERE actor_id=$1 AND operation_id=$2", actor.UserID, original)
+				Exec(t.Context(), "UPDATE shuttle_massage_binding_operations SET "+
+					"expires_at=clock_timestamp()-interval '1 second' WHERE actor_id=$1 AND operation_id=$2", actor.UserID, original)
 			require.NoError(t, err)
 			for _, op := range []uuid.UUID{original, adopted} {
 				receipt, e := f.H.store.ChangeMassageBinding(
@@ -175,10 +175,11 @@ func TestMassageBindingAdoptionFailureAndAuthorizationLeaveNoEffect(t *testing.T
 	prep, err := f.H.store.PrepareMassageBinding(t.Context(), actor, op, args)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "CREATE FUNCTION fail_binding_alias() RETURNS trigger LANGUAGE plpgsql AS" +
-" $$ BEGIN RAISE EXCEPTION 'synthetic alias failure'; END $$;\n CREATE TRI" +
-"GGER fail_binding_alias BEFORE INSERT ON shuttle_massage_binding_operati" +
-"on_aliases FOR EACH ROW EXECUTE FUNCTION fail_binding_alias()")
+		Exec(t.Context(), "CREATE FUNCTION fail_binding_alias() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN "+
+			"RAISE EXCEPTION 'synthetic alias failure'; END $$;\n"+
+			" CREATE TRIGGER fail_binding_alias BEFORE INSERT ON "+
+			"shuttle_massage_binding_operation_aliases FOR EACH ROW EXECUTE FUNCTION "+
+			"fail_binding_alias()")
 	require.NoError(t, err)
 	alias := uuid.New()
 	_, err = f.H.store.AdoptMassageBinding(t.Context(), actor, alias, prep.ID, args)
@@ -216,8 +217,8 @@ func TestMassageBindingAdoptionFailureAndAuthorizationLeaveNoEffect(t *testing.T
 	require.NoError(t, err)
 	session := nativeMassageSession(t, f, actor, 11001)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interva" +
-"l '1 second' WHERE user_id=$1", actor.UserID)
+		Exec(t.Context(), "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 "+
+			"second' WHERE user_id=$1", actor.UserID)
 	require.NoError(t, err)
 	_, err = f.H.store.MassageBindingStatus(t.Context(), actor, &session, alias, uuid.Nil)
 	require.ErrorIs(t, err, db.ErrMiniAppDenied)
@@ -244,8 +245,8 @@ func TestMassageBindingPendingPaginationReachesEveryCanonicalProposal(t *testing
 	require.NoError(t, err)
 	// The continuation remains usable after the cursor proposal itself expires.
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_massage_binding_operations SET expires_at=clock_timestamp" +
-"()-interval '1 second' WHERE proposal_id=$1", cursor)
+		Exec(t.Context(), "UPDATE shuttle_massage_binding_operations SET "+
+			"expires_at=clock_timestamp()-interval '1 second' WHERE proposal_id=$1", cursor)
 	require.NoError(t, err)
 	second, err := f.H.store.PendingMassageBindings(t.Context(), actor, nil, uuid.Nil, cursor)
 	require.NoError(t, err)

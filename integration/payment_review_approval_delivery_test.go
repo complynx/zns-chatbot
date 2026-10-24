@@ -21,8 +21,8 @@ func paymentApprovalFixture(
 	t.Helper()
 	f, scope, review := reviewWorkspaceFixture(t)
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_users SET profile=jsonb_build_object('language_code',$1::" +
-"text) WHERE id=$2", language, f.AmbassadorID)
+		Exec(t.Context(), "UPDATE shuttle_users SET profile=jsonb_build_object('language_code',$1::text) WHERE "+
+			"id=$2", language, f.AmbassadorID)
 	require.NoError(t, err)
 	w, err := f.H.store.PreparePaymentReviewWorkspace(
 		t.Context(),

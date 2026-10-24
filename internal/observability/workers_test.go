@@ -21,7 +21,17 @@ func TestWorkerDurationMetricsBoundLabelsAndRecordSecondsWithCancelledContext(t 
 	telemetry, err := observability.New(t.Context(), observability.Options{})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, telemetry.Shutdown(context.Background())) })
-	for _, kind := range []string{"shuttle_task", "zinusya_profile_name_sync", "zinusya_payment_notification", "zinusya_pair_notification", "zinusya_order_notification", "zinusya_knowledge_notification", "zinusya_avatar_delivery", "zinusya_massage_reminder", "zinusya_massage_specialist_notice"} {
+	for _, kind := range []string{
+		"shuttle_task",
+		"zinusya_profile_name_sync",
+		"zinusya_payment_notification",
+		"zinusya_pair_notification",
+		"zinusya_order_notification",
+		"zinusya_knowledge_notification",
+		"zinusya_avatar_delivery",
+		"zinusya_massage_reminder",
+		"zinusya_massage_specialist_notice",
+	} {
 		for _, outcome := range []string{"returned", "snoozed", "cancelled", "error"} {
 			telemetry.RecordWorkerDuration(t.Context(), kind, outcome, 250*time.Millisecond)
 		}
@@ -41,7 +51,17 @@ func TestWorkerDurationMetricsBoundLabelsAndRecordSecondsWithCancelledContext(t 
 	telemetry.MetricsHandler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/metrics", nil))
 	require.Equal(t, http.StatusOK, w.Code)
 	body := w.Body.String()
-	for _, kind := range []string{"shuttle_task", "zinusya_profile_name_sync", "zinusya_payment_notification", "zinusya_pair_notification", "zinusya_order_notification", "zinusya_knowledge_notification", "zinusya_avatar_delivery", "zinusya_massage_reminder", "zinusya_massage_specialist_notice"} {
+	for _, kind := range []string{
+		"shuttle_task",
+		"zinusya_profile_name_sync",
+		"zinusya_payment_notification",
+		"zinusya_pair_notification",
+		"zinusya_order_notification",
+		"zinusya_knowledge_notification",
+		"zinusya_avatar_delivery",
+		"zinusya_massage_reminder",
+		"zinusya_massage_specialist_notice",
+	} {
 		for _, outcome := range []string{"returned", "snoozed", "cancelled", "error"} {
 			count, sum := 1, "0.25"
 			if kind == "shuttle_task" && outcome == "error" {

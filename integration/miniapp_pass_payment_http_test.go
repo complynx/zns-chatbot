@@ -176,7 +176,16 @@ func TestNativePassPaymentHTTPStrictClaimsAndOwnerIsolation(t *testing.T) {
 	f, owner := nativePassPaymentHTTPFixture(t)
 	file := paymentFile(t, f.H, f.OwnerID, 66201, "native-pass-strict", time.Now().UTC().Truncate(time.Second))
 	body := nativePassPaymentHTTPBody(t, f, "strict-claim", file, 3087, payments.Initial)
-	for _, invalid := range []string{`{}`, `null`, strings.Replace(body, `,"purpose":"initial"`, "", 1), strings.TrimSuffix(body, "}") + `,"currency":"BYN"}`, strings.TrimSuffix(body, "}") + `,"operation_id":"duplicate"}`, body + ` {}`, strings.Replace(body, `"initial"`, `null`, 1), strings.Replace(body, `3087`, `9007199254740992`, 1)} {
+	for _, invalid := range []string{
+		`{}`,
+		`null`,
+		strings.Replace(body, `,"purpose":"initial"`, "", 1),
+		strings.TrimSuffix(body, "}") + `,"currency":"BYN"}`,
+		strings.TrimSuffix(body, "}") + `,"operation_id":"duplicate"}`,
+		body + ` {}`,
+		strings.Replace(body, `"initial"`, `null`, 1),
+		strings.Replace(body, `3087`, `9007199254740992`, 1),
+	} {
 		code, raw, _ := appCall(
 			t,
 			f.H,
@@ -208,12 +217,21 @@ func TestNativePassPaymentHTTPStrictClaimsAndOwnerIsolation(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, code, string(raw))
 	first := nativePassPaymentHTTPSubmit(t, f, owner, body)
 	admin := detailsAppSession(t, f.H, 11001, 133)
-	for _, path := range []string{nativePassPaymentHTTPEvent(f) + "/evidence/" + first.ID.String(), nativePassPaymentHTTPEvent(f) + "/passes/" + f.Pass.ID.String(), nativePassPaymentHTTPEvent(f) + "/operations/strict-claim"} {
+	for _, path := range []string{
+		nativePassPaymentHTTPEvent(f) + "/evidence/" + first.ID.String(),
+		nativePassPaymentHTTPEvent(f) + "/passes/" + f.Pass.ID.String(),
+		nativePassPaymentHTTPEvent(f) + "/operations/strict-claim",
+	} {
 		code, raw, _ = appCall(t, f.H, http.MethodGet, path, "", admin.Token, appTestOrigin)
 		require.Equal(t, http.StatusNotFound, code, string(raw))
 		require.NotContains(t, string(raw), first.ID.String())
 	}
-	for _, query := range []string{"?limit=21", "?limit=0", "?after=", "?after=" + uuid.NewString() + "&after=" + uuid.NewString()} {
+	for _, query := range []string{
+		"?limit=21",
+		"?limit=0",
+		"?after=",
+		"?after=" + uuid.NewString() + "&after=" + uuid.NewString(),
+	} {
 		code, raw, _ = appCall(
 			t,
 			f.H,
@@ -232,7 +250,10 @@ func TestNativePassPaymentHTTPAgentOriginHistoryAndFiles(t *testing.T) {
 	f, owner := nativePassPaymentHTTPFixture(t)
 	file := paymentFile(t, f.H, f.OwnerID, 66301, "agent-origin-native-read", time.Now().UTC().Truncate(time.Second))
 	first := submittedPayment(t, f, "agent-proof-native", file, 3087, payments.Initial)
-	for _, path := range []string{nativePassPaymentHTTPEvent(f) + "/evidence?pass_id=" + f.Pass.ID.String(), nativePassPaymentHTTPEvent(f) + "/operations/agent-proof-native"} {
+	for _, path := range []string{
+		nativePassPaymentHTTPEvent(f) + "/evidence?pass_id=" + f.Pass.ID.String(),
+		nativePassPaymentHTTPEvent(f) + "/operations/agent-proof-native",
+	} {
 		code, raw, _ := appCall(t, f.H, http.MethodGet, path, "", owner.Token, appTestOrigin)
 		require.Equal(t, http.StatusOK, code, string(raw))
 		require.Contains(t, string(raw), first.ID.String())
@@ -335,9 +356,8 @@ func TestNativePassPaymentHTTPSessionLogoutWhileEventLockedPreventsWrite(t *test
 	require.Eventually(t, func() bool {
 		var waiting bool
 		readErr := f.H.store.Pool().
-			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
-"ase() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid" +
-")))", blocker.Conn().PgConn().PID()).
+			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND "+
+				"pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid)))", blocker.Conn().PgConn().PID()).
 			Scan(&waiting)
 		return readErr == nil && waiting
 	}, 3*time.Second, 10*time.Millisecond)
@@ -382,8 +402,8 @@ func TestNativePassPaymentHTTPSessionExpiryWhileSourceLockedRollsBack(t *testing
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()+interva" +
-"l '2 seconds' WHERE user_id=$1 AND state='active' RETURNING expires_at", owner.UserID).
+			QueryRow(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()+interval '2 "+
+				"seconds' WHERE user_id=$1 AND state='active' RETURNING expires_at", owner.UserID).
 			Scan(&expires),
 	)
 	type response struct {
@@ -407,9 +427,8 @@ func TestNativePassPaymentHTTPSessionExpiryWhileSourceLockedRollsBack(t *testing
 	require.Eventually(t, func() bool {
 		var waiting bool
 		readErr := f.H.store.Pool().
-			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
-"ase() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid" +
-")))", blocker.Conn().PgConn().PID()).
+			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND "+
+				"pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid)))", blocker.Conn().PgConn().PID()).
 			Scan(&waiting)
 		return readErr == nil && waiting
 	}, time.Second, 10*time.Millisecond, "submission must pass initial session authorization and wait on the source lock")
@@ -429,12 +448,19 @@ func TestNativePassPaymentHTTPSessionExpiryWhileSourceLockedRollsBack(t *testing
 		t.Fatal("source-blocked submission did not finish")
 	}
 	var evidence, receipts, actions, notices int
-	require.NoError(t, f.H.store.Pool().QueryRow(ctx, "SELECT\n (SELECT count(*) FROM shuttle_payment_evidence WHERE file_id=$1)" +
-",\n (SELECT count(*) FROM shuttle_payment_operations WHERE actor=$2 AND o" +
-"peration_id=$3),\n (SELECT count(*) FROM shuttle_native_payment_evidence_" +
-"actions WHERE actor=$2 AND operation_id=$3),\n (SELECT count(*) FROM shut" +
-"tle_payment_notifications n JOIN shuttle_payment_evidence e ON e.id=n.ev" +
-"idence_id WHERE e.file_id=$1)", file, paymentScope(t, f.H, f.OwnerID, false).Subject, operation).Scan(&evidence, &receipts, &actions, &notices))
+	require.NoError(t, f.H.store.Pool().QueryRow(ctx, "SELECT\n"+
+		" (SELECT count(*) FROM shuttle_payment_evidence WHERE file_id=$1),\n"+
+		" (SELECT count(*) FROM shuttle_payment_operations WHERE actor=$2 AND "+
+		"operation_id=$3),\n"+
+		" (SELECT count(*) FROM shuttle_native_payment_evidence_actions WHERE actor=$2 AND "+
+		"operation_id=$3),\n"+
+		" (SELECT count(*) FROM shuttle_payment_notifications n JOIN "+
+		"shuttle_payment_evidence e ON e.id=n.evidence_id WHERE e.file_id=$1)", file, paymentScope(
+		t,
+		f.H,
+		f.OwnerID,
+		false,
+	).Subject, operation).Scan(&evidence, &receipts, &actions, &notices))
 	require.Zero(t, evidence, "expired session must not submit evidence")
 	require.Zero(t, receipts, "expired submission must not save a receipt")
 	require.Zero(t, actions, "expired submission must not save native history")

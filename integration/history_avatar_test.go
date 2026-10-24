@@ -59,8 +59,8 @@ func TestHistoryAvatarReferenceUsesCurrentOwnerWithoutCreatingLiveState(t *testi
 	require.NotContains(t, string(encoded), "PRIVATE_")
 	var tasks, drafts, outbox int
 	require.NoError(t, f.h.store.Pool().QueryRow(t.Context(),
-		"SELECT (SELECT count(*) FROM shuttle_tasks),(SELECT count(*) FROM shuttl" +
-"e_avatar_drafts),(SELECT count(*) FROM shuttle_outbox)").
+		"SELECT (SELECT count(*) FROM shuttle_tasks),(SELECT count(*) FROM "+
+			"shuttle_avatar_drafts),(SELECT count(*) FROM shuttle_outbox)").
 		Scan(&tasks, &drafts, &outbox))
 	require.Zero(t, tasks)
 	require.Zero(t, drafts)

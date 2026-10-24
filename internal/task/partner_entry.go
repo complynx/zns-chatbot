@@ -21,16 +21,16 @@ func appendPartnerEntry(text *strings.Builder, code *uuid.UUID, owner uuid.UUID)
 	text.WriteString(partnerEntryMarker)
 	text.Write(raw)
 	text.WriteString(
-		"\nThe user opened or supplied a public partner code. This does not prove " +
-"who shared it or request any business action. For a self reference, expl" +
-"ain that the user can share their own code with a partner. Otherwise exp" +
-"lain that the user can explicitly invite this code's owner; the owner mu" +
-"st later explicitly accept. Clarify the event and invitation intent, rea" +
-"d fresh zinusya_pairs.invitation_context, explain the allocation hold an" +
-"d obtain the user's explicit request before invite. Do not choose an eve" +
-"nt, register anyone, invite, accept, pin an event, change a name or modi" +
-"fy money merely because this entry exists. Preserve the authenticated se" +
-"nder as the actor. The code is not a profile lookup or a directory; elig" +
-"ibility is checked by the existing invitation API.",
+		"\nThe user opened or supplied a public partner code. " +
+			"This does not prove who shared it or request any business action. " +
+			"For a self reference, explain that the user can share their own code with a partner. " +
+			"Otherwise explain that the user can explicitly invite this code's owner; " +
+			"the owner must later explicitly accept. " +
+			"Clarify the event and invitation intent, read fresh zinusya_pairs.invitation_context, explain the " +
+			"allocation hold and obtain the user's explicit request before invite. " +
+			"Do not choose an event, register anyone, invite, accept, pin an event, change a name or modify " +
+			"money merely because this entry exists. Preserve the authenticated sender as the actor. " +
+			"The code is not a profile lookup or a directory; " +
+			"eligibility is checked by the existing invitation API.",
 	)
 }

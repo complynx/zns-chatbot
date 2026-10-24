@@ -300,7 +300,11 @@ func TestAvatarFinalizationAPIForeignOwnerAndNativeOriginGuards(t *testing.T) {
 	code, raw = avatarDraftAgent(t, foreign, "finalization_operation", uuid.New(), map[string]any{"operation_id": op})
 	require.Equal(t, http.StatusOK, code, string(raw))
 	require.Contains(t, string(raw), `"status":"not_found"`)
-	for _, path := range []string{"/app/avatars/finalized/" + receipt.ArtifactID.String(), "/app/avatars/finalizations/operations/" + op.String(), "/app/avatars/finalized/" + receipt.ArtifactID.String() + "/content"} {
+	for _, path := range []string{
+		"/app/avatars/finalized/" + receipt.ArtifactID.String(),
+		"/app/avatars/finalizations/operations/" + op.String(),
+		"/app/avatars/finalized/" + receipt.ArtifactID.String() + "/content",
+	} {
 		code, raw, _ = appCall(t, f.h, http.MethodGet, path, "", foreign.session.Token, "")
 		require.Equal(t, http.StatusNotFound, code, string(raw))
 	}
@@ -389,8 +393,8 @@ func TestAvatarFinalizationAPIRechecksDraftAndNativeSessionDuringRender(t *testi
 				require.NoError(t, err)
 			} else {
 				_, err := f.h.store.Pool().
-					Exec(t.Context(), "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interva" +
-"l '1 second' WHERE user_id=$1", f.scope.UserID)
+					Exec(t.Context(), "UPDATE shuttle_miniapp_sessions"+
+						" SET expires_at=clock_timestamp()-interval '1 second' WHERE user_id=$1", f.scope.UserID)
 				require.NoError(t, err)
 				expected = http.StatusUnauthorized
 			}

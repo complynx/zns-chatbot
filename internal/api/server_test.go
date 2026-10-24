@@ -49,16 +49,16 @@ func newAPI(t *testing.T, a *intake) *api.Server {
 	return s
 }
 
-const validUpdate = "{\"update_id\":1,\"message\":{\"message_id\":2,\"from\":{\"id\":123,\"first_name\"" +
-":\"Daniel\"},\"chat\":{\"id\":123,\"type\":\"private\"},\"text\":\"Hello\"}}"
+const validUpdate = "{\"update_id\":1,\"message\":{\"message_id\":2,\"from\":{\"id\":123," +
+	"\"first_name\":\"Daniel\"},\"chat\":{\"id\":123,\"type\":\"private\"},\"text\":\"Hello\"}}"
 
 func TestPermanentlyUnsupportedIntakeDoesNotRequestRedelivery(t *testing.T) {
 	t.Parallel()
 	a := &intake{failure: task.ErrUnsupportedUpdate}
 	s := newAPI(t, a)
-	callback := "{\"update_id\":3,\"callback_query\":{\"id\":\"callback-3\",\"from\":{\"id\":123,\"" +
-"first_name\":\"Daniel\"},\"message\":{\"message_id\":2,\"chat\":{\"id\":123,\"type" +
-"\":\"private\"}},\"data\":\"invalid\"}}"
+	callback := "{\"update_id\":3,\"callback_query\":{\"id\":\"callback-3\",\"from\":{\"id\":123," +
+		"\"first_name\":\"Daniel\"},\"message\":{\"message_id\":2,\"chat\":{\"id\":123," +
+		"\"type\":\"private\"}},\"data\":\"invalid\"}}"
 	w := post(s, callback, "test-secret")
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Body.String(), `"ignored":true`)

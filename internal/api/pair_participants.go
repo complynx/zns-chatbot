@@ -22,7 +22,7 @@ const routeStatus = "status"
 type ownedPairArguments struct {
 	EventID uuid.UUID `json:"event_id,omitempty"`
 	After   uuid.UUID `json:"after,omitempty"`
-	Limit   int32     `json:"limit,omitempty"    minimum:"1" maximum:"20"`
+	Limit   int32     `json:"limit,omitempty" minimum:"1" maximum:"20"`
 }
 
 type ownedPairListResult struct {

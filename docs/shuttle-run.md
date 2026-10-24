@@ -25,3 +25,16 @@ CGO_ENABLED=0 go build ./cmd/shuttle
 ```
 
 Run database-heavy commands sequentially within the available connection and memory budget. The [integration runner](shuttle-integration-batches.md) bounds the complete PostgreSQL package and verifies exact discovery coverage. A successful subset does not establish complete-suite acceptance. Use the [QA procedure](shuttle-qa.md) for native/agent behavior and the [roadmap](shuttle-roadmap.md) for remaining work. Concrete installation configuration is maintained separately.
+
+## Source formatting
+
+Maintained Go code and tests use a 120-character line limit, including string
+literals and comments. Both the formatter and `lll` count a tab as one character.
+Generated code follows its generator. Keep struct tag separators compact; the
+formatter does not pad tags.
+
+Split long strings at words, sentences, SQL clauses or JSON property boundaries.
+Preserve the exact runtime bytes, including spaces, newlines and Unicode.
+Use named constants for long reusable descriptions. Keep schema descriptions and
+validation equivalent when moving metadata out of a struct tag. Do not exempt
+strings from the limit or suppress a length check to hide unreadable content.

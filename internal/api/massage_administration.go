@@ -59,16 +59,15 @@ func massageAdministrationReadMethod() map[string]any {
 	}
 	return administrativeRead(
 		"massage_bookings",
-		"Read retained massage bookings and cancellations for one deployment even"+
-			"t, across owners. Requires global zinusya.admin; event authority, an ass"+
-			"igned pass and public specialist IDs do not grant this read. Returns own"+
-			"er UUIDs with booking terms, no private legal/passport fields or Telegra"+
-			"m credentials. Follow next_after as after until absent; pages may contai"+
-			"n fewer than limit due to the byte bound. Includes event timezone and ob"+
-			"servation time; preserve each booking's historical terms/timezone snapsh"+
-			"ot. Historical access needs no active pass or enabled module. This reads"+
-			" history, not a staff booking permission or current reservation availabi"+
-			"lity.",
+		"Read retained massage bookings and cancellations for one deployment event, across owners. "+
+			"Requires global zinusya.admin; event authority, an assigned pass and public specialist "+
+			"IDs do not grant this read. Returns owner UUIDs with booking terms, no private "+
+			"legal/passport fields or Telegram credentials. Follow next_after as after until absent; "+
+			"pages may contain fewer than limit due to the byte bound. "+
+			"Includes event timezone and observation time; "+
+			"preserve each booking's historical terms/timezone snapshot. "+
+			"Historical access needs no active pass or enabled module. "+
+			"This reads history, not a staff booking permission or current reservation availability.",
 		properties,
 		[]string{schemaEventID},
 		[]string{schemaEventID, schemaTimezone, schemaObservedAt, "bookings"},

@@ -22,10 +22,10 @@ func TestProfileLatinOmissionPreservesLegacyRequestBytes(t *testing.T) {
 	//nolint:testifylint // Exact bytes, including field order, define legacy idempotency hashes.
 	require.Equal(
 		t,
-		"{\"operation_id\":\"00000000-0000-0000-0000-000000000001\",\"expected_version"+
-			"\":0,\"kind\":\"set_name\",\"full_name\":\"Анна Иванова\",\"first_name\":\"Анна\","+
-			"\"last_name\":\"Иванова\",\"expectation_id\":\"00000000-0000-0000-0000-00000000"+
-			"0000\"}",
+		"{\"operation_id\":\"00000000-0000-0000-0000-000000000001\",\"expected_version\":0,"+
+			"\"kind\":\"set_name\",\"full_name\":\"Анна Иванова\","+
+			"\"first_name\":\"Анна\",\"last_name\":\"Иванова\","+
+			"\"expectation_id\":\"00000000-0000-0000-0000-000000000000\"}",
 		string(raw),
 	)
 	var old UserProfile

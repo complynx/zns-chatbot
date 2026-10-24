@@ -134,8 +134,8 @@ func TestOrderEvidenceMutationNativeCompletionResolvesAgentReadOnly(t *testing.T
 	require.NoError(
 		t,
 		f.H.store.Pool().
-			QueryRow(t.Context(), "SELECT result IS NOT NULL FROM shuttle_order_review_calls WHERE actor_id" +
-"=$1 AND operation_id=$2", scope.UserID, op).
+			QueryRow(t.Context(), "SELECT result IS NOT NULL FROM shuttle_order_review_calls WHERE actor_id=$1 AND "+
+				"operation_id=$2", scope.UserID, op).
 			Scan(&completed),
 	)
 	require.False(t, completed, "status must not create an outer write receipt")

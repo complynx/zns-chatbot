@@ -97,7 +97,13 @@ func (s *Server) prepareHistory(
 	out := &historyPreparationResponse{}
 	out.Body.Status, out.Body.OperationID, out.Body.Arguments = agentPrepared, in.Body.OperationID, prepared.Arguments
 	out.Body.Preconditions.ProposalID, out.Body.ExpiresAt = prepared.ID, prepared.ExpiresAt
-	out.Body.Description = "Apply historical data from archive " + prepared.Arguments.ArchiveID.String() + " SHA-256 " + prepared.Arguments.SHA256 + " using " + prepared.Arguments.ProjectionVersion + ". No live accounts, passes or confirmed money are created."
+	out.Body.Description = "Apply historical data from archive " +
+		prepared.Arguments.ArchiveID.String() +
+		" SHA-256 " +
+		prepared.Arguments.SHA256 +
+		" using " +
+		prepared.Arguments.ProjectionVersion +
+		". No live accounts, passes or confirmed money are created."
 	return out, nil
 }
 

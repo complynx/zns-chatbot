@@ -29,7 +29,12 @@ func unknownSpecialistNotice(
 	staff := ownerProfileScope(t, f.H, f.AmbassadorID)
 	owner := ownerProfileScope(t, f.H, f.OwnerID)
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_users SET profile=$2 WHERE id=$1", owner.UserID, json.RawMessage(`{"first_name":"Hidden Client"}`))
+		Exec(
+			t.Context(),
+			"UPDATE shuttle_users SET profile=$2 WHERE id=$1",
+			owner.UserID,
+			json.RawMessage(`{"first_name":"Hidden Client"}`),
+		)
 	require.NoError(t, err)
 	args := massageBookingArgs(f, schedule, 0)
 	args.Selection.SpecialistID = "beth"
@@ -79,17 +84,17 @@ func TestMassageSpecialistAdministrationResolvesExactlyAndPreservesOriginalRecei
 			require.NoError(
 				t,
 				f.H.store.Pool().
-					QueryRow(t.Context(), "SELECT massage_specialist_notification_id,num_nonnulls(notification_id,p" +
-"air_notification_id,order_notification_id,massage_reminder_id,massage_sp" +
-"ecialist_notification_id) FROM shuttle_notification_resolutions WHERE op" +
-"eration_id='specialist-resolution'").
+					QueryRow(t.Context(), "SELECT massage_specialist_notification_id,num_nonnulls(notification_id,"+
+						"pair_notification_id,order_notification_id,massage_reminder_id,"+
+						"massage_specialist_notification_id) FROM shuttle_notification_resolutions WHERE "+
+						"operation_id='specialist-resolution'").
 					Scan(&target, &targets),
 			)
 			require.Equal(t, unknown.ID, target)
 			require.Equal(t, 1, targets)
 			_, err := f.H.store.Pool().
-				Exec(t.Context(), "UPDATE shuttle_notification_resolutions SET expires_at=clock_timestamp()" +
-"-interval '1 second' WHERE operation_id='specialist-resolution'")
+				Exec(t.Context(), "UPDATE shuttle_notification_resolutions SET expires_at=clock_timestamp()-interval "+
+					"'1 second' WHERE operation_id='specialist-resolution'")
 			require.NoError(t, err)
 			f.H.start(t)
 			expected := 1
@@ -304,8 +309,8 @@ func TestMassageSpecialistAdministrationChecksExactAndUnexpiredProposal(t *testi
 	code, raw := adminRequest(t, f.H, f.Admin, http.MethodPost, notificationResolutionAPI, altered)
 	assertSpecialistResolutionRejected(t, code, raw)
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_notification_resolutions SET expires_at=clock_timestamp()" +
-"-interval '1 second' WHERE operation_id='specialist-proposal-guards'")
+		Exec(t.Context(), "UPDATE shuttle_notification_resolutions SET expires_at=clock_timestamp()-interval "+
+			"'1 second' WHERE operation_id='specialist-proposal-guards'")
 	require.NoError(t, err)
 	code, raw = adminRequest(t, f.H, f.Admin, http.MethodPost, notificationResolutionAPI, body)
 	assertSpecialistResolutionRejected(t, code, raw)

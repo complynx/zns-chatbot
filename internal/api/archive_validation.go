@@ -21,7 +21,7 @@ const (
 
 type archiveValidationArguments struct {
 	SourceFileID uuid.UUID `json:"source_file_id"`
-	SHA256       string    `json:"sha256"         minLength:"64" maxLength:"64" pattern:"^[0-9a-f]{64}$"`
+	SHA256       string    `json:"sha256" minLength:"64" maxLength:"64" pattern:"^[0-9a-f]{64}$"`
 }
 
 func (s *Server) registerArchiveValidation(api huma.API) {
@@ -69,8 +69,8 @@ func (s *Server) validateStoredArchive(
 func storedArchiveValidationMethod() map[string]any {
 	method := administrativeRead(
 		"validate_stored_archive",
-		"Recheck a stored legacy archive from its exact database bytes. No histor"+
-			"y is applied and no source records are exposed.",
+		"Recheck a stored legacy archive from its exact database bytes. "+
+			"No history is applied and no source records are exposed.",
 		map[string]any{
 			schemaArchiveID: map[string]any{manifestType: schemaString, schemaFormat: schemaUUID},
 		},
@@ -129,10 +129,9 @@ func (s *Server) endArchiveValidation() { <-s.archiveValidation }
 func archiveValidationMethod() map[string]any {
 	method := administrativeRead(
 		"validate_archive",
-		"Verify a caller-owned legacy archive using its source_file_id and expect"+
-			"ed SHA-256. Read only: no extraction, storage or import. Telegram files "+
-			"have a 20 MiB read limit; larger archives require the operator upload AP"+
-			"I.",
+		"Verify a caller-owned legacy archive using its source_file_id and expected SHA-256. "+
+			"Read only: no extraction, storage or import. Telegram files have a 20 MiB read limit; "+
+			"larger archives require the operator upload API.",
 		map[string]any{
 			schemaSourceFileID: map[string]any{manifestType: schemaString, schemaFormat: schemaUUID},
 			schemaSHA256:       map[string]any{manifestType: schemaString, schemaPattern: schemaSHA256Pattern},

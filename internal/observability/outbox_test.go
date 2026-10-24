@@ -41,17 +41,17 @@ func TestOutboxMetricsCacheAgeAndSuppressFailedSnapshotsUntilRecovery(t *testing
 	body := taskMetricsBody(t, telemetry)
 	require.Contains(t, body, "\nzinusya_outbox_collection_success 1\n")
 	require.Contains(t, body, "\nzinusya_outbox_last_success_timestamp_seconds 1000\n")
-	require.Contains(t, body, "zinusya_outbox_unresolved{state=\"pending\"} 2\n")
+	require.Contains(t, body, `zinusya_outbox_unresolved{state="pending"} 2`+"\n")
 	rows[0].Count = 900
 	now = start.Add(5 * time.Second)
 	body = taskMetricsBody(t, telemetry)
-	require.Contains(t, body, "zinusya_outbox_unresolved{state=\"pending\"} 2\n")
-	require.Contains(t, body, "zinusya_outbox_oldest_created_age_seconds{state=\"pending\"} 15\n")
-	require.Contains(t, body, "zinusya_outbox_oldest_created_age_seconds{state=\"retryable\"} 0\n")
-	require.Contains(t, body, "zinusya_outbox_oldest_created_age_seconds{state=\"send_inflight\"} 0\n")
+	require.Contains(t, body, `zinusya_outbox_unresolved{state="pending"} 2`+"\n")
+	require.Contains(t, body, `zinusya_outbox_oldest_created_age_seconds{state="pending"} 15`+"\n")
+	require.Contains(t, body, `zinusya_outbox_oldest_created_age_seconds{state="retryable"} 0`+"\n")
+	require.Contains(t, body, `zinusya_outbox_oldest_created_age_seconds{state="send_inflight"} 0`+"\n")
 	now = start.Add(25 * time.Second)
 	require.Contains(t, taskMetricsBody(t, telemetry),
-		"zinusya_outbox_oldest_created_age_seconds{state=\"retryable\"} 5\n")
+		`zinusya_outbox_oldest_created_age_seconds{state="retryable"} 5`+"\n")
 	require.Equal(t, 1, calls)
 	failed = true
 	now = start.Add(31 * time.Second)
@@ -71,8 +71,8 @@ func TestOutboxMetricsCacheAgeAndSuppressFailedSnapshotsUntilRecovery(t *testing
 	body = taskMetricsBody(t, telemetry)
 	require.Contains(t, body, "\nzinusya_outbox_collection_success 1\n")
 	require.Contains(t, body, "\nzinusya_outbox_last_success_timestamp_seconds 1067\n")
-	require.Contains(t, body, "zinusya_outbox_unresolved{state=\"pending\"} 4\n")
-	require.Contains(t, body, "zinusya_outbox_oldest_created_age_seconds{state=\"pending\"} 3\n")
+	require.Contains(t, body, `zinusya_outbox_unresolved{state="pending"} 4`+"\n")
+	require.Contains(t, body, `zinusya_outbox_oldest_created_age_seconds{state="pending"} 3`+"\n")
 	require.Equal(t, 3, calls)
 }
 

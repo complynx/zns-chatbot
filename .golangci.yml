@@ -43,6 +43,8 @@ formatters:
       # Target maximum line length.
       # Default: 100
       max-len: 120
+      tab-len: 1
+      reformat-tags: false
 
 linters:
   enable:

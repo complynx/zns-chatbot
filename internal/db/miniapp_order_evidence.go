@@ -104,7 +104,10 @@ func (s *Store) MiniAppOrderEvidenceSubmissionReceipt(
 	}
 	defer rollbackLegacyArchive(ctx, tx)
 	row, err := s.q.WithTx(tx).
-		ReadOrderEvidenceOperation(ctx, sqlc.ReadOrderEvidenceOperationParams{UserID: scope.UserID, OperationID: operation, Kind: paymentSubmission})
+		ReadOrderEvidenceOperation(
+			ctx,
+			sqlc.ReadOrderEvidenceOperationParams{UserID: scope.UserID, OperationID: operation, Kind: paymentSubmission},
+		)
 	if err != nil {
 		return OrderEvidenceOperation{}, err
 	}
@@ -139,7 +142,10 @@ func (s *Store) MiniAppOrderEvidenceFileList(
 	}
 	defer rollbackLegacyArchive(ctx, tx)
 	rows, err := s.q.WithTx(tx).
-		ListMiniAppOrderEvidenceFiles(ctx, sqlc.ListMiniAppOrderEvidenceFilesParams{UserID: scope.UserID, AfterID: after, PageLimit: limit + 1})
+		ListMiniAppOrderEvidenceFiles(
+			ctx,
+			sqlc.ListMiniAppOrderEvidenceFilesParams{UserID: scope.UserID, AfterID: after, PageLimit: limit + 1},
+		)
 	if err != nil {
 		return MiniAppOrderEvidenceFiles{}, err
 	}
@@ -214,7 +220,16 @@ func (s *Store) MiniAppOrderEvidenceSource(
 	}
 	defer rollbackLegacyArchive(ctx, tx)
 	row, err := s.q.WithTx(tx).
-		GetOwnedFile(ctx, sqlc.GetOwnedFileParams{ID: file, ID_2: scope.UserID, BotID: scope.BotID, ZitadelOrg: scope.Organization, ZitadelSubject: scope.Subject})
+		GetOwnedFile(
+			ctx,
+			sqlc.GetOwnedFileParams{
+				ID:             file,
+				ID_2:           scope.UserID,
+				BotID:          scope.BotID,
+				ZitadelOrg:     scope.Organization,
+				ZitadelSubject: scope.Subject,
+			},
+		)
 	if err != nil {
 		return File{}, err
 	}

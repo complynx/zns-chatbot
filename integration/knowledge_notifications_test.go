@@ -71,7 +71,12 @@ func TestKnowledgeNoticesDeliverReviewAndDecisionOnceAcrossRestart(t *testing.T)
 	require.Len(t, sentNotifications(f.h.peers, 41002), 1)
 	f.h.stop(t)
 	_, err := f.h.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_users SET profile=$2 WHERE id=$1", f.user.UserID, json.RawMessage(`{"language_code":"uk"}`))
+		Exec(
+			t.Context(),
+			"UPDATE shuttle_users SET profile=$2 WHERE id=$1",
+			f.user.UserID,
+			json.RawMessage(`{"language_code":"uk"}`),
+		)
 	require.NoError(t, err)
 	knowledgeApply(
 		t,

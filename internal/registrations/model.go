@@ -38,7 +38,7 @@ type Rules struct {
 	Pricing              *TierPolicy                       `json:"pricing,omitempty"`
 	LeaderCapacity       int32                             `json:"leader_capacity"`
 	FollowerCapacity     int32                             `json:"follower_capacity"`
-	PriceMinor           int64                             `json:"price_minor"                    minimum:"0" maximum:"9007199254740991"`
+	PriceMinor           int64                             `json:"price_minor" minimum:"0" maximum:"9007199254740991"`
 	Currency             string                            `json:"currency"`
 	CurrencyScale        int32                             `json:"currency_scale"`
 	ClosesAt             time.Time                         `json:"closes_at"`
@@ -51,7 +51,15 @@ func (r *Rules) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return ErrInvalid
 	}
-	for _, name := range []string{"leader_capacity", "follower_capacity", "price_minor", "currency", "currency_scale", "closes_at", "payment_window_seconds"} {
+	for _, name := range []string{
+		"leader_capacity",
+		"follower_capacity",
+		"price_minor",
+		"currency",
+		"currency_scale",
+		"closes_at",
+		"payment_window_seconds",
+	} {
 		value, present := fields[name]
 		if !present || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
 			return ErrInvalid
@@ -76,7 +84,9 @@ func (r Rules) Normalize() (Rules, error) {
 	r.Currency = strings.TrimSpace(r.Currency)
 	if r.LeaderCapacity < 0 || r.FollowerCapacity < 0 ||
 		r.PriceMinor < 0 || r.PriceMinor > maxJSONInteger || !currencyCode.MatchString(r.Currency) ||
-		r.CurrencyScale < 0 || r.CurrencyScale > maxCurrencyScale || r.ClosesAt.IsZero() || r.ClosesAt.Nanosecond()%int(time.Microsecond) != 0 ||
+		r.CurrencyScale < 0 || r.CurrencyScale > maxCurrencyScale || r.ClosesAt.IsZero() || r.ClosesAt.Nanosecond()%int(
+		time.Microsecond,
+	) != 0 ||
 		r.PaymentWindowSeconds < 1 {
 		return Rules{}, ErrInvalid
 	}

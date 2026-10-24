@@ -45,9 +45,8 @@ func TestMiniAppPaymentReviewHTTPInvalidationDuringEventWaitPreventsCredit(t *te
 	require.Eventually(t, func() bool {
 		var waiting bool
 		readErr := f.H.store.Pool().QueryRow(ctx,
-			"SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
-"ase() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid" +
-")))",
+			"SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND "+
+				"pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid)))",
 			blocker.Conn().PgConn().PID()).
 			Scan(&waiting)
 		return readErr == nil && waiting
@@ -104,9 +103,8 @@ func TestMiniAppPaymentReviewHTTPExpiryDuringPayerWaitPreventsCredit(t *testing.
 	require.Eventually(t, func() bool {
 		var waiting bool
 		readErr := f.H.store.Pool().QueryRow(ctx,
-			"SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
-"ase() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid" +
-")))",
+			"SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND "+
+				"pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid)))",
 			blocker.Conn().PgConn().PID()).
 			Scan(&waiting)
 		return readErr == nil && waiting

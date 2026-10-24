@@ -34,18 +34,27 @@ func nativePaymentEvidenceActions(
 	task uuid.UUID,
 	limit int32,
 ) ([]NativePaymentEvidenceAction, error) {
-	rows, err := tx.Query(ctx, "SELECT a.operation_id,e.id,(op.result->>'pass_id')::uuid,\n (op.result->>" +
-"'id')::uuid,(op.result->>'file_id')::uuid,e.name,e.timezone,op.result->>" +
-"'state',a.completed_at\n FROM shuttle_native_payment_evidence_actions a\n " +
-"JOIN shuttle_payment_operations op ON op.bot_id=a.bot_id AND op.organiza" +
-"tion_id=a.organization_id\n AND op.actor=a.actor AND op.operation_id=a.op" +
-"eration_id AND op.kind='submit'\n JOIN shuttle_events e ON e.id=(op.resul" +
-"t->>'event_id')::uuid\n WHERE a.user_id=$1 AND a.bot_id=$2 AND a.organiza" +
-"tion_id=$3 AND a.actor=$4\n AND (op.result->>'user_id')::uuid=$1 AND e.bo" +
-"t_id=$2 AND e.organization_id=$3\n AND 'registrations'=ANY(e.modules)\n AN" +
-"D ($5::uuid='00000000-0000-0000-0000-000000000000' OR EXISTS(\n SELECT 1 " +
-"FROM shuttle_tasks t WHERE t.id=$5 AND t.user_id=$1 AND a.completed_at<t" +
-".created_at))\n ORDER BY a.completed_at DESC,a.operation_id DESC LIMIT $6", scope.UserID, scope.BotID, scope.Organization, scope.Subject, task, limit)
+	rows, err := tx.Query(
+		ctx,
+		`SELECT a.operation_id,e.id,(op.result->>'pass_id')::uuid,
+ (op.result->>'id')::uuid,(op.result->>'file_id')::uuid,e.name,e.timezone,op.result->>'state',a.completed_at
+ FROM shuttle_native_payment_evidence_actions a
+ JOIN shuttle_payment_operations op ON op.bot_id=a.bot_id AND op.organization_id=a.organization_id
+ AND op.actor=a.actor AND op.operation_id=a.operation_id AND op.kind='submit'
+ JOIN shuttle_events e ON e.id=(op.result->>'event_id')::uuid
+ WHERE a.user_id=$1 AND a.bot_id=$2 AND a.organization_id=$3 AND a.actor=$4
+ AND (op.result->>'user_id')::uuid=$1 AND e.bot_id=$2 AND e.organization_id=$3
+ AND 'registrations'=ANY(e.modules)
+ AND ($5::uuid='00000000-0000-0000-0000-000000000000' OR EXISTS(
+ SELECT 1 FROM shuttle_tasks t WHERE t.id=$5 AND t.user_id=$1 AND a.completed_at<t.created_at))
+ ORDER BY a.completed_at DESC,a.operation_id DESC LIMIT $6`,
+		scope.UserID,
+		scope.BotID,
+		scope.Organization,
+		scope.Subject,
+		task,
+		limit,
+	)
 	if err != nil {
 		return nil, err
 	}

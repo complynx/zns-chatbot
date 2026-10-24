@@ -41,18 +41,18 @@ type ScheduleLabel struct {
 }
 
 type ScheduleService struct {
-	ID         string        `json:"id"          pattern:"^[a-z][a-z0-9_-]{0,31}$"`
+	ID         string        `json:"id" pattern:"^[a-z][a-z0-9_-]{0,31}$"`
 	Name       ScheduleLabel `json:"name"`
-	Blocks     int           `json:"blocks"                                        minimum:"1" maximum:"6"`
-	PriceMinor int64         `json:"price_minor"                                   minimum:"0" maximum:"9000000000000000"`
+	Blocks     int           `json:"blocks" minimum:"1" maximum:"6"`
+	PriceMinor int64         `json:"price_minor" minimum:"0" maximum:"9000000000000000"`
 }
 
 type ScheduleWindow struct {
-	ID       string        `json:"id"        pattern:"^[a-z][a-z0-9_-]{0,31}$"`
+	ID       string        `json:"id" pattern:"^[a-z][a-z0-9_-]{0,31}$"`
 	Name     ScheduleLabel `json:"name"`
 	StartsAt time.Time     `json:"starts_at"`
 	EndsAt   time.Time     `json:"ends_at"`
-	Tables   int           `json:"tables"                                      minimum:"0" maximum:"64"`
+	Tables   int           `json:"tables" minimum:"0" maximum:"64"`
 }
 
 type ScheduleWorkSpan struct {
@@ -62,21 +62,21 @@ type ScheduleWorkSpan struct {
 }
 
 type ScheduleSpecialist struct {
-	ID            string             `json:"id"             pattern:"^[a-z][a-z0-9_-]{0,31}$"`
+	ID            string             `json:"id" pattern:"^[a-z][a-z0-9_-]{0,31}$"`
 	Name          ScheduleLabel      `json:"name"`
 	RequiresTable bool               `json:"requires_table"`
-	ServiceIDs    []string           `json:"service_ids"                                      minItems:"1" maxItems:"16" uniqueItems:"true"`
-	WorkSpans     []ScheduleWorkSpan `json:"work_spans"                                       minItems:"1" maxItems:"64"`
+	ServiceIDs    []string           `json:"service_ids" minItems:"1" maxItems:"16" uniqueItems:"true"`
+	WorkSpans     []ScheduleWorkSpan `json:"work_spans" minItems:"1" maxItems:"64"`
 }
 
 type ScheduleDocument struct {
-	Currency      string               `json:"currency"       pattern:"^[A-Z]{3}$"`
-	CurrencyScale int                  `json:"currency_scale"                      minimum:"0"  maximum:"4"`
-	BlockSeconds  int                  `json:"block_seconds"                       minimum:"60" maximum:"3600"`
-	BufferSeconds int                  `json:"buffer_seconds"                      minimum:"0"  maximum:"3599"`
-	Services      []ScheduleService    `json:"services"                                                        minItems:"1" maxItems:"16"`
-	Windows       []ScheduleWindow     `json:"windows"                                                         minItems:"1" maxItems:"32"`
-	Specialists   []ScheduleSpecialist `json:"specialists"                                                     minItems:"1" maxItems:"32"`
+	Currency      string               `json:"currency" pattern:"^[A-Z]{3}$"`
+	CurrencyScale int                  `json:"currency_scale" minimum:"0" maximum:"4"`
+	BlockSeconds  int                  `json:"block_seconds" minimum:"60" maximum:"3600"`
+	BufferSeconds int                  `json:"buffer_seconds" minimum:"0" maximum:"3599"`
+	Services      []ScheduleService    `json:"services" minItems:"1" maxItems:"16"`
+	Windows       []ScheduleWindow     `json:"windows" minItems:"1" maxItems:"32"`
+	Specialists   []ScheduleSpecialist `json:"specialists" minItems:"1" maxItems:"32"`
 }
 
 // Required zero/false values must be explicit on the wire, never inferred from omissions.
@@ -177,7 +177,8 @@ func validSpan(start, end time.Time) bool {
 // stable ordering for exact administrative approval hashes.
 func Normalize(d ScheduleDocument) (ScheduleDocument, error) {
 	if !currencyCode.MatchString(d.Currency) || d.CurrencyScale < 0 || d.CurrencyScale > MaxCurrencyScale ||
-		d.BlockSeconds < MinBlockSeconds || d.BlockSeconds > MaxBlockSeconds || d.BufferSeconds < 0 || d.BufferSeconds >= d.BlockSeconds ||
+		d.BlockSeconds < MinBlockSeconds || d.BlockSeconds > MaxBlockSeconds ||
+		d.BufferSeconds < 0 || d.BufferSeconds >= d.BlockSeconds ||
 		len(d.Services) < 1 || len(d.Services) > MaxServices || len(d.Windows) < 1 || len(d.Windows) > MaxWindows ||
 		len(d.Specialists) < 1 || len(d.Specialists) > MaxSpecialists {
 		return ScheduleDocument{}, ErrInvalid

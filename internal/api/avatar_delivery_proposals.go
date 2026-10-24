@@ -71,10 +71,10 @@ func avatarDeliveryProposalMethods() []map[string]any {
 	return []map[string]any{
 		administrativeRead(
 			"avatar_delivery_proposal",
-			"Recover your original avatar delivery repair proposal by exactly one ope"+
-				"ration_id OR proposal_id. Includes original arguments, delivery snapshot"+
-				", expiry and any immutable completed result. Pending is not approval; ex"+
-				"pired proposals cannot be confirmed. This read does not retry delivery.",
+			"Recover your original avatar delivery repair proposal by exactly one operation_id OR "+
+				"proposal_id. Includes original arguments, delivery snapshot, expiry and any "+
+				"immutable completed result. Pending is not approval; "+
+				"expired proposals cannot be confirmed. This read does not retry delivery.",
 			map[string]any{avatarProposalOperationField: uuidField, "proposal_id": uuidField},
 			nil,
 			[]string{
@@ -89,10 +89,10 @@ func avatarDeliveryProposalMethods() []map[string]any {
 		),
 		administrativeRead(
 			"avatar_delivery_pending",
-			"List your unexpired uncompleted avatar delivery repair proposals, at mos"+
-				"t 20 per page. Pass next_cursor as after for the next page; pages can be"+
-				" shorter due to the byte budget. Finding a proposal is not consent to re"+
-				"try.",
+			"List your unexpired uncompleted avatar delivery repair proposals, at most 20 per page. "+
+				"Pass next_cursor as after for the next page; "+
+				"pages can be shorter due to the byte budget. "+
+				"Finding a proposal is not consent to retry.",
 			map[string]any{
 				"after": uuidField,
 				"limit": map[string]any{

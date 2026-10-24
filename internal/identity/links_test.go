@@ -154,7 +154,14 @@ func (tr linkRaceTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 
 func TestTelegramIDPLinkDoesNotTrustCallerAccountOrInvalidScope(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"wrong email", "wrong organization", "wrong numeric id", "empty provider", "empty opaque subject", "inactive account"} {
+	for _, name := range []string{
+		"wrong email",
+		"wrong organization",
+		"wrong numeric id",
+		"empty provider",
+		"empty opaque subject",
+		"inactive account",
+	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			links, iam, client, account := linkedFixture(t)

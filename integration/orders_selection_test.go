@@ -103,9 +103,8 @@ func TestOrdersSelectionDurableRecoveryClearAndHistoricalReceipt(t *testing.T) {
 	require.NoError(
 		t,
 		reopened.Pool().
-			QueryRow(ctx, "SELECT (SELECT count(*) FROM shuttle_orders_selections),(SELECT count(*)" +
-" FROM shuttle_orders_selection_operations),(SELECT count(*) FROM shuttle" +
-"_payment_evidence)").
+			QueryRow(ctx, "SELECT (SELECT count(*) FROM shuttle_orders_selections),(SELECT count(*) FROM "+
+				"shuttle_orders_selection_operations),(SELECT count(*) FROM shuttle_payment_evidence)").
 			Scan(&drafts, &receipts, &evidence),
 	)
 	require.Equal(t, 1, drafts)

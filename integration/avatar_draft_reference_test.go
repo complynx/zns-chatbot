@@ -151,7 +151,10 @@ func TestAvatarDraftHistorySharesNativeAndAgentStateWithoutOriginalStorage(t *te
 	)
 	require.Equal(t, http.StatusUnprocessableEntity, code, string(raw))
 	require.Contains(t, string(raw), "send it again")
-	for _, path := range []string{"/internal/avatar-drafts/" + draft.ID.String() + "/original", "/internal/avatar-drafts/" + draft.ID.String() + "/preview/2"} {
+	for _, path := range []string{
+		"/internal/avatar-drafts/" + draft.ID.String() + "/original",
+		"/internal/avatar-drafts/" + draft.ID.String() + "/preview/2",
+	} {
 		code, raw = adminRequest(t, f.h, f.owner, http.MethodGet, path, nil)
 		require.Equal(t, http.StatusUnprocessableEntity, code, string(raw))
 		require.Contains(t, string(raw), "send it again")
@@ -224,8 +227,8 @@ func TestAvatarDraftHistoryRejectsBindingChangeDuringDownload(t *testing.T) {
 	require.NoError(
 		t,
 		f.h.store.Pool().
-			QueryRow(t.Context(), "SELECT (SELECT count(*) FROM shuttle_avatar_drafts),(SELECT count(*) FRO" +
-"M shuttle_avatar_draft_operations)").
+			QueryRow(t.Context(), "SELECT (SELECT count(*) FROM shuttle_avatar_drafts),"+
+				"(SELECT count(*) FROM shuttle_avatar_draft_operations)").
 			Scan(&drafts, &operations),
 	)
 	require.Zero(t, drafts)
@@ -431,9 +434,9 @@ func TestAvatarDraftReferencePreservesUploadsAndOldOperationReplay(t *testing.T)
 			original = nil
 		}
 		_, err = f.h.store.Pool().Exec(t.Context(),
-			"INSERT INTO shuttle_avatar_drafts(id,user_id,source_file_id,original,sou" +
-"rce_sha256,mime_type,frame_sha256,transform,version,source_size_bytes)\n " +
-"VALUES($1,$2,$3,$4,$5,'image/png',$6,$7,1,$8)",
+			"INSERT INTO shuttle_avatar_drafts(id,user_id,source_file_id,original,source_sha256,"+
+				"mime_type,frame_sha256,transform,version,source_size_bytes)\n VALUES($1,$2,$3,$4,$5,"+
+				"'image/png',$6,$7,1,$8)",
 			row.id, f.scope.UserID, row.source, original, digest[:], frame, transform, len(f.raw))
 		require.NoError(t, err)
 	}
@@ -453,13 +456,14 @@ func TestAvatarDraftReferencePreservesUploadsAndOldOperationReplay(t *testing.T)
 	require.NoError(t, err)
 	oldHash := sha256.Sum256(
 		[]byte(
-			`{"kind":"create_file","source_file_id":"` + fileID.String() + `","draft_id":"00000000-0000-0000-0000-000000000000"}`,
+			`{"kind":"create_file","source_file_id":"` + fileID.String() +
+				`","draft_id":"00000000-0000-0000-0000-000000000000"}`,
 		),
 	)
 	_, err = f.h.store.Pool().
-		Exec(t.Context(), "INSERT INTO shuttle_avatar_draft_operations(user_id,operation_id,kind,re" +
-"quest_hash,draft_id,result,native) VALUES($1,$2,'create_file',$3,$4,$5,f" +
-"alse)", f.scope.UserID, operation, oldHash[:], telegramID, result)
+		Exec(t.Context(), "INSERT INTO shuttle_avatar_draft_operations(user_id,operation_id,kind,request_hash,"+
+			"draft_id,result,native) VALUES($1,$2,'create_file',$3,$4,$5,false)",
+			f.scope.UserID, operation, oldHash[:], telegramID, result)
 	require.NoError(t, err)
 	upload, raw, err := f.h.store.AvatarDraftOriginal(t.Context(), f.scope, uploadID)
 	require.NoError(t, err)

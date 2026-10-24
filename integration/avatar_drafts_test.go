@@ -461,8 +461,8 @@ func TestAvatarDraftSessionExpiryDuringProcessingPreventsCommit(t *testing.T) {
 		t.Fatal("Renderer was not reached")
 	}
 	_, err := f.h.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interva" +
-"l '1 second' WHERE user_id=$1", f.session.UserID)
+		Exec(t.Context(), "UPDATE shuttle_miniapp_sessions"+
+			" SET expires_at=clock_timestamp()-interval '1 second' WHERE user_id=$1", f.session.UserID)
 	require.NoError(t, err)
 	close(release)
 	result := <-done

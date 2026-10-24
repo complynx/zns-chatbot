@@ -58,17 +58,16 @@ func (s *snapshot) inspect(t *testing.T) (legacyimport.Report, error) {
 func TestSnapshotInspectionIsRepeatableReadOnlyAndNotAnImport(t *testing.T) {
 	t.Parallel()
 	s := newSnapshot(t, map[string]string{
-		"users": "{\"_id\":{\"$oid\":\"1234567890abcdef12345678\"},\"bot_id\":123,\"user_id\":{\"$nu" +
-			"mberLong\":\"4503599627370495\"},\"legal_name\":\"PRIVATE_NAME\",\"pass_old\":{\"p" +
-			"aid\":true,\"bank\":\"PRIVATE_BANK\"}}" + "\n",
-		"messages": "{\"_id\":\"message-1\",\"user_id\":{\"$numberLong\":\"4503599627370495\"},\"role\"" +
-			":\"user\",\"content\":\"PRIVATE_MESSAGE\",\"date\":{\"$date\":{\"$numberLong\":\"0" +
-			"\"}}}" + "\n" +
-			"{\"_id\":\"message-2\",\"user_id\":4503599627370495,\"role\":\"assistant\",\"conte" +
-			"nt\":\"PRIVATE_REPLY\",\"date\":{\"$date\":\"2020-01-01T15:01:02+03:00\"}}" + "\n",
+		"users": `{"_id":{"$oid":"1234567890abcdef12345678"},"bot_id":123,` +
+			`"user_id":{"$numberLong":"4503599627370495"},"legal_name":"PRIVATE_NAME",` +
+			`"pass_old":{"paid":true,"bank":"PRIVATE_BANK"}}` + "\n",
+		"messages": `{"_id":"message-1","user_id":{"$numberLong":"4503599627370495"},"role":"user",` +
+			`"content":"PRIVATE_MESSAGE","date":{"$date":{"$numberLong":"0"}}}` + "\n" +
+			`{"_id":"message-2","user_id":4503599627370495,"role":"assistant",` +
+			`"content":"PRIVATE_REPLY","date":{"$date":"2020-01-01T15:01:02+03:00"}}` + "\n",
 		"passes": `{"_id":"pass-1","bot_id":123,"user_id":4503599627370495,"paid":true,"sum":12345}` + "\n",
-		"files": "{\"_id\":\"file-1\",\"bot_id\":123,\"user_id\":4503599627370495,\"tg_file_id\":\"P" +
-			"RIVATE_TG_FILE\",\"status\":\"completed_simple\"}" + "\n",
+		"files": `{"_id":"file-1","bot_id":123,"user_id":4503599627370495,` +
+			`"tg_file_id":"PRIVATE_TG_FILE","status":"completed_simple"}` + "\n",
 	})
 	first, err := s.inspect(t)
 	require.NoError(t, err)
@@ -99,15 +98,29 @@ func TestSnapshotRejectsUnsafeRecordsWithoutDisclosingTheirContents(t *testing.T
 		{"duplicate", "users", user + "\n" + user, "duplicate_source_id"},
 		{"conflict", "users", user + "\n" + `{"_id":"u","bot_id":123,"user_id":43}`, "conflicting_source_id"},
 		{"identity_conflict", "users", user + "\n" + `{"_id":"u2","bot_id":123,"user_id":42}`, "conflicting_owner_id"},
-		{"duplicate_json", "users", "{\"_id\":\"u\",\"bot_id\":124,\"bot_id\":123,\"user_id\":42,\"name\":\"PRIVATE_VAL" +
-			"UE\"}", "invalid_record_json"},
+		{
+			"duplicate_json",
+			"users",
+			`{"_id":"u","bot_id":124,"bot_id":123,"user_id":42,"name":"PRIVATE_VALUE"}`,
+			"invalid_record_json",
+		},
 		{"fractional_owner", "users", `{"_id":"u","bot_id":123,"user_id":42.5}`, "invalid_owner_id"},
 		{"missing_scope", "passes", `{"_id":"p","user_id":42}`, "missing_bot_id"},
-		{"naive_date", "messages", `{"_id":"m","user_id":42,"date":{"$date":"2020-01-01T12:00:00"}}`, "unsupported_source_date"},
+		{
+			"naive_date",
+			"messages",
+			`{"_id":"m","user_id":42,"date":{"$date":"2020-01-01T12:00:00"}}`,
+			"unsupported_source_date",
+		},
 		{"malformed", "users", `{"_id":`, "invalid_record_json"},
 		{"invalid_utf8", "users", "{\"_id\":\"u\",\"bot_id\":123,\"user_id\":42,\"name\":\"\xff\"}", "invalid_record_json"},
 		{"nested_json", "users", `{"_id":"u","bot_id":123,"user_id":42,"x":{"secret":1,"secret":2}}`, "invalid_record_json"},
-		{"deep_json", "users", `{"_id":"u","bot_id":123,"user_id":42,"x":` + strings.Repeat("[", 65) + "0" + strings.Repeat("]", 65) + "}", "invalid_record_json"},
+		{
+			"deep_json",
+			"users",
+			`{"_id":"u","bot_id":123,"user_id":42,"x":` + strings.Repeat("[", 65) + "0" + strings.Repeat("]", 65) + "}",
+			"invalid_record_json",
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -210,7 +223,13 @@ func TestSnapshotRejectsManifestAliasesAndSameFileUnderTwoRoles(t *testing.T) {
 
 func TestSnapshotAcceptsExactDoubleIdentitiesWithoutChangingSource(t *testing.T) {
 	t.Parallel()
-	for _, number := range []string{`42.0`, `4.2e1`, `{"$numberDouble":"42.0"}`, `{"$numberDouble":"4.2E+1"}`, `4503599627370495.0`} {
+	for _, number := range []string{
+		`42.0`,
+		`4.2e1`,
+		`{"$numberDouble":"42.0"}`,
+		`{"$numberDouble":"4.2E+1"}`,
+		`4503599627370495.0`,
+	} {
 		t.Run(number, func(t *testing.T) {
 			t.Parallel()
 			s := newSnapshot(t, map[string]string{
@@ -232,7 +251,17 @@ func TestSnapshotAcceptsExactDoubleIdentitiesWithoutChangingSource(t *testing.T)
 
 func TestSnapshotRejectsInexactAndUnsafeDoubleIdentities(t *testing.T) {
 	t.Parallel()
-	for _, number := range []string{`42.5`, `4503599627370495.1`, `4503599627370496.0`, `{"$numberDouble":"NaN"}`, `{"$numberDouble":"Infinity"}`, `{"$numberDouble":"42.0000000000000001"}`, `{"$numberDouble":"1e-999999999"}`, `{"$numberDouble":"1/1"}`, `{"$numberDouble":"42","extra":true}`} {
+	for _, number := range []string{
+		`42.5`,
+		`4503599627370495.1`,
+		`4503599627370496.0`,
+		`{"$numberDouble":"NaN"}`,
+		`{"$numberDouble":"Infinity"}`,
+		`{"$numberDouble":"42.0000000000000001"}`,
+		`{"$numberDouble":"1e-999999999"}`,
+		`{"$numberDouble":"1/1"}`,
+		`{"$numberDouble":"42","extra":true}`,
+	} {
 		t.Run(number, func(t *testing.T) {
 			t.Parallel()
 			s := newSnapshot(t, map[string]string{"users": `{"_id":"u","bot_id":123,"user_id":` + number + `}`})

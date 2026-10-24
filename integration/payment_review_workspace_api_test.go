@@ -283,8 +283,8 @@ func TestPaymentReviewWorkspaceAPICancelExpiryAndFreshAuthority(t *testing.T) {
 	args = workspaceCommit(replacement.Result)
 	_, _ = workspaceAPIPrepared(t, f, "expired-call", args)
 	_, err := f.H.store.Pool().
-		Exec(ctx, "UPDATE shuttle_payment_preparations SET expires_at=clock_timestamp()-int" +
-"erval '1 hour' WHERE proposal_id=$1", replacement.Result.Preparation.ID)
+		Exec(ctx, "UPDATE shuttle_payment_preparations SET expires_at=clock_timestamp()-interval '1 hour' WHERE "+
+			"proposal_id=$1", replacement.Result.Preparation.ID)
 	require.NoError(t, err)
 	code, raw = workspaceAPIStatus(t, f, f.Ambassador, "review_commit", "expired-call")
 	require.Equal(t, http.StatusOK, code, string(raw))

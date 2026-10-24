@@ -334,7 +334,9 @@ func (v *TelegramPrelinkVerifier) fetchKeys(ctx context.Context) (jose.JSONWebKe
 		}
 		var key jose.JSONWebKey
 		if json.Unmarshal(entry, &key) != nil || !prelinkText(key.KeyID) || seen[key.KeyID] ||
-			!key.IsPublic() || (key.Use != "" && key.Use != "sig") || (key.Algorithm != "" && key.Algorithm != string(jose.RS256)) {
+			!key.IsPublic() || (key.Use != "" && key.Use != "sig") || (key.Algorithm != "" && key.Algorithm != string(
+			jose.RS256,
+		)) {
 			return jose.JSONWebKeySet{}, ErrUnavailable
 		}
 		public, ok := key.Key.(*rsa.PublicKey)

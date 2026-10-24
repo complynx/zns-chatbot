@@ -43,7 +43,8 @@ type OrdersSelection struct {
 
 func normalizeOrdersSelection(a OrdersSelectionChange) (OrdersSelectionChange, []byte, error) {
 	if a.OperationID == uuid.Nil || a.EventID == uuid.Nil || a.ExpectedEventVersion < 1 ||
-		a.ExpectedCatalogVersion < 1 || a.ExpectedDraftVersion < 0 || a.Selections == nil || len(a.Selections) > orders.MaxSelections {
+		a.ExpectedCatalogVersion < 1 || a.ExpectedDraftVersion < 0 || a.Selections == nil ||
+		len(a.Selections) > orders.MaxSelections {
 		return a, nil, orders.ErrSelection
 	}
 	a.Selections = append([]orders.Selection{}, a.Selections...)
@@ -155,7 +156,10 @@ func (s *Store) OwnOrdersSelectionOperation(
 	}
 	defer rollbackLegacyArchive(ctx, tx)
 	row, err := s.q.WithTx(tx).
-		ReadOrdersSelectionOperation(ctx, sqlc.ReadOrdersSelectionOperationParams{UserID: scope.UserID, OperationID: operation})
+		ReadOrdersSelectionOperation(
+			ctx,
+			sqlc.ReadOrdersSelectionOperationParams{UserID: scope.UserID, OperationID: operation},
+		)
 	if err != nil {
 		return OrdersSelection{}, err
 	}
@@ -298,7 +302,10 @@ func (s *Store) OwnOrdersSelectionOperationByID(
 		return OrdersSelection{}, err
 	}
 	row, err := s.q.WithTx(tx).
-		ReadOrdersSelectionOperation(ctx, sqlc.ReadOrdersSelectionOperationParams{UserID: scope.UserID, OperationID: operation})
+		ReadOrdersSelectionOperation(
+			ctx,
+			sqlc.ReadOrdersSelectionOperationParams{UserID: scope.UserID, OperationID: operation},
+		)
 	if err != nil {
 		return OrdersSelection{}, err
 	}

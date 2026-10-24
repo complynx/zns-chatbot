@@ -212,7 +212,8 @@ func massageSpecialistNoticeMessage(
 	if terms.CurrencyScale < 0 || terms.CurrencyScale > massage.MaxCurrencyScale {
 		return telegram.SendMessageRequest{}, errors.New("invalid massage specialist notification currency scale")
 	}
-	heading, startLabel, clientLabel, serviceLabel, priceLabel, referenceLabel, contactLabel := "New massage booking", "Start", "Client", "Service", "Price", "Booking", "Contact client"
+	heading, startLabel, clientLabel, serviceLabel, priceLabel, referenceLabel, contactLabel :=
+		"New massage booking", "Start", "Client", "Service", "Price", "Booking", "Contact client"
 	service, specialist := terms.ServiceName.EN, terms.SpecialistName.EN
 	specialistLabel, endLabel := "Specialist", "End"
 	switch n.Kind {
@@ -222,7 +223,8 @@ func massageSpecialistNoticeMessage(
 		heading = "Massage session reminder"
 	}
 	if language == "ru" {
-		heading, startLabel, clientLabel, serviceLabel, priceLabel, referenceLabel, contactLabel = "Новая запись на массаж", "Начало", "Клиент", "Услуга", "Стоимость", "Запись", "Связаться с клиентом"
+		heading, startLabel, clientLabel, serviceLabel, priceLabel, referenceLabel, contactLabel =
+			"Новая запись на массаж", "Начало", "Клиент", "Услуга", "Стоимость", "Запись", "Связаться с клиентом"
 		service, specialist = terms.ServiceName.RU, terms.SpecialistName.RU
 		specialistLabel, endLabel = "Специалист", "Окончание"
 		switch n.Kind {

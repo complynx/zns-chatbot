@@ -253,8 +253,8 @@ func testUser(id string) iamUser {
 	var u iamUser
 	_ = json.Unmarshal(
 		[]byte(
-			`{"userId":"`+id+"\",\"state\":\"USER_STATE_ACTIVE\",\"details\":{\"resourceOwner\":\"org\"},\"human"+
-				"\":{\"email\":{\"email\":\"tg+123+456@telegram.invalid\",\"isVerified\":true}}}",
+			`{"userId":"`+id+`","state":"USER_STATE_ACTIVE","details":{"resourceOwner":"org"},`+
+				`"human":{"email":{"email":"tg+123+456@telegram.invalid","isVerified":true}}}`,
 		),
 		&u,
 	)
@@ -520,7 +520,12 @@ func TestVerifyRejectsJWTTrustMismatch(t *testing.T) {
 		name, actor, org string
 		aud              []string
 		expiry           time.Time
-	}{{"org", "actor", "other", []string{"api"}, time.Now().Add(time.Hour)}, {"aud", "actor", "org", []string{"other"}, time.Now().Add(time.Hour)}, {"actor", "other", "org", []string{"api"}, time.Now().Add(time.Hour)}, {"expired", "actor", "org", []string{"api"}, time.Now().Add(-time.Second)}}
+	}{
+		{"org", "actor", "other", []string{"api"}, time.Now().Add(time.Hour)},
+		{"aud", "actor", "org", []string{"other"}, time.Now().Add(time.Hour)},
+		{"actor", "other", "org", []string{"api"}, time.Now().Add(time.Hour)},
+		{"expired", "actor", "org", []string{"api"}, time.Now().Add(-time.Second)},
+	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()

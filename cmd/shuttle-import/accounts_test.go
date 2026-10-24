@@ -59,7 +59,11 @@ func TestAccountImportRejectsForeignAuthorityBeforeTargetReads(t *testing.T) {
 	for _, principal := range []identity.Principal{
 		{Subject: "stranger", OrganizationID: "org", Roles: map[string]map[string]string{"zinusya.admin": {"org": "Org"}}},
 		{Subject: "operator", OrganizationID: "other", Roles: map[string]map[string]string{"zinusya.admin": {"org": "Org"}}},
-		{Subject: "operator", OrganizationID: "org", Roles: map[string]map[string]string{"zinusya.admin": {"other": "Other"}}},
+		{
+			Subject:        "operator",
+			OrganizationID: "org",
+			Roles:          map[string]map[string]string{"zinusya.admin": {"other": "Other"}},
+		},
 	} {
 		probe := &importIdentityProbe{principal: principal}
 		require.ErrorIs(t, verifyAccountBindings(

@@ -8,7 +8,7 @@ import (
 
 // Requirements belong to an event; the saved owner record remains independent.
 type Requirements struct {
-	LegalName      bool `json:"legal_name"      required:"false"`
+	LegalName      bool `json:"legal_name" required:"false"`
 	PassportNumber bool `json:"passport_number" required:"false"`
 }
 

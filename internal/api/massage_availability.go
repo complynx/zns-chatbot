@@ -34,19 +34,18 @@ func massageAvailabilityMethod() map[string]any {
 	props["query"] = massageCandidateQuerySchema()
 	method := paymentMethod(
 		"availability",
-		"Observe live public massage starts with your current assigned pass, incl"+
-			"uding unpaid. Resolve event context for module massage, read schedule ve"+
-			"rsions, then supply a specialist/service/window and an absolute range of"+
-			" at most 24 hours; pages have at most 100 candidates. Times include even"+
-			"t-zone offsets, including repeated DST times. Public lengths are 1, 2, 3"+
-			" or 5 blocks, with 15-minute notice. Each candidate explicitly reports a"+
-			"vailable or a non-identifying occupied/party_limit reason; configured_ta"+
-			"bles is not remaining capacity. This reads actual reservations and owner"+
-			" party count, but creates no preparation or hold. Availability can chang"+
-			"e immediately; book/prepare and exact approved apply remain authoritativ"+
-			"e. Follow next_after as query.after_start with unchanged range/versions,"+
-			" including when every returned candidate is unavailable. Never use sched"+
-			"ule-only candidate_starts as live availability.",
+		"Observe live public massage starts with your current assigned pass, including unpaid. "+
+			"Resolve event context for module massage, read schedule versions, then supply a "+
+			"specialist/service/window and an absolute range of at most 24 hours; "+
+			"pages have at most 100 candidates. Times include event-zone offsets, including repeated "+
+			"DST times. Public lengths are 1, 2, 3 or 5 blocks, with 15-minute notice. "+
+			"Each candidate explicitly reports available or a non-identifying occupied/party_limit "+
+			"reason; configured_tables is not remaining capacity. "+
+			"This reads actual reservations and owner party count, but creates no preparation or hold. "+
+			"Availability can change immediately; book/prepare and exact approved apply remain "+
+			"authoritative. Follow next_after as query.after_start with unchanged range/versions, "+
+			"including when every returned candidate is unavailable. "+
+			"Never use schedule-only candidate_starts as live availability.",
 		props,
 		[]string{schemaEventID, schemaExpectedEventVersion, "expected_schedule_version", "query"},
 		[]string{

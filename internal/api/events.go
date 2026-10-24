@@ -36,7 +36,8 @@ type eventWriteRequest struct {
 
 	ID   uuid.UUID `path:"id"`
 	Body struct {
-		OperationID     string          `json:"operation_id" minLength:"1" maxLength:"128" pattern:"^[A-Za-z0-9][A-Za-z0-9._:-]*$"`
+		OperationID string `json:"operation_id" minLength:"1" maxLength:"128" pattern:"^[A-Za-z0-9][A-Za-z0-9._:-]*$"`
+
 		ExpectedVersion int64           `json:"expected_version" minimum:"0"`
 		Document        events.Document `json:"document"`
 	}

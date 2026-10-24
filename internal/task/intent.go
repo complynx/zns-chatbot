@@ -106,7 +106,8 @@ func unsupportedMedia(raw json.RawMessage) bool {
 	var message map[string]json.RawMessage
 	_ = json.Unmarshal(raw, &update)
 	_ = json.Unmarshal(update["message"], &message)
-	for _, key := range []string{"sticker", "contact", "location", "poll", "dice", "paid_media", "live_photo", "rich_message"} {
+	for _, key := range []string{"sticker", "contact", "location", "poll", "dice", "paid_media", "live_photo",
+		"rich_message"} {
 		if _, ok := message[key]; ok {
 			return true
 		}

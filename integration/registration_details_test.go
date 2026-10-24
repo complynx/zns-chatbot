@@ -68,8 +68,8 @@ func TestRegistrationDetailsKeepProfileSeparateAndRecoverHistoricalReceipt(t *te
 	require.NoError(
 		t,
 		h.store.Pool().
-			QueryRow(t.Context(), "SELECT result FROM shuttle_registration_details_operations WHERE user_id" +
-"=$1 AND operation_id=$2", user, passport.OperationID).
+			QueryRow(t.Context(), "SELECT result FROM shuttle_registration_details_operations WHERE user_id=$1 AND "+
+				"operation_id=$2", user, passport.OperationID).
 			Scan(&receipt),
 	)
 	for _, raw := range [][]byte{encrypted, receipt} {
@@ -81,7 +81,8 @@ func TestRegistrationDetailsKeepProfileSeparateAndRecoverHistoricalReceipt(t *te
 	defer reopened.Close()
 	fresh := detailsProtector(t, 61)
 	updatedName := name
-	updatedName.OperationID, updatedName.ExpectedVersion, updatedName.Value = uuid.New(), completed.Version, "Other Synthetic Legal Name"
+	updatedName.OperationID, updatedName.ExpectedVersion, updatedName.Value = uuid.New(), completed.Version,
+		"Other Synthetic Legal Name"
 	later, err := reopened.MutateRegistrationDetails(t.Context(), scope, updatedName, fresh)
 	require.NoError(t, err)
 	require.EqualValues(t, 3, later.Version)

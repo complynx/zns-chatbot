@@ -15,7 +15,19 @@ func TestEventTimeZonesAndDSTUseAbsoluteInstants(t *testing.T) {
 		name, zone string
 		offset     int
 	}{
-		{"moscow", "Europe/Moscow", 3 * 60 * 60}, {"minsk", "Europe/Minsk", 3 * 60 * 60}, {"ekaterinburg", "Asia/Yekaterinburg", 5 * 60 * 60},
+		{
+			"moscow",
+			"Europe/Moscow",
+			3 * 60 * 60,
+		}, {
+			"minsk",
+			"Europe/Minsk",
+			3 * 60 * 60,
+		}, {
+			"ekaterinburg",
+			"Asia/Yekaterinburg",
+			5 * 60 * 60,
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -38,7 +50,9 @@ func TestEventTimeZonesAndDSTUseAbsoluteInstants(t *testing.T) {
 		})
 	}
 	start := time.Date(2026, time.March, 29, 0, 30, 0, 0, time.UTC)
-	localStart, localEnd, err := (events.Event{Document: events.Document{Timezone: "Europe/Berlin", StartsAt: start, EndsAt: start.Add(time.Hour)}}).LocalTimes()
+	localStart, localEnd, err := (events.Event{
+		Document: events.Document{Timezone: "Europe/Berlin", StartsAt: start, EndsAt: start.Add(time.Hour)},
+	}).LocalTimes()
 	require.NoError(t, err)
 	require.Equal(t, 1, localStart.Hour())
 	require.Equal(t, 3, localEnd.Hour())

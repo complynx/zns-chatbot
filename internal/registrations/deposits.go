@@ -27,7 +27,7 @@ func (p DepositPolicy) ValidatePrices(rules Rules) error {
 // This policy never cancels a pass.
 type DepositPolicy struct {
 	MinimumMinor int64 `json:"minimum_minor" minimum:"0" maximum:"9007199254740991"`
-	MinimumBPS   int32 `json:"minimum_bps"   minimum:"0" maximum:"10000"`
+	MinimumBPS   int32 `json:"minimum_bps" minimum:"0" maximum:"10000"`
 }
 
 func (p *DepositPolicy) UnmarshalJSON(raw []byte) error {

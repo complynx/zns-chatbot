@@ -77,13 +77,24 @@ func TestMiniAppLocalRedirectStartupConfiguration(t *testing.T) {
 		{name: "disabled", valid: true},
 		{name: "default HTTPS", origin: "https://app.example.invalid", want: "https://app.example.invalid/app/", valid: true},
 		{name: "HTTPS launch override", origin: "https://app.example.invalid", launch: launch, want: launch, valid: true},
-		{name: "local explicit opt-in", origin: "http://localhost:18382", launch: launch, allow: "true", want: launch, valid: true},
+		{
+			name:   "local explicit opt-in",
+			origin: "http://localhost:18382",
+			launch: launch,
+			allow:  "true",
+			want:   launch,
+			valid:  true,
+		},
 		{name: "HTTP default denied", origin: "http://localhost:18382", launch: launch},
 		{name: "local requires HTTPS launch", origin: "http://localhost:18382", allow: "true"},
 		{name: "remote HTTP stays denied", origin: "http://evil.invalid", launch: launch, allow: "true"},
 		{name: "launch requires origin", launch: launch},
 		{name: "launch never HTTP", origin: "http://localhost:18382", launch: "http://localhost:18382/app/", allow: "true"},
-		{name: "launch credentials", origin: "https://app.example.invalid", launch: "https://user:secret-token@example.invalid/app/"},
+		{
+			name:   "launch credentials",
+			origin: "https://app.example.invalid",
+			launch: "https://user:secret-token@example.invalid/app/",
+		},
 		{name: "bad bool", origin: "https://app.example.invalid", allow: "secret-token"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

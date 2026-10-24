@@ -192,6 +192,34 @@ class MockTest(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertEqual(len(self.webhook.received), before)
 
+    def test_reply_keyboard_is_private_state_and_cannot_be_edited(self):
+        markup = {'keyboard': [[{'text': 'Reply'}]]}
+        sent = self.bot('sendMessage', {'chat_id': 101, 'text': 'Choice', 'reply_markup': markup})
+        self.assertNotIn('reply_markup', sent)
+        reply = self.qa('click', {'user': self.user1, 'chat_id': 101,
+                                  'message_id': sent['message_id'], 'row': 0, 'column': 0})['update']['message']
+        self.assertEqual(reply['text'], 'Reply')
+        status, _ = self.call('/bot' + self.config['token'] + '/editMessageText',
+                              {'chat_id': 101, 'message_id': sent['message_id'], 'text': 'Not editable'})
+        self.assertEqual(status, 400)
+        stored = next(value for value in self.state()['messages']
+                      if value['message_id'] == sent['message_id'] and value['chat']['id'] == 101)
+        self.assertEqual(stored['text'], 'Choice')
+
+    def test_private_webapp_and_callback_byte_limits(self):
+        button = {'text': 'Open', 'web_app': {'url': 'https://qa.invalid/app'}}
+        markup = {'inline_keyboard': [[button]]}
+        before = self.state()['messages']
+        status, _ = self.call('/bot' + self.config['token'] + '/sendMessage',
+                              {'chat_id': -100123, 'text': 'Invalid group button', 'reply_markup': markup})
+        self.assertEqual(status, 400)
+        self.assertEqual(self.state()['messages'], before)
+        for length, expected in ((32, 200), (33, 400)):
+            status, _ = self.call('/bot' + self.config['token'] + '/sendMessage',
+                                  {'chat_id': 101, 'text': 'UTF8 bytes', 'reply_markup':
+                                   {'inline_keyboard': [[{'text': 'Callback', 'callback_data': 'я' * length}]]}})
+            self.assertEqual(status, expected)
+
     def test_chat_commands_menu_and_typing_are_stateful_without_messages(self):
         scope = {'type': 'chat', 'chat_id': 101}
         commands = [{'command': 'qa', 'description': 'QA menu'}]
@@ -206,6 +234,8 @@ class MockTest(unittest.TestCase):
         path = '/bot' + self.config['token'] + '/getChatMenuButton'
         self.assertEqual(self.call(path, {'chat_id': 101}, server=other)[1]['result'], menu)
         self.assertEqual(self.bot('getMyCommands', {'scope': scope}), commands)
+        self.assertTrue(self.bot('setMyCommands', {'scope': scope, 'commands': None}))
+        self.assertEqual(self.bot('getMyCommands', {'scope': scope}), [])
         self.assertTrue(self.bot('deleteMyCommands', {'scope': scope, 'language_code': 'pt'}))
         self.assertEqual(self.bot('getMyCommands', {'scope': scope, 'language_code': 'pt'}), [])
         self.assertTrue(self.bot('setChatMenuButton', {'chat_id': 101, 'menu_button': {'type': 'default'}}))

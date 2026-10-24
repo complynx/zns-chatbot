@@ -54,8 +54,8 @@ func TestMiniAppPassPaymentStoreDepositTopUpAndOneLease(t *testing.T) {
 		Exec(ctx, `UPDATE shuttle_files SET sent_at=clock_timestamp()-interval '2 days' WHERE id=$1`, args.FileID)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(ctx, "UPDATE shuttle_passes SET assigned_at=clock_timestamp()-interval '3 days" +
-"',payment_due_at=clock_timestamp()-interval '1 day' WHERE id=$1", f.Pass.ID)
+		Exec(ctx, "UPDATE shuttle_passes SET assigned_at=clock_timestamp()-interval '3 days',"+
+			"payment_due_at=clock_timestamp()-interval '1 day' WHERE id=$1", f.Pass.ID)
 	require.NoError(t, err)
 	initial, err := store.SubmitMiniAppPaymentEvidence(ctx, scope, session, "native-initial", f.Event.ID, args)
 	require.NoError(t, err)
@@ -81,8 +81,8 @@ func TestMiniAppPassPaymentStoreDepositTopUpAndOneLease(t *testing.T) {
 	require.Equal(t, initial, receipt.Result)
 	// A timely file can be reviewed after the event's sales window and initial due date.
 	_, err = f.H.store.Pool().
-		Exec(ctx, "UPDATE shuttle_events SET starts_at=clock_timestamp()-interval '3 days'," +
-"ends_at=clock_timestamp()-interval '1 day' WHERE id=$1", f.Event.ID)
+		Exec(ctx, "UPDATE shuttle_events SET starts_at=clock_timestamp()-interval '3 days',"+
+			"ends_at=clock_timestamp()-interval '1 day' WHERE id=$1", f.Event.ID)
 	require.NoError(t, err)
 	authority := paymentScope(t, f.H, f.AmbassadorID, false)
 	review := payments.ReviewChange{
@@ -227,8 +227,11 @@ func TestMiniAppPassPaymentStoreSessionChangesDuringEventWait(t *testing.T) {
 				require.Eventually(t, func() bool {
 					var waiting int
 					queryErr := f.H.store.Pool().
-						QueryRow(ctx, "SELECT count(*) FROM pg_stat_activity WHERE $1::integer=ANY(pg_blocking_" +
-"pids(pid))", blocker.Conn().PgConn().PID()).
+						QueryRow(
+							ctx,
+							"SELECT count(*) FROM pg_stat_activity WHERE $1::integer=ANY(pg_blocking_pids(pid))",
+							blocker.Conn().PgConn().PID(),
+						).
 						Scan(&waiting)
 					return queryErr == nil && waiting >= 1
 				}, 5*time.Second, 20*time.Millisecond)
@@ -330,8 +333,11 @@ func TestMiniAppPassPaymentStoreReceiptSurvivesUnavailableAssignedTarget(t *test
 	)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_registrations SET state='waitlisted',version=version+1 WH" +
-"ERE id=$1", f.Pass.RegistrationID)
+		Exec(
+			t.Context(),
+			"UPDATE shuttle_registrations SET state='waitlisted',version=version+1 WHERE id=$1",
+			f.Pass.RegistrationID,
+		)
 	require.NoError(t, err)
 	_, err = f.H.store.MiniAppOwnPaymentTarget(t.Context(), scope, session, f.Event.ID, f.Pass.ID)
 	require.Error(t, err)

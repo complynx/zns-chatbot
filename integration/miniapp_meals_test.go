@@ -198,7 +198,12 @@ func TestMiniAppMealDraftRejectsForeignStaleInvalidAndLoggedOutRequests(t *testi
 		appTestOrigin,
 	)
 	require.Equal(t, http.StatusConflict, code, string(raw))
-	for _, invalid := range []string{`{"operation_id":"` + uuid.NewString() + `","expected_event_version":1,"expected_catalog_version":1,"choices":[]}`, `{"owner_id":"` + uuid.NewString() + `"}`, mealsAppBody(t, a) + ` {}`, `null`} {
+	for _, invalid := range []string{
+		`{"operation_id":"` + uuid.NewString() + `","expected_event_version":1,"expected_catalog_version":1,"choices":[]}`,
+		`{"owner_id":"` + uuid.NewString() + `"}`,
+		mealsAppBody(t, a) + ` {}`,
+		`null`,
+	} {
 		code, raw, _ = appCall(t, f.H, http.MethodPost, path+"/draft", invalid, session.Token, appTestOrigin)
 		require.Equal(t, http.StatusBadRequest, code, string(raw))
 	}
@@ -223,10 +228,10 @@ func TestMiniAppMealDraftJournalFailureRollsBackEverything(t *testing.T) {
 	f, _, session, a := mealsAppFixture(t)
 	path := mealsAppPath(a.EventID)
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), "CREATE FUNCTION reject_selection_action() RETURNS trigger LANGUAGE plpgs" +
-"ql AS $$ BEGIN RAISE EXCEPTION 'journal unavailable'; END $$; CREATE TRI" +
-"GGER reject_selection_action BEFORE INSERT ON shuttle_miniapp_meal_draft" +
-"_actions FOR EACH ROW EXECUTE FUNCTION reject_selection_action()")
+		Exec(t.Context(), "CREATE FUNCTION reject_selection_action() RETURNS trigger LANGUAGE plpgsql AS $$ "+
+			"BEGIN RAISE EXCEPTION 'journal unavailable'; END $$; CREATE TRIGGER "+
+			"reject_selection_action BEFORE INSERT ON shuttle_miniapp_meal_draft_actions FOR "+
+			"EACH ROW EXECUTE FUNCTION reject_selection_action()")
 	require.NoError(t, err)
 	code, raw, _ := appCall(
 		t,
@@ -291,14 +296,15 @@ func TestMiniAppMealDraftRechecksSessionAfterEventLockWait(t *testing.T) {
 	require.Eventually(t, func() bool {
 		var waiting bool
 		probeErr := f.H.store.Pool().
-			QueryRow(t.Context(), "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::integer=ANY(pg_bl" +
-"ocking_pids(pid)))", blockingPID).
+			QueryRow(t.Context(), "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE "+
+				"$1::integer=ANY(pg_blocking_pids(pid)))", blockingPID).
 			Scan(&waiting)
 		return probeErr == nil && waiting
 	}, 3*time.Second, 5*time.Millisecond)
 	_, err = blocking.Exec(
 		t.Context(),
-		"UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 second' WHERE user_id=$1",
+		"UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 "+
+			"second' WHERE user_id=$1",
 		session.UserID,
 	)
 	require.NoError(t, err)
@@ -319,8 +325,8 @@ func TestMiniAppMealsEventsKeepPastAssignedUnpaidHistory(t *testing.T) {
 	t.Parallel()
 	f, _, session, a := mealsAppFixture(t)
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_events SET starts_at=clock_timestamp()-interval '2 days'," +
-"ends_at=clock_timestamp()-interval '1 day' WHERE id=$1", a.EventID)
+		Exec(t.Context(), "UPDATE shuttle_events SET starts_at=clock_timestamp()-interval '2 days',"+
+			"ends_at=clock_timestamp()-interval '1 day' WHERE id=$1", a.EventID)
 	require.NoError(t, err)
 	code, raw, _ := appCall(t, f.H, http.MethodGet, "/app/meals/events", "", session.Token, "")
 	require.Equal(t, http.StatusOK, code, string(raw))
@@ -378,14 +384,15 @@ func TestMiniAppMealsReadSuppressesSessionExpiredWhileCatalogBlocked(t *testing.
 	require.Eventually(t, func() bool {
 		var waiting bool
 		probeErr := f.H.store.Pool().
-			QueryRow(t.Context(), "SELECT EXISTS(SELECT 1 FROM pg_locks WHERE relation='shuttle_meal_catalo" +
-"gs'::regclass AND NOT granted)").
+			QueryRow(t.Context(), "SELECT EXISTS(SELECT 1 FROM pg_locks WHERE "+
+				"relation='shuttle_meal_catalogs'::regclass AND NOT granted)").
 			Scan(&waiting)
 		return probeErr == nil && waiting
 	}, 3*time.Second, 5*time.Millisecond)
 	_, err = blocking.Exec(
 		t.Context(),
-		"UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 second' WHERE user_id=$1",
+		"UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 "+
+			"second' WHERE user_id=$1",
 		session.UserID,
 	)
 	require.NoError(t, err)

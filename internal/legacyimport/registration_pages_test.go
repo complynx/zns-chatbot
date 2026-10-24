@@ -19,9 +19,11 @@ import (
 func TestRegistrationDiscoveryPagesLiteralKeysAndOmitsUnsupportedData(t *testing.T) {
 	t.Parallel()
 	raw, hash, target := registrationArchive(t,
-		`"Я":{"paid":true},"old.event":{"state":"paid","paid":false,"bank":"PRIVATE_BANK","couple":"PRIVATE_PARTNER"},`+
-			`"a":{"role":"admin"},"unsupported-secret":{"paid":"PRIVATE_PROOF"},"scalar-secret":"PRIVATE_SCALAR",`+
-			`"nested":{"event":{"paid":true}},"unrelated":{"secret":"PRIVATE_IAM"},"bad\u0000key":{"paid":true}`)
+		`"Я":{"paid":true},"old.event":{"state":"paid","paid":false,`+
+			`"bank":"PRIVATE_BANK","couple":"PRIVATE_PARTNER"},"a":{"role":"admin"},`+
+			`"unsupported-secret":{"paid":"PRIVATE_PROOF"},"scalar-secret":"PRIVATE_SCALAR",`+
+			`"nested":{"event":{"paid":true}},"unrelated":{"secret":"PRIVATE_IAM"},`+
+			`"bad\u0000key":{"paid":true}`)
 	var keys []string
 	after := ""
 	for {

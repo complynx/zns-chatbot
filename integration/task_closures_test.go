@@ -102,8 +102,8 @@ func TestTaskClosureConcurrentConfirmationPreservesDeliveryAndOriginalReceipt(t 
 	)
 	var cleared bool
 	require.NoError(t, h.store.Pool().QueryRow(ctx,
-		"SELECT active_task_id IS NULL AND active_run_id='' FROM shuttle_conversa" +
-"tions WHERE id=$1", before.Task.ConversationID).
+		"SELECT active_task_id IS NULL AND active_run_id='' FROM shuttle_conversations WHERE id=$1",
+		before.Task.ConversationID).
 		Scan(&cleared))
 	require.True(t, cleared)
 	_, err = h.store.Pool().Exec(ctx,
@@ -122,7 +122,8 @@ func TestTaskClosureConcurrentConfirmationPreservesDeliveryAndOriginalReceipt(t 
 
 func TestTaskClosureRejectsChangedExpiredLeasedAndResolvedTargets(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"changed_reason", "changed_version", "changed_target", "changed_proposal", "expired", "leased", "stale", "resolved"} {
+	for _, scenario := range []string{"changed_reason", "changed_version", "changed_target", "changed_proposal",
+		"expired", "leased", "stale", "resolved"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			h, scope, args := taskClosureFixture(t)
@@ -144,8 +145,8 @@ func TestTaskClosureRejectsChangedExpiredLeasedAndResolvedTargets(t *testing.T) 
 					Exec(ctx, "UPDATE shuttle_task_closure_proposals SET expires_at=clock_timestamp()-interval '1 second'")
 			case "leased":
 				_, err = h.store.Pool().
-					Exec(ctx, "UPDATE shuttle_tasks SET lease_owner='live-worker',lease_until=clock_tim" +
-"estamp()+interval '1 hour' WHERE id=$1", args.TaskID)
+					Exec(ctx, "UPDATE shuttle_tasks SET lease_owner='live-worker',lease_until=clock_timestamp()+interval "+
+						"'1 hour' WHERE id=$1", args.TaskID)
 			case "stale":
 				_, err = h.store.Pool().Exec(ctx, "UPDATE shuttle_tasks SET version=version+1 WHERE id=$1", args.TaskID)
 			case "resolved":
@@ -298,8 +299,8 @@ func TestTaskClosureKeepsNewerConversationBinding(t *testing.T) {
 	require.NoError(t, err)
 	newer := closureIntake(t, h, scope.BotID, user.TelegramUserID, 990)
 	_, err = h.store.Pool().Exec(ctx,
-		"UPDATE shuttle_conversations SET active_task_id=$1,active_run_id='newer-" +
-"remote-run' WHERE id=$2", newer.ID, newer.ConversationID)
+		"UPDATE shuttle_conversations SET active_task_id=$1,active_run_id='newer-remote-run' WHERE id=$2", newer.ID,
+		newer.ConversationID)
 	require.NoError(t, err)
 	prep, err := h.store.PrepareTaskClosure(ctx, scope, "close-older", args)
 	require.NoError(t, err)

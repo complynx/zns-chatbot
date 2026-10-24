@@ -29,27 +29,27 @@ type Label struct {
 }
 
 type Item struct {
-	ID                    string   `json:"id"                                pattern:"^[a-z][a-z0-9_-]{0,31}$"`
+	ID                    string   `json:"id" pattern:"^[a-z][a-z0-9_-]{0,31}$"`
 	Name                  Label    `json:"name"`
-	BasePriceMinor        int64    `json:"base_price_minor"                                                    minimum:"0" maximum:"9000000000000000"`
-	RequiredSupplementIDs []string `json:"required_supplement_ids,omitempty"                                                                          maxItems:"20" uniqueItems:"true"`
+	BasePriceMinor        int64    `json:"base_price_minor" minimum:"0" maximum:"9000000000000000"`
+	RequiredSupplementIDs []string `json:"required_supplement_ids,omitempty" maxItems:"20" uniqueItems:"true"`
 }
 
 type Offer struct {
-	ID            string    `json:"id"              pattern:"^[a-z][a-z0-9_-]{0,31}$"`
+	ID            string    `json:"id" pattern:"^[a-z][a-z0-9_-]{0,31}$"`
 	Name          Label     `json:"name"`
 	StartsAt      time.Time `json:"starts_at"`
 	EndsAt        time.Time `json:"ends_at"`
 	SalesOpensAt  time.Time `json:"sales_opens_at"`
 	SalesClosesAt time.Time `json:"sales_closes_at"`
-	ItemIDs       []string  `json:"item_ids"                                          minItems:"1" maxItems:"100" uniqueItems:"true"`
+	ItemIDs       []string  `json:"item_ids" minItems:"1" maxItems:"100" uniqueItems:"true"`
 }
 
 type CatalogDocument struct {
-	Currency         string            `json:"currency"                    pattern:"^[A-Z]{3}$"`
-	CurrencyScale    int               `json:"currency_scale"                                   minimum:"0" maximum:"6"`
-	Items            []Item            `json:"items"                                                                    minItems:"1" maxItems:"100"`
-	Offers           []Offer           `json:"offers"                                                                   minItems:"1" maxItems:"20"`
+	Currency         string            `json:"currency" pattern:"^[A-Z]{3}$"`
+	CurrencyScale    int               `json:"currency_scale" minimum:"0" maximum:"6"`
+	Items            []Item            `json:"items" minItems:"1" maxItems:"100"`
+	Offers           []Offer           `json:"offers" minItems:"1" maxItems:"20"`
 	CompletePricing  *CompletePricing  `json:"complete_pricing,omitempty"`
 	CompleteCapacity *CompleteCapacity `json:"complete_capacity,omitempty"`
 }

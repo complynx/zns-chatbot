@@ -14,15 +14,15 @@ import (
 )
 
 type agentContextListArguments struct {
-	Module string    `json:"module"          minLength:"1" maxLength:"128"`
+	Module string    `json:"module" minLength:"1" maxLength:"128"`
 	After  uuid.UUID `json:"after,omitempty"`
-	Limit  int32     `json:"limit,omitempty"                               minimum:"1" maximum:"20"`
+	Limit  int32     `json:"limit,omitempty" minimum:"1" maximum:"20"`
 }
 
 type agentContextChoiceArguments struct {
-	Module          string    `json:"module"           minLength:"1" maxLength:"128"`
+	Module          string    `json:"module" minLength:"1" maxLength:"128"`
 	EventID         uuid.UUID `json:"event_id"`
-	ExpectedVersion int64     `json:"expected_version"                               minimum:"0"`
+	ExpectedVersion int64     `json:"expected_version" minimum:"0"`
 }
 type agentContextChoiceRequest struct {
 	AuthInput
@@ -204,6 +204,39 @@ func contextError(err error) error {
 	}
 }
 
+const (
+	eventContextResolveDescription = "Resolve an event for module before a user action. " +
+		"Priority: explicit event_id, eligible run/user pin, eligible hint_id, ongoing event, nearest " +
+		"upcoming start. Multiple ongoing events or equal nearest starts require clarification; " +
+		"never choose by UUID. registrations accepts open configured events without a pass; " +
+		"other modules require an assigned pass, including unpaid. " +
+		"Event must enable module and be current/future. " +
+		"Optional require_explicit disables hints/automatic selection; valid saved pins still qualify. " +
+		"Output source, optional selected event summary and registration rules, bounded choices " +
+		"(max20), more and selection_version; use list to page all qualified events. " +
+		"No selection is saved. UTC instants plus IANA timezone; convert for display. " +
+		"Example: {\"module\":\"orders\"}. Explicit inaccessible ID returns404, invalid hints/pins are " +
+		"ignored. Context grants no action permission."
+
+	eventContextListDescription = "List all current/future events qualified for module in stable UUID order. " +
+		"registrations needs open rules; other participant modules need an assigned, even unpaid, " +
+		"pass. Default limit20, max20; follow next as after. " +
+		"Returns events with bounded metadata, timezone and optional registration rules. " +
+		"Use this list when resolve.more is true or to choose another event. " +
+		"Example: {\"module\":\"orders\",\"limit\":20}."
+
+	eventContextSelectDescription = "Save a qualified event for this user and current run, after an explicit user " +
+		"choice or a resolved unambiguous context for the requested action. Read resolve first; " +
+		"send its selection_version as expected_version. Arguments module, event_id, expected_version. " +
+		"No pass, booking or payment is created. Stable original receipt; " +
+		"stale version/changed retry conflicts. Same run's saved choice survives a different run " +
+		"changing the user's default. Business actions must still supply the explicit event ID and " +
+		"recheck access. Example: {\"module\":\"orders\"," +
+		"\"event_id\":\"00000000-0000-4000-8000-000000000001\",\"expected_version\":0}. " +
+		"After uncertainty reconcile the same operation; " +
+		"missing status is unknown and never permits blind replacement."
+)
+
 func eventContextModule() map[string]any {
 	uuidField := map[string]any{manifestType: schemaString, schemaFormat: schemaUUID}
 	moduleField := map[string]any{
@@ -231,19 +264,7 @@ func eventContextModule() map[string]any {
 	}
 	resolve := common(
 		"resolve",
-		"Resolve an event for module before a user action. Priority: explicit eve"+
-			"nt_id, eligible run/user pin, eligible hint_id, ongoing event, nearest u"+
-			"pcoming start. Multiple ongoing events or equal nearest starts require c"+
-			"larification; never choose by UUID. registrations accepts open configure"+
-			"d events without a pass; other modules require an assigned pass, includi"+
-			"ng unpaid. Event must enable module and be current/future. Optional requ"+
-			"ire_explicit disables hints/automatic selection; valid saved pins still "+
-			"qualify. Output source, optional selected event summary and registration"+
-			" rules, bounded choices (max20), more and selection_version; use list to"+
-			" page all qualified events. No selection is saved. UTC instants plus IAN"+
-			"A timezone; convert for display. Example: {\"module\":\"orders\"}. Explicit "+
-			"inaccessible ID returns404, invalid hints/pins are ignored. Context gran"+
-			"ts no action permission.",
+		eventContextResolveDescription,
 		effectRead,
 		map[string]any{
 			manifestType:               schemaObject,
@@ -259,12 +280,7 @@ func eventContextModule() map[string]any {
 	)
 	list := common(
 		"list",
-		"List all current/future events qualified for module in stable UUID order"+
-			". registrations needs open rules; other participant modules need an assi"+
-			"gned, even unpaid, pass. Default limit20, max20; follow next as after. R"+
-			"eturns events with bounded metadata, timezone and optional registration "+
-			"rules. Use this list when resolve.more is true or to choose another even"+
-			"t. Example: {\"module\":\"orders\",\"limit\":20}.",
+		eventContextListDescription,
 		effectRead,
 		map[string]any{
 			manifestType:               schemaObject,
@@ -296,17 +312,7 @@ func eventContextModule() map[string]any {
 	}
 	choose := common(
 		"choose",
-		"Save a qualified event for this user and current run, after an explicit "+
-			"user choice or a resolved unambiguous context for the requested action. "+
-			"Read resolve first; send its selection_version as expected_version. Argu"+
-			"ments module, event_id, expected_version. No pass, booking or payment is"+
-			" created. Stable original receipt; stale version/changed retry conflicts"+
-			". Same run's saved choice survives a different run changing the user's d"+
-			"efault. Business actions must still supply the explicit event ID and rec"+
-			"heck access. Example: {\"module\":\"orders\",\"event_id\":\"00000000-0000-4000-"+
-			"8000-000000000001\",\"expected_version\":0}. After uncertainty reconcile th"+
-			"e same operation; missing status is unknown and never permits blind repl"+
-			"acement.",
+		eventContextSelectDescription,
 		effectWrite,
 		map[string]any{
 			manifestType:               schemaObject,

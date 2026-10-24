@@ -12,8 +12,8 @@ import (
 
 func TestOutlineAndSectionKeepOriginalMarkdown(t *testing.T) {
 	t.Parallel()
-	body := "Intro\r\n# Зук\r\nOriginal **text**.\r\n```md\r\n# Not a heading\r\n```\r\n## Deta" +
-		"il\r\nDetails\r\n# Зук\r\nSecond\r\n# Зук-2\r\nThird\r\n# Зук\r\nFourth\r\n"
+	body := "Intro\r\n# Зук\r\nOriginal **text**.\r\n```md\r\n# Not a heading\r\n```\r\n## Detail\r\n" +
+		"Details\r\n# Зук\r\nSecond\r\n# Зук-2\r\nThird\r\n# Зук\r\nFourth\r\n"
 	outline, err := knowledge.Outline(body, knowledge.OutlineRequest{})
 	if err != nil {
 		t.Fatal(err)
@@ -210,8 +210,8 @@ func TestFindLiteralUnicodeContextAndContinuation(t *testing.T) {
 
 func TestFindAnchorsPreambleAndLaterNestedSections(t *testing.T) {
 	t.Parallel()
-	body := "needle preamble\n# One\nfirst\n# Two\nsecond\n# Three\nthird\n# Four\nneedle par" +
-		"ent\n## Repeat\nneedle nested\n## Repeat\nneedle repeated\n# End\nend"
+	body := "needle preamble\n# One\nfirst\n# Two\nsecond\n# Three\nthird\n# Four\nneedle parent\n## Repeat\n" +
+		"needle nested\n## Repeat\nneedle repeated\n# End\nend"
 	result, err := knowledge.Find(body, knowledge.FindRequest{Query: "needle"})
 	if err != nil {
 		t.Fatal(err)
@@ -237,7 +237,18 @@ func TestReadRejectsInvalidBounds(t *testing.T) {
 	t.Parallel()
 	body := "# A\nя text\n# B\nend"
 	midRune := 5
-	for _, r := range []knowledge.ReadRequest{{MaxBytes: 3}, {MaxBytes: knowledge.MaxReadBytes + 1}, {LineCount: -1}, {LineCount: 201}, {StartLine: -1}, {StartLine: 100}, {StartLine: 1, StartByte: &midRune}, {StartByte: &midRune}, {Anchor: "missing"}, {Anchor: "b", StartLine: 2}} {
+	for _, r := range []knowledge.ReadRequest{
+		{MaxBytes: 3},
+		{MaxBytes: knowledge.MaxReadBytes + 1},
+		{LineCount: -1},
+		{LineCount: 201},
+		{StartLine: -1},
+		{StartLine: 100},
+		{StartLine: 1, StartByte: &midRune},
+		{StartByte: &midRune},
+		{Anchor: "missing"},
+		{Anchor: "b", StartLine: 2},
+	} {
 		if _, err := knowledge.Read(body, r); !errors.Is(err, knowledge.ErrInvalid) {
 			t.Errorf("read %+v: %v", r, err)
 		}
@@ -248,7 +259,14 @@ func TestFindRejectsInvalidBounds(t *testing.T) {
 	t.Parallel()
 	body := "# A\nя text\n# B\nend"
 	midRune := 5
-	for _, r := range []knowledge.FindRequest{{Query: ""}, {Query: strings.Repeat("x", 257)}, {Query: "x", StartByte: midRune}, {Query: "x", Limit: 21}, {Query: "x", ContextBytes: 513}, {Query: "x", StartByte: -1}} {
+	for _, r := range []knowledge.FindRequest{
+		{Query: ""},
+		{Query: strings.Repeat("x", 257)},
+		{Query: "x", StartByte: midRune},
+		{Query: "x", Limit: 21},
+		{Query: "x", ContextBytes: 513},
+		{Query: "x", StartByte: -1},
+	} {
 		if _, err := knowledge.Find(body, r); !errors.Is(err, knowledge.ErrInvalid) {
 			t.Errorf("find %+v: %v", r, err)
 		}

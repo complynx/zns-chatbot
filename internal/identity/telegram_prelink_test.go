@@ -301,8 +301,18 @@ func TestTelegramPrelinkRequiresHTTPSStartupTrust(t *testing.T) {
 	for _, o := range []identity.TelegramPrelinkOptions{
 		{Issuer: "http://localhost", JWKSURL: "https://provider.invalid/keys", Audience: "prelink", BotID: 123},
 		{Issuer: "https://provider.invalid", JWKSURL: "http://localhost/keys", Audience: "prelink", BotID: 123},
-		{Issuer: "https://user:password@provider.invalid", JWKSURL: "https://provider.invalid/keys", Audience: "prelink", BotID: 123},
-		{Issuer: "https://provider.invalid", JWKSURL: "https://provider.invalid/keys?token=secret", Audience: "prelink", BotID: 123},
+		{
+			Issuer:   "https://user:password@provider.invalid",
+			JWKSURL:  "https://provider.invalid/keys",
+			Audience: "prelink",
+			BotID:    123,
+		},
+		{
+			Issuer:   "https://provider.invalid",
+			JWKSURL:  "https://provider.invalid/keys?token=secret",
+			Audience: "prelink",
+			BotID:    123,
+		},
 		{Issuer: "https://provider.invalid", JWKSURL: "https://provider.invalid/keys", Audience: "", BotID: 123},
 		{Issuer: "https://provider.invalid", JWKSURL: "https://provider.invalid/keys", Audience: "prelink", BotID: 0},
 	} {

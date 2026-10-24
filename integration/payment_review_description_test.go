@@ -24,17 +24,17 @@ type paymentDescriptionPreparation struct {
 
 func paymentDescriptionLocale(t *testing.T, f paymentFixture, preference, telegram, fallback string) {
 	t.Helper()
-	_, err := f.H.store.Pool().Exec(t.Context(), "INSERT INTO shuttle_user_profiles(user_id,version,bot_language)\nVALUES($" +
-"1,0,$2) ON CONFLICT(user_id) DO UPDATE SET bot_language=$2,version=shutt" +
-"le_user_profiles.version+1", f.AmbassadorID, preference)
+	_, err := f.H.store.Pool().Exec(t.Context(), "INSERT INTO shuttle_user_profiles(user_id,version,"+
+		"bot_language)\nVALUES($1,0,$2) ON CONFLICT(user_id) DO UPDATE SET bot_language=$2,"+
+		"version=shuttle_user_profiles.version+1", f.AmbassadorID, preference)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_users SET profile=jsonb_set(profile,'{language_code}',to_" +
-"jsonb($2::text),true) WHERE id=$1", f.AmbassadorID, telegram)
+		Exec(t.Context(), "UPDATE shuttle_users SET profile=jsonb_set(profile,'{language_code}',"+
+			"to_jsonb($2::text),true) WHERE id=$1", f.AmbassadorID, telegram)
 	require.NoError(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_settings SET document=jsonb_set(document,'{default_langua" +
-"ge}',to_jsonb($1::text)) WHERE id=true", fallback)
+		Exec(t.Context(), "UPDATE shuttle_settings SET document=jsonb_set(document,'{default_language}',"+
+			"to_jsonb($1::text)) WHERE id=true", fallback)
 	require.NoError(t, err)
 }
 
@@ -60,7 +60,8 @@ func TestPaymentReviewPreparationUsesReviewerLanguageAndKeepsOriginalReplay(t *t
 			require.True(t, strings.HasPrefix(prepared.Description, test.title))
 			require.Equal(t, review, prepared.Arguments)
 			require.NotEqual(t, uuid.Nil, prepared.Preconditions.ProposalID)
-			for _, value := range []string{"30.87 BYN", "40.00 BYN", "123.45 BYN", "92.58 BYN", "Europe/Minsk", f.Event.Document.Name} {
+			for _, value := range []string{"30.87 BYN", "40.00 BYN", "123.45 BYN", "92.58 BYN", "Europe/Minsk",
+				f.Event.Document.Name} {
 				require.Contains(t, prepared.Description, value)
 			}
 			paymentDescriptionLocale(t, f, "en", "en", "en")
@@ -92,9 +93,9 @@ func TestPaymentReviewRejectionDescriptionKeepsMetadataLiteralAndCreditsZero(t *
 	review.Decision, review.AmountMinor = payments.Rejected, 0
 	review.Reason = "**untrusted** ```\nnot a command [link](https://example.invalid)"
 	payer := "Payer **literal** ``` @example"
-	_, err := f.H.store.Pool().Exec(t.Context(), "INSERT INTO shuttle_user_profiles(user_id,version,full_name)\nVALUES($1,0" +
-",$2) ON CONFLICT(user_id) DO UPDATE SET full_name=$2,version=shuttle_use" +
-"r_profiles.version+1", f.OwnerID, payer)
+	_, err := f.H.store.Pool().Exec(t.Context(), "INSERT INTO shuttle_user_profiles(user_id,version,"+
+		"full_name)\nVALUES($1,0,$2) ON CONFLICT(user_id) DO UPDATE SET full_name=$2,"+
+		"version=shuttle_user_profiles.version+1", f.OwnerID, payer)
 	require.NoError(t, err)
 	code, raw := paymentRequest(t, f, f.Ambassador, "review/prepare", "readable-rejection", review)
 	require.Equal(t, http.StatusOK, code, string(raw))
@@ -108,7 +109,8 @@ func TestPaymentReviewRejectionDescriptionKeepsMetadataLiteralAndCreditsZero(t *
 			require.Equal(t, "pre", entity.Type, "Proof metadata must not create links, emphasis or mentions")
 		}
 	}
-	for _, value := range []string{"Отклонить подтверждение оплаты?", "Зачислить: 0.00 BYN", "Остаток после этого решения: 123.45 BYN", strconv.Quote(payer), strconv.Quote(review.Reason)} {
+	for _, value := range []string{"Отклонить подтверждение оплаты?", "Зачислить: 0.00 BYN",
+		"Остаток после этого решения: 123.45 BYN", strconv.Quote(payer), strconv.Quote(review.Reason)} {
 		require.Contains(t, shown.String(), value)
 	}
 	require.Equal(t, review, prepared.Arguments)

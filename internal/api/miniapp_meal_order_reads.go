@@ -37,8 +37,8 @@ func (s *Server) miniAppSubmittedMeals(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		result, err = s.store.MiniAppOwnMealOrderOperation(ctx, s.eventScope(), session, event, op, kind)
-	case r.PathValue("order") != "":
-		order, parseErr := uuid.Parse(r.PathValue("order"))
+	case r.PathValue(schemaOrder) != "":
+		order, parseErr := uuid.Parse(r.PathValue(schemaOrder))
 		if parseErr != nil || order == uuid.Nil {
 			miniAppHTTPError(w, http.StatusBadRequest, "invalid meal order")
 			return

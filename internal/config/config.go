@@ -165,7 +165,16 @@ func Load(path string) (Config, error) {
 }
 
 func (c Config) Validate() error {
-	for _, check := range []func() error{c.validateTimeouts, c.validateListeners, c.validateServices, c.validateTelegram, c.validateIdentity, c.validateTelegramPrelink, c.validateRegistrationDetails, c.OTel.validate} {
+	for _, check := range []func() error{
+		c.validateTimeouts,
+		c.validateListeners,
+		c.validateServices,
+		c.validateTelegram,
+		c.validateIdentity,
+		c.validateTelegramPrelink,
+		c.validateRegistrationDetails,
+		c.OTel.validate,
+	} {
 		if err := check(); err != nil {
 			return err
 		}
@@ -256,7 +265,18 @@ func validSecret(secret string) bool {
 	return true
 }
 func (c Config) validateIdentity() error {
-	for _, value := range []string{c.Identity.OrganizationID, c.Identity.Audience, c.Identity.APIAudience, c.Identity.ActorID, c.Identity.ActorClientID, c.Identity.ActorClientSecret, c.Identity.ClientID, c.Identity.ClientSecret, c.Identity.IntrospectionClientID, c.Identity.IntrospectionClientSecret} {
+	for _, value := range []string{
+		c.Identity.OrganizationID,
+		c.Identity.Audience,
+		c.Identity.APIAudience,
+		c.Identity.ActorID,
+		c.Identity.ActorClientID,
+		c.Identity.ActorClientSecret,
+		c.Identity.ClientID,
+		c.Identity.ClientSecret,
+		c.Identity.IntrospectionClientID,
+		c.Identity.IntrospectionClientSecret,
+	} {
 		if strings.TrimSpace(value) == "" || len(value) > 4096 || strings.ContainsAny(value, "\r\n") {
 			return errors.New("required identity startup parameter missing")
 		}
@@ -343,7 +363,11 @@ func (c Config) MiniAppURL() string {
 
 // applyTypedEnvironment preserves parsing order and keeps startup errors free of values.
 func applyTypedEnvironment(c *Config) error {
-	for key, field := range map[string]*time.Duration{"HTTP_TIMEOUT": &c.HTTPTimeout, "SHUTDOWN_TIMEOUT": &c.ShutdownTimeout, "OTEL_TIMEOUT": &c.OTel.Timeout} {
+	for key, field := range map[string]*time.Duration{
+		"HTTP_TIMEOUT":     &c.HTTPTimeout,
+		"SHUTDOWN_TIMEOUT": &c.ShutdownTimeout,
+		"OTEL_TIMEOUT":     &c.OTel.Timeout,
+	} {
 		if value, ok := os.LookupEnv("SHUTTLE_" + key); ok {
 			parsed, parseErr := time.ParseDuration(value)
 			if parseErr != nil {

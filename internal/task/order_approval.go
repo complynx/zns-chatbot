@@ -144,7 +144,8 @@ func (s *Service) orderApprovalText(ctx context.Context, t db.Task, i intent, a 
 		if a.Method == mealSubmitApprovalMethod {
 			page = "meals"
 		}
-		nativeURL = s.options.MiniAppURL + "#" + page + "?event=" + prepared.Arguments.EventID.String() + "&operation=" + receipt.OperationID.String()
+		nativeURL = s.options.MiniAppURL + "#" + page + "?event=" + prepared.Arguments.EventID.String() +
+			"&operation=" + receipt.OperationID.String()
 	}
 	return text, nativeURL, err
 }
@@ -156,10 +157,12 @@ func fullOrderApproval(p db.OrderPreparation, expires time.Time, language string
 		return "", err
 	}
 	ru := language == "ru"
-	title, event, items, charges, total, cutoff, expiry, each := "Submit order?", "Event", "Items", "Required charges", "Total", "Sales/cancellation cutoff", "Confirm before", "each"
+	title, event, items, charges, total, cutoff, expiry, each := "Submit order?", "Event", "Items",
+		"Required charges", "Total", "Sales/cancellation cutoff", "Confirm before", "each"
 	note := "Submission clears this exact saved draft. It reserves no capacity and confirms no money."
 	if ru {
-		title, event, items, charges, total, cutoff, expiry, each = "Оформить заказ?", "Эвент", "Позиции", "Обязательные доплаты", "Итого", "Закрытие продаж/срок отмены", "Подтвердить до", "за единицу"
+		title, event, items, charges, total, cutoff, expiry, each = "Оформить заказ?", "Эвент", "Позиции",
+			"Обязательные доплаты", "Итого", "Закрытие продаж/срок отмены", "Подтвердить до", "за единицу"
 		note = "Оформление очищает именно этот сохранённый выбор. Места не резервируются, оплата не подтверждается."
 	}
 	var body strings.Builder

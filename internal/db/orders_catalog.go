@@ -162,9 +162,11 @@ func (s *Store) ownOrdersCatalogSnapshot(
 	if err != nil {
 		return result, err
 	}
-	result.EventID, result.EventVersion, result.EventName, result.Timezone = eventID, event.Version, event.Name, event.Timezone
+	result.EventID, result.EventVersion, result.EventName, result.Timezone =
+		eventID, event.Version, event.Name, event.Timezone
 	result.Version, result.ObservedAt = catalog.Version, now.Time.UTC()
-	result.Currency, result.CurrencyScale, result.Items = catalog.Document.Currency, catalog.Document.CurrencyScale, catalog.Document.Items
+	result.Currency, result.CurrencyScale, result.Items =
+		catalog.Document.Currency, catalog.Document.CurrencyScale, catalog.Document.Items
 	result.CompletePricing = catalog.Document.CompletePricing
 	result.CompleteCapacity = catalog.Document.CompleteCapacity
 	result.Offers = make([]OrdersOfferView, 0, len(catalog.Document.Offers))

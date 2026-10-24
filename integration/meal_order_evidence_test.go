@@ -61,7 +61,15 @@ func TestMealEvidenceNativeAgentReviewAndRestart(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Contains(t, w.Preparation.Description, "Состав питания")
-	for _, name := range []string{"Суп", "Горячее", "Гарнир", "Салат", "Чай", "BYN", order.Snapshot.Quote.Timezone} {
+	for _, name := range []string{
+		"Суп",
+		"Горячее",
+		"Гарнир",
+		"Салат",
+		"Чай",
+		"BYN",
+		order.Snapshot.Quote.Timezone,
+	} {
 		require.Contains(t, w.Preparation.Description, name)
 	}
 	reviewerNative := nativePaymentSession(t, f, reviewer, 11003)

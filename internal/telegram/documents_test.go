@@ -28,8 +28,8 @@ func TestSendDocumentUploadsPrivateBytesAndChecksReceipt(t *testing.T) {
 		assert.Equal(t, "42", r.FormValue("chat_id"))
 		assert.JSONEq(
 			t,
-			"{\"inline_keyboard\":[[{\"text\":\"Crop\",\"web_app\":{\"url\":\"https://example.t" +
-"est/app/#avatar-crop?draft=00000000-0000-0000-0000-000000000001\"}}]]}",
+			`{"inline_keyboard":[[{"text":"Crop",`+
+				`"web_app":{"url":"https://example.test/app/#avatar-crop?draft=00000000-0000-0000-0000-000000000001"}}]]}`,
 			r.FormValue("reply_markup"),
 		)
 		file, header, err := r.FormFile("document")

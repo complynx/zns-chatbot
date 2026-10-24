@@ -69,7 +69,12 @@ func TestContentRejectsInvalidBounds(t *testing.T) {
 		"source credentials": func(c *knowledge.Content) { c.Sources[0].URL = "https://user:secret@example.org" },
 		"source scheme":      func(c *knowledge.Content) { c.Sources[0].URL = "file:///tmp/article" },
 		"relative URL":       func(c *knowledge.Content) { c.Sources[0].URL = "/article" },
-		"long URL":           func(c *knowledge.Content) { c.Sources[0].URL = "https://example.org/" + strings.Repeat("x", 2048) },
+		"long URL": func(c *knowledge.Content) {
+			c.Sources[0].URL = "https://example.org/" + strings.Repeat(
+				"x",
+				2048,
+			)
+		},
 	}
 	for name, change := range cases {
 		t.Run(name, func(t *testing.T) {

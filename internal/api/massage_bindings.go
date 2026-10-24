@@ -13,7 +13,7 @@ import (
 type massageBindingListArguments struct {
 	EventID uuid.UUID `json:"event_id"`
 	After   string    `json:"after,omitempty" maxLength:"32"`
-	Limit   int32     `json:"limit,omitempty"                minimum:"1" maximum:"20"`
+	Limit   int32     `json:"limit,omitempty" minimum:"1" maximum:"20"`
 }
 
 type massageBindingArguments struct {

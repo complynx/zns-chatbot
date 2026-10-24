@@ -45,7 +45,12 @@ func (s *Store) OwnerHistoryRegistration(ctx context.Context, scope ProfileScope
 		scope,
 		id,
 		reauthorize,
-		func(ctx context.Context, input io.Reader, digest string, target legacyimport.Record) (legacyimport.BundleValidation, error) {
+		func(
+			ctx context.Context,
+			input io.Reader,
+			digest string,
+			target legacyimport.Record,
+		) (legacyimport.BundleValidation, error) {
 			var validation legacyimport.BundleValidation
 			var readErr error
 			claim, validation, readErr = legacyimport.ReadRegistration(ctx, input, digest, target, key)
@@ -81,7 +86,12 @@ func (s *Store) OwnerHistoryRegistrations(
 		scope,
 		id,
 		reauthorize,
-		func(ctx context.Context, input io.Reader, digest string, target legacyimport.Record) (legacyimport.BundleValidation, error) {
+		func(
+			ctx context.Context,
+			input io.Reader,
+			digest string,
+			target legacyimport.Record,
+		) (legacyimport.BundleValidation, error) {
 			var validation legacyimport.BundleValidation
 			var readErr error
 			page, validation, readErr = legacyimport.ReadRegistrations(ctx, input, digest, target, after, limit)

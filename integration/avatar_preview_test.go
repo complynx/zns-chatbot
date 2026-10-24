@@ -173,7 +173,9 @@ func TestAvatarPreviewRejectsForeignStaleAndUnavailableFrame(t *testing.T) {
 	code, _, _ = avatarPreviewRead(f.h, avatarPreviewURL(d.ID, 0), f.session.Token, false)
 	require.Equal(t, http.StatusBadRequest, code)
 	_, err = f.h.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_avatar_drafts SET frame_sha256=$2 WHERE id=$1", d.ID, bytes.Repeat([]byte{1}, sha256.Size))
+		Exec(t.Context(),
+			"UPDATE shuttle_avatar_drafts SET frame_sha256=$2 WHERE id=$1",
+			d.ID, bytes.Repeat([]byte{1}, sha256.Size))
 	require.NoError(t, err)
 	code, _, _ = avatarPreviewRead(f.h, avatarPreviewURL(d.ID, 2), f.session.Token, false)
 	require.Equal(t, http.StatusConflict, code, "A new frame must never silently replace the pinned one")
@@ -230,8 +232,8 @@ func TestAvatarPreviewRechecksVersionAndSessionAfterRendering(t *testing.T) {
 				require.NoError(t, err)
 			} else {
 				_, err := f.h.store.Pool().
-					Exec(t.Context(), "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interva" +
-"l '1 second' WHERE user_id=$1", f.scope.UserID)
+					Exec(t.Context(), "UPDATE shuttle_miniapp_sessions"+
+						" SET expires_at=clock_timestamp()-interval '1 second' WHERE user_id=$1", f.scope.UserID)
 				require.NoError(t, err)
 				expected = http.StatusUnauthorized
 			}

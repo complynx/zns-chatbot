@@ -29,7 +29,7 @@ func TestInspectorRejectsArgumentsWithoutLeakingThem(t *testing.T) {
 func TestVerifyArchiveRoundTripAndCorruption(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	users := []byte("{\"_id\":\"u\",\"bot_id\":123,\"user_id\":42,\"name\":\"PRIVATE_NAME\"}\n")
+	users := []byte(`{"_id":"u","bot_id":123,"user_id":42,"name":"PRIVATE_NAME"}` + "\n")
 	hash := sha256.Sum256(users)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "users.ndjson"), users, 0o600))
 	manifest := legacyimport.Manifest{Version: 1, SourceInstance: "fixture", BotID: 123,

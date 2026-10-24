@@ -29,7 +29,8 @@ func (s *Store) avatarDraftTransaction(
 		var attempt MiniAppAttempt
 		attempt, err = s.lockMiniAppBearer(ctx, tx, scope.BotID, session.Bearer, session.Generation)
 		if err == nil &&
-			(attempt.User.ID != scope.UserID || attempt.User.Organization != scope.Organization || attempt.User.Subject != scope.Subject) {
+			(attempt.User.ID != scope.UserID || attempt.User.Organization != scope.Organization ||
+				attempt.User.Subject != scope.Subject) {
 			err = ErrMiniAppDenied
 		}
 	}
@@ -55,8 +56,8 @@ func writeAvatarDraftOperation(
 	}
 	_, err = tx.Exec(
 		ctx,
-		"INSERT INTO shuttle_avatar_draft_operations(user_id,operation_id,kind,re" +
-"quest_hash,draft_id,result,native) VALUES($1,$2,$3,$4,$5,$6,$7)",
+		"INSERT INTO shuttle_avatar_draft_operations(user_id,operation_id,kind,request_hash,"+
+			"draft_id,result,native) VALUES($1,$2,$3,$4,$5,$6,$7)",
 		owner,
 		operation,
 		kind,
@@ -95,6 +96,10 @@ func (s *Store) CreateMiniAppAvatarDraft(
 ) (AvatarDraft, error) {
 	return s.createAvatarDraft(ctx, scope, a, raw, proof, &avatarDraftSession{bearer, generation}, true)
 }
+
+const insertAvatarDraftQuery = "INSERT INTO shuttle_avatar_drafts(id,user_id,source_file_id,original,source_sha256," +
+	"mime_type,frame_sha256,transform,version,source_size_bytes,history_record_id," +
+	"history_archive_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,1,$9,$10,$11)"
 
 func (s *Store) createAvatarDraft(
 	ctx context.Context,
@@ -163,10 +168,7 @@ func (s *Store) createAvatarDraft(
 	}
 	_, err = tx.Exec(
 		ctx,
-		"INSERT INTO shuttle_avatar_drafts(id,user_id,source_file_id,original,sou" +
-"rce_sha256,mime_type,frame_sha256,transform,version,source_size_bytes,hi" +
-"story_record_id,history_archive_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,1,$9," +
-"$10,$11)",
+		insertAvatarDraftQuery,
 		id,
 		scope.UserID,
 		source,
@@ -252,8 +254,8 @@ func (s *Store) saveAvatarDraft(
 	}
 	tag, err := tx.Exec(
 		ctx,
-		"UPDATE shuttle_avatar_drafts SET transform=$3,version=version+1,updated_" +
-"at=clock_timestamp() WHERE user_id=$1 AND id=$2 AND version=$4",
+		"UPDATE shuttle_avatar_drafts SET transform=$3,version=version+1,"+
+			"updated_at=clock_timestamp() WHERE user_id=$1 AND id=$2 AND version=$4",
 		scope.UserID,
 		a.DraftID,
 		encoded,

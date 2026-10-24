@@ -143,9 +143,8 @@ func TestPairScheduledExpirySurvivesRestartAndIAMLoomOutage(t *testing.T) {
 	invitation := invitePair(t, f)
 	f.H.stop(t)
 	_, err := f.H.store.Pool().Exec(ctx,
-		"UPDATE shuttle_pair_invitations SET created_at=clock_timestamp()-interva" +
-"l '10 seconds',expires_at=clock_timestamp()-interval '1 second' WHERE id" +
-"=$1",
+		"UPDATE shuttle_pair_invitations SET created_at=clock_timestamp()-interval '10 seconds',"+
+			"expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
 		invitation.Invitation.ID)
 	require.NoError(t, err)
 	_, err = f.H.store.ExpirePairInvitations(ctx, db.EventScope{BotID: 999, Organization: "other"}, uuid.Nil)
@@ -197,9 +196,8 @@ func TestPairExpiredInvitationReleasesHoldAndPreservesReceipt(t *testing.T) {
 	invitation := invitePair(t, f)
 	f.H.stop(t)
 	_, err := f.H.store.Pool().
-		Exec(ctx, "UPDATE shuttle_pair_invitations SET created_at=clock_timestamp()-interva" +
-"l '10 seconds',expires_at=clock_timestamp()-interval '1 second' WHERE id" +
-"=$1", invitation.Invitation.ID)
+		Exec(ctx, "UPDATE shuttle_pair_invitations SET created_at=clock_timestamp()-interval '10 seconds',"+
+			"expires_at=clock_timestamp()-interval '1 second' WHERE id=$1", invitation.Invitation.ID)
 	require.NoError(t, err)
 	args := db.PairInvitationDecision{
 		EventID:         f.EventID,

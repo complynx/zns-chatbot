@@ -18,10 +18,10 @@ const pairInvitationPath = "/internal/agent/pairs/"
 
 type pairInvitationListArguments struct {
 	Direction string    `json:"direction,omitempty" enum:"incoming,outgoing"`
-	State     string    `json:"state,omitempty"     enum:"pending,accepted,declined,revoked,expired,all"`
+	State     string    `json:"state,omitempty" enum:"pending,accepted,declined,revoked,expired,all"`
 	EventID   uuid.UUID `json:"event_id,omitempty"`
 	After     uuid.UUID `json:"after,omitempty"`
-	Limit     int32     `json:"limit,omitempty"                                                          minimum:"1" maximum:"20"`
+	Limit     int32     `json:"limit,omitempty" minimum:"1" maximum:"20"`
 }
 
 type pairInvitationListResult struct {
@@ -69,7 +69,8 @@ func (s *Server) registerPairInvitations(api huma.API) {
 				Path:         pairInvitationPath + kind,
 				MaxBodyBytes: internalBodyLimit,
 			},
-			func(ctx context.Context, in *paymentWriteRequest[db.PairInvitationDecision]) (*paymentWriteResponse[db.PairResult], error) {
+			func(ctx context.Context,
+				in *paymentWriteRequest[db.PairInvitationDecision]) (*paymentWriteResponse[db.PairResult], error) {
 				return s.decidePairInvitation(ctx, in, kind)
 			},
 		)

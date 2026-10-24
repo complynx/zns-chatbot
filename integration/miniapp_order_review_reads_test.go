@@ -188,7 +188,12 @@ func TestMiniAppOrderReviewContentRechecksSessionAuthorityAndLocatorAfterIO(t *t
 					}
 				case "role-removed":
 					_, err = f.H.store.Pool().
-						Exec(t.Context(), "DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2", f.Event.ID, f.AmbassadorID)
+						Exec(
+							t.Context(),
+							"DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2",
+							f.Event.ID,
+							f.AmbassadorID,
+						)
 				case "locator-changed":
 					_, err = f.H.store.Pool().
 						Exec(t.Context(), "UPDATE shuttle_files SET telegram_id='different-review-source' WHERE id=$1", claim.FileID)
@@ -243,9 +248,8 @@ func TestMiniAppOrderReviewReadDeniesLogoutAfterEventLockWait(t *testing.T) {
 	require.Eventually(t, func() bool {
 		var wait bool
 		readErr := f.H.store.Pool().
-			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
-"ase() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid" +
-")))", blocking.Conn().PgConn().PID()).
+			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND "+
+				"pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid)))", blocking.Conn().PgConn().PID()).
 			Scan(&wait)
 		return readErr == nil && wait
 	}, 3*time.Second, 10*time.Millisecond)

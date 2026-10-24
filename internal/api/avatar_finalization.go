@@ -203,7 +203,15 @@ func (s *Server) fetchFinalizedAvatar(
 		OperationID string                `json:"operation_id"`
 		Result      db.AvatarDraftReceipt `json:"result"`
 		Artifacts   []fileDescriptor      `json:"artifacts"`
-	}{agentSucceeded, in.Body.OperationID, view.Avatar, []fileDescriptor{{ExternalID: "avatar-finalized:" + view.Avatar.ArtifactID.String(), FetchMethod: avatarRefetchMethod, DownloadPath: finalizedAvatarPath(view.Avatar), MIMEType: mimeJPEG, SizeBytes: view.Avatar.SizeBytes, SHA256: view.Avatar.SHA256}}}
+	}{agentSucceeded,
+		in.Body.OperationID,
+		view.Avatar,
+		[]fileDescriptor{{ExternalID: "avatar-finalized:" + view.Avatar.ArtifactID.String(),
+			FetchMethod:  avatarRefetchMethod,
+			DownloadPath: finalizedAvatarPath(view.Avatar),
+			MIMEType:     mimeJPEG,
+			SizeBytes:    view.Avatar.SizeBytes,
+			SHA256:       view.Avatar.SHA256}}}
 	raw, err := json.Marshal(result)
 	if err != nil {
 		return nil, huma.Error503ServiceUnavailable("avatar descriptor unavailable")

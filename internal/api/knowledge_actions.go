@@ -19,8 +19,8 @@ const (
 )
 
 type knowledgeOperationArguments struct {
-	Kind        string `json:"kind"         enum:"suggest,edit,review,set_moderator"`
-	OperationID string `json:"operation_id"                                          format:"uuid"`
+	Kind        string `json:"kind" enum:"suggest,edit,review,set_moderator"`
+	OperationID string `json:"operation_id" format:"uuid"`
 }
 
 // The preparation contains exactly the original verb's normalized arguments.
@@ -44,9 +44,9 @@ type knowledgeActionPreparation struct {
 }
 
 type knowledgeActionView struct {
-	Kind        string                      `json:"kind"                  enum:"suggest,edit,review,set_moderator"`
+	Kind        string                      `json:"kind" enum:"suggest,edit,review,set_moderator"`
 	OperationID string                      `json:"operation_id"`
-	State       string                      `json:"state"                 enum:"completed,prepared,expired,unknown"`
+	State       string                      `json:"state" enum:"completed,prepared,expired,unknown"`
 	Preparation *knowledgeActionPreparation `json:"preparation,omitempty"`
 	Result      *knowledgeResultView        `json:"result,omitempty"`
 	ObservedAt  time.Time                   `json:"observed_at"`
@@ -133,24 +133,25 @@ func knowledgeActionMethods() []map[string]any {
 	return []map[string]any{
 		knowledgeMethod[knowledgeOperationArguments, knowledgeActionView](
 			"operation",
-			"Inspect your own original action using kind and operation_id. completed "+
-				"returns a bounded original receipt, not current article state. prepared/"+
-				"expired include exact original normalized verb arguments and proposal_id"+
-				"; this past consent is not current permission or a new request. To conti"+
-				"nue a prepared action, use its original operation_id and unchanged argum"+
-				"ents and obtain fresh exact consent; confirmation still rechecks expiry,"+
-				" rights and versions. expired needs fresh preparation and consent. unkno"+
-				"wn is nonterminal, never proof a replacement operation is safe. Never mu"+
-				"tate merely because history exists.",
+			"Inspect your own original action using kind and operation_id. "+
+				"completed returns a bounded original receipt, not current article state. "+
+				"prepared/expired include exact original normalized verb arguments and proposal_id; "+
+				"this past consent is not current permission or a new request. "+
+				"To continue a prepared action, use its original operation_id and unchanged "+
+				"arguments and obtain fresh exact consent; "+
+				"confirmation still rechecks expiry, rights and versions. "+
+				"expired needs fresh preparation and consent. "+
+				"unknown is nonterminal, never proof a replacement operation is safe. "+
+				"Never mutate merely because history exists.",
 		),
 		knowledgeMethod[struct{}, knowledgeRecentActionsView](
 			"recent_actions",
-			"Read at most five recent actor-owned action locators, without content bo"+
-				"dies. This is a bounded continuation hint, not an exhaustive directory o"+
-				"r paginated history. Use operation with a known kind/operation_id for ex"+
-				"act original terms and result. Observed states may have different timest"+
-				"amps. Historical actions are not current requests, consent or permission"+
-				"; continue only the user's explicit request.",
+			"Read at most five recent actor-owned action locators, without content bodies. "+
+				"This is a bounded continuation hint, not an exhaustive directory or paginated "+
+				"history. Use operation with a known kind/operation_id for exact original terms and "+
+				"result. Observed states may have different timestamps. "+
+				"Historical actions are not current requests, consent or permission; "+
+				"continue only the user's explicit request.",
 		),
 	}
 }

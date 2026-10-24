@@ -43,7 +43,8 @@ func TestIncompatibleCreatedRunStaysOwnedUntilCancellationAfterRestart(t *testin
 			p.mu.Unlock()
 			if !tc.applied {
 				_, err = h.store.Pool().Exec(t.Context(),
-					`UPDATE shuttle_tasks SET snapshot=jsonb_set(snapshot,'{loom_auth_retry_until}',to_jsonb($2::text)) WHERE id=$1`,
+					"UPDATE shuttle_tasks SET snapshot=jsonb_set(snapshot,'{loom_auth_retry_until}',"+
+						"to_jsonb($2::text)) WHERE id=$1",
 					id, time.Now().Add(-time.Minute).UTC().Format(time.RFC3339Nano))
 				require.NoError(t, err)
 				h.start(t)

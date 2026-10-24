@@ -135,8 +135,8 @@ func TestTelegramNameReplyTextAndMediaRemainAgentInputAcrossRestart(t *testing.T
 				require.Contains(
 					t,
 					p.inputs[0].Text,
-					"Use zinusya_files.fetch with these IDs to import and inspect the attachm" +
-"ent with Loom file tools; metadata alone is not image content.",
+					"Use zinusya_files.fetch with these IDs to import and inspect the attachment with Loom file tools; "+
+						"metadata alone is not image content.",
 				)
 				require.NotContains(t, p.inputs[0].Text, "private-native-reply-file")
 			}

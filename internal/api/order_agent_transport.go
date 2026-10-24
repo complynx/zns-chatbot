@@ -12,9 +12,22 @@ import (
 // Both modules share HTTP validation and recovery, while each store binding
 // retains its own entitlement checks, immutable draft and persisted business kind.
 type orderAgentActions struct {
-	prepare   func(context.Context, db.ProfileScope, uuid.UUID, db.OrderSubmission, db.OrderSource) (db.OrderPreparation, error)
-	submit    func(context.Context, db.ProfileScope, uuid.UUID, db.OrderSubmission, uuid.UUID, db.OrderSource) (db.OrderSubmissionResult, error)
-	cancel    func(context.Context, db.ProfileScope, uuid.UUID, db.OrderCancellation, db.OrderSource) (db.SubmittedOrder, error)
+	prepare func(context.Context,
+		db.ProfileScope,
+		uuid.UUID,
+		db.OrderSubmission,
+		db.OrderSource) (db.OrderPreparation, error)
+	submit func(context.Context,
+		db.ProfileScope,
+		uuid.UUID,
+		db.OrderSubmission,
+		uuid.UUID,
+		db.OrderSource) (db.OrderSubmissionResult, error)
+	cancel func(context.Context,
+		db.ProfileScope,
+		uuid.UUID,
+		db.OrderCancellation,
+		db.OrderSource) (db.SubmittedOrder, error)
 	get       func(context.Context, db.ProfileScope, uuid.UUID, uuid.UUID) (db.SubmittedOrder, error)
 	list      func(context.Context, db.ProfileScope, uuid.UUID, uuid.UUID, int32) (db.OrdersPage, error)
 	operation func(context.Context, db.ProfileScope, uuid.UUID, db.OrderOperationKind) (db.OrderOperation, error)

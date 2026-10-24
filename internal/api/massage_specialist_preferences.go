@@ -116,11 +116,11 @@ func massagePreferenceResult(
 func massageSpecialistPreferenceMethods() []map[string]any {
 	get := paymentMethod(
 		"preferences",
-		"Read your global specialist booking/cancellation and upcoming-session no" +
-"tification preferences across ALL your events in this bot account. Selec" +
-"t one enabled event with a current own private specialist binding for au" +
-"thorization; a pass or administrator role is not a substitute. Both flag" +
-"s default to true/version0. This is not an event-specific preference.",
+		"Read your global specialist booking/cancellation and upcoming-session notification "+
+			"preferences across ALL your events in this bot account. "+
+			"Select one enabled event with a current own private specialist binding for authorization; "+
+			"a pass or administrator role is not a substitute. Both flags default to true/version0. "+
+			"This is not an event-specific preference.",
 		massageEventProperties(),
 		[]string{schemaEventID},
 		[]string{"user_id", massagePreferenceNotifyBookings, massagePreferenceNotifyNext, schemaVersion},
@@ -132,17 +132,16 @@ func massageSpecialistPreferenceMethods() []map[string]any {
 	properties[massagePreferenceNotifyNext] = map[string]any{manifestType: schemaBoolean}
 	set := paymentMethod(
 		"set_preferences",
-		"Set your own global specialist booking/cancellation and upcoming-session" +
-" notification preferences across ALL your events in this bot account, on" +
-"ly on explicit user intent. Select an enabled event with a current own b" +
-"inding and read preferences first. Send expected_version and at least on" +
-"e explicit boolean: notify_bookings or notify_next, including false. An " +
-"omitted flag stays unchanged. A same-value write keeps the version but r" +
-"etains its receipt. Same operation ID returns its original result withou" +
-"t changing newer preferences. Missing status is not proof of non-executi" +
-"on: reconcile/retry the same operation before creating another. Each fla" +
-"g has an independent delivery generation; changing one does not invalida" +
-"te notifications governed by the other.",
+		"Set your own global specialist booking/cancellation and upcoming-session notification "+
+			"preferences across ALL your events in this bot account, only on explicit user intent. "+
+			"Select an enabled event with a current own binding and read preferences first. "+
+			"Send expected_version and at least one explicit boolean: notify_bookings or notify_next, "+
+			"including false. An omitted flag stays unchanged. "+
+			"A same-value write keeps the version but retains its receipt. "+
+			"Same operation ID returns its original result without changing newer preferences. "+
+			"Missing status is not proof of non-execution: reconcile/retry the same operation before "+
+			"creating another. Each flag has an independent delivery generation; "+
+			"changing one does not invalidate notifications governed by the other.",
 		properties,
 		[]string{schemaEventID, schemaExpectedVersion},
 		[]string{"user_id", massagePreferenceNotifyBookings, massagePreferenceNotifyNext, schemaVersion},

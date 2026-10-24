@@ -213,7 +213,8 @@ func New(
 func (s *Service) recoverBusinessNotifications(ctx context.Context) error {
 	scope := s.notificationScope()
 	for _, recoverNotices := range []func(context.Context, db.EventScope) error{
-		s.store.RecoverNotifications, s.store.RecoverPairNotifications, s.store.RecoverOrderNotifications, s.store.RecoverAvatarDeliveries,
+		s.store.RecoverNotifications, s.store.RecoverPairNotifications, s.store.RecoverOrderNotifications,
+		s.store.RecoverAvatarDeliveries,
 		s.store.RecoverMassageReminders, s.store.RecoverMassageSpecialistNotifications, s.store.RecoverKnowledgeNotifications,
 	} {
 		if err := recoverNotices(ctx, scope); err != nil {

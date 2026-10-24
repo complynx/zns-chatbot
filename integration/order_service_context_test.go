@@ -75,8 +75,8 @@ func TestOldOrderPreparationRequiresFreshServiceConsent(t *testing.T) {
 	require.Equal(t, 1, count)
 	// Completed historical records remain readable without inventing a service.
 	_, err = f.H.store.Pool().
-		Exec(ctx, "UPDATE shuttle_orders SET submitted_result=submitted_result #- '{order,s" +
-"napshot,services}' WHERE id=$1", result.Order.ID)
+		Exec(ctx, "UPDATE shuttle_orders SET submitted_result=submitted_result #- '{order,snapshot,services}' "+
+			"WHERE id=$1", result.Order.ID)
 	require.NoError(t, err)
 	old, err := f.H.store.OwnOrder(ctx, scope, args.EventID, result.Order.ID)
 	require.NoError(t, err)

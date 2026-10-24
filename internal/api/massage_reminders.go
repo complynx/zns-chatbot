@@ -84,10 +84,10 @@ func massageReminderMethods() []map[string]any {
 	return []map[string]any{
 		administrativeRead(
 			"massage_reminders",
-			"List this deployment's owner massage reminder metadata with current glob"+
-				"al administrator authority. Default/max page20; follow next as after. Du"+
-				"e and retry embargo are independent; unknown delivery does not prove non"+
-				"-delivery. No raw outbound payload is returned.",
+			"List this deployment's owner massage reminder metadata with current global administrator "+
+				"authority. Default/max page20; follow next as after. "+
+				"Due and retry embargo are independent; "+
+				"unknown delivery does not prove non-delivery. No raw outbound payload is returned.",
 			map[string]any{
 				schemaState: map[string]any{manifestType: schemaString},
 				schemaAfter: uuidField,
@@ -102,12 +102,12 @@ func massageReminderMethods() []map[string]any {
 		),
 		administrativeRead(
 			"massage_reminder",
-			"Inspect owner massage reminder state/version, due/retry times, attempt I"+
-				"D, Telegram receipt and frozen booking terms. Use resolve_notification w"+
-				"ith notification_kind=massage for exact audited retry/dismiss; retry of "+
-				"unknown may duplicate and requires checking the receipt/chat first. Canc"+
-				"elled bookings cannot be retried. Delivery does not confirm payment; nev"+
-				"er repeat the booking to resend a reminder.",
+			"Inspect owner massage reminder state/version, due/retry times, attempt ID, Telegram "+
+				"receipt and frozen booking terms. "+
+				"Use resolve_notification with notification_kind=massage for exact audited "+
+				"retry/dismiss; retry of unknown may duplicate and requires checking the "+
+				"receipt/chat first. Cancelled bookings cannot be retried. "+
+				"Delivery does not confirm payment; never repeat the booking to resend a reminder.",
 			map[string]any{"id": uuidField},
 			[]string{"id"},
 			[]string{"id", schemaState, schemaVersion, paymentSchemaReceipt},

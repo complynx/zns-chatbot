@@ -74,7 +74,12 @@ func (s *Store) AvatarDraftSource(ctx context.Context, scope ProfileScope, id uu
 	}
 	result := AvatarDraftInput{Draft: d, Original: raw}
 	if d.SourceFileID != nil {
-		err = tx.QueryRow(ctx, `SELECT telegram_id FROM shuttle_files WHERE id=$1 AND user_id=$2`, *d.SourceFileID, scope.UserID).
+		err = tx.QueryRow(
+			ctx,
+			`SELECT telegram_id FROM shuttle_files WHERE id=$1 AND user_id=$2`,
+			*d.SourceFileID,
+			scope.UserID,
+		).
 			Scan(&result.TelegramID)
 	} else if d.HistorySource != nil {
 		var row sqlc.OwnerHistoryAvatarSourceRow

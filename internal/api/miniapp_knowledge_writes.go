@@ -33,7 +33,10 @@ func registerMiniAppKnowledgeWrite[T any](
 	registerMiniAppKnowledgePost(
 		s,
 		kind+"/prepare",
-		func(ctx context.Context, scope db.PaymentScope, session db.MiniAppKnowledgeSession, in miniAppKnowledgePrepareInput[T]) (any, error) {
+		func(ctx context.Context,
+			scope db.PaymentScope,
+			session db.MiniAppKnowledgeSession,
+			in miniAppKnowledgePrepareInput[T]) (any, error) {
 			if err := knowledgeOperationID(in.OperationID); err != nil {
 				return nil, err
 			}
@@ -58,7 +61,10 @@ func registerMiniAppKnowledgeWrite[T any](
 	registerMiniAppKnowledgePost(
 		s,
 		kind+"/confirm",
-		func(ctx context.Context, scope db.PaymentScope, session db.MiniAppKnowledgeSession, in miniAppKnowledgeConfirmInput[T]) (any, error) {
+		func(ctx context.Context,
+			scope db.PaymentScope,
+			session db.MiniAppKnowledgeSession,
+			in miniAppKnowledgeConfirmInput[T]) (any, error) {
 			if err := knowledgeOperationID(in.OperationID); err != nil {
 				return nil, err
 			}
@@ -80,7 +86,10 @@ func registerMiniAppKnowledgeWrite[T any](
 	registerMiniAppKnowledgePost(
 		s,
 		kind+"/status",
-		func(ctx context.Context, scope db.PaymentScope, _ db.MiniAppKnowledgeSession, in miniAppKnowledgeStatusInput) (any, error) {
+		func(ctx context.Context,
+			scope db.PaymentScope,
+			_ db.MiniAppKnowledgeSession,
+			in miniAppKnowledgeStatusInput) (any, error) {
 			if err := knowledgeOperationID(in.OperationID); err != nil {
 				return nil, err
 			}

@@ -109,8 +109,8 @@ func TestMiniAppPairAssignmentNativeAndMixedPathsRecoverOneCanonicalReceipt(t *t
 			}
 			requireNativePairAssignmentEffects(t, f, admin, 2, 1, beforeActions)
 			_, err = reopened.Pool().Exec(ctx,
-				"UPDATE shuttle_pair_preparations SET expires_at=clock_timestamp()-interv" +
-"al '1 minute' WHERE proposal_id=$1", prep.ID)
+				"UPDATE shuttle_pair_preparations SET expires_at=clock_timestamp()-interval '1 "+
+					"minute' WHERE proposal_id=$1", prep.ID)
 			require.NoError(t, err)
 			_, err = reopened.Pool().
 				Exec(ctx, "UPDATE shuttle_events SET modules='{}',version=version+1 WHERE id=$1", args.EventID)
@@ -281,8 +281,8 @@ func TestMiniAppPairAssignmentRejectsSessionLossBeforeEffectsAndReceiptReplay(t 
 					)
 				case "expired":
 					_, err = f.H.store.Pool().
-						Exec(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interva" +
-"l '1 second' WHERE bearer_hash=$1", session.Bearer[:])
+						Exec(ctx, "UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 "+
+							"second' WHERE bearer_hash=$1", session.Bearer[:])
 					require.NoError(t, err)
 				case "nil_authority":
 					session.AuthorityUnchanged = nil
@@ -347,8 +347,8 @@ func testMiniAppPairAssignmentSessionAfterLockWait(t *testing.T, target, failure
 	var expiry time.Time
 	if failure == "expired" {
 		err = f.H.store.Pool().QueryRow(t.Context(),
-			"UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()+interva" +
-"l '2 seconds' WHERE bearer_hash=$1 RETURNING expires_at", session.Bearer[:]).
+			"UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()+interval '2 "+
+				"seconds' WHERE bearer_hash=$1 RETURNING expires_at", session.Bearer[:]).
 			Scan(&expiry)
 		require.NoError(t, err)
 	}
@@ -370,8 +370,8 @@ func testMiniAppPairAssignmentSessionAfterLockWait(t *testing.T, target, failure
 		var waiting bool
 		probeErr = blocker.QueryRow(
 			ctx,
-			"SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
-"ase() AND $1::integer=ANY(pg_blocking_pids(pid)))",
+			"SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND "+
+				"$1::integer=ANY(pg_blocking_pids(pid)))",
 			blocker.Conn().PgConn().PID(),
 		).Scan(&waiting)
 		return probeErr != nil || waiting

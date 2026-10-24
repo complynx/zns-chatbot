@@ -35,9 +35,9 @@ func TestHistoricalAvatarReferenceKeepsTelegramIDsPrivate(t *testing.T) {
 	for _, mime := range []string{"image/jpeg", "image/png"} {
 		t.Run(mime, func(t *testing.T) {
 			t.Parallel()
-			fields := "\"tg_file_id\":\"PRIVATE_FILE_ID\",\"tg_file_unique_id\":\"PRIVATE_UNIQUE_ID\",\"" +
-				"mime_type\":\"" + mime + "\",\"status\":\"completed_simple\",\"cached_file_key\":\"PRIVATE_PATH\",\"original" +
-				"_file_name\":\"PRIVATE_NAME\",\"bank\":\"PRIVATE_BANK\""
+			fields := `"tg_file_id":"PRIVATE_FILE_ID","tg_file_unique_id":"PRIVATE_UNIQUE_ID",` +
+				`"mime_type":"` + mime + `","status":"completed_simple","cached_file_key":"PRIVATE_PATH",` +
+				`"original_file_name":"PRIVATE_NAME","bank":"PRIVATE_BANK"`
 			raw, hash, target := avatarInputArchive(t, fields)
 			result, validation, err := legacyimport.ReadAvatarInput(t.Context(), bytes.NewReader(raw), hash, target)
 			require.NoError(t, err)
@@ -63,7 +63,10 @@ func TestHistoricalAvatarInputRejectsNonImagesAndMalformedMetadata(t *testing.T)
 		{"missing-unique", `"mime_type":"image/png","tg_file_id":"file"`},
 		{"empty-file", `"mime_type":"image/png","tg_file_id":"","tg_file_unique_id":"unique"`},
 		{"nul-file", `"mime_type":"image/png","tg_file_id":"bad\u0000file","tg_file_unique_id":"unique"`},
-		{"long-file", `"mime_type":"image/png","tg_file_id":"` + strings.Repeat("x", 1025) + `","tg_file_unique_id":"unique"`},
+		{
+			"long-file",
+			`"mime_type":"image/png","tg_file_id":"` + strings.Repeat("x", 1025) + `","tg_file_unique_id":"unique"`,
+		},
 		{"numeric-status", `"mime_type":"image/png","tg_file_id":"file","tg_file_unique_id":"unique","status":123`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -82,7 +85,15 @@ func TestHistoricalAvatarInputNeverReturnsUnverifiedProvisionalMetadata(t *testi
 		t,
 		`"mime_type":"image/jpeg","tg_file_id":"PRIVATE_FILE","tg_file_unique_id":"PRIVATE_UNIQUE"`,
 	)
-	for _, name := range []string{"late-corruption", "owner", "canonical-hash", "line", "missing-key", "wrong-role", "cancelled"} {
+	for _, name := range []string{
+		"late-corruption",
+		"owner",
+		"canonical-hash",
+		"line",
+		"missing-key",
+		"wrong-role",
+		"cancelled",
+	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			input := append([]byte(nil), raw...)

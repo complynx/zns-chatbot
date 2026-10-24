@@ -23,10 +23,12 @@ import (
 func bundleSnapshot(t *testing.T) (*snapshot, string) {
 	t.Helper()
 	s := newSnapshot(t, map[string]string{
-		"users":    `{"_id":"u","bot_id":123,"user_id":42,"name":"PRIVATE_NAME","pass_old":{"paid":true}}` + "\r\n",
-		"messages": `{"_id":"m","user_id":42,"content":"PRIVATE_MESSAGE","date":{"$date":"2020-01-01T00:00:00Z"}}` + "\n",
-		"passes":   `{"_id":"p","bot_id":123,"user_id":42,"paid":true}` + "\n",
-		"files":    `{"_id":"f","bot_id":123,"user_id":42,"tg_file_id":"PRIVATE_FILE"}` + "\n",
+		"users": `{"_id":"u","bot_id":123,"user_id":42,"name":"PRIVATE_NAME",` +
+			`"pass_old":{"paid":true}}` + "\r\n",
+		"messages": `{"_id":"m","user_id":42,"content":"PRIVATE_MESSAGE",` +
+			`"date":{"$date":"2020-01-01T00:00:00Z"}}` + "\n",
+		"passes": `{"_id":"p","bot_id":123,"user_id":42,"paid":true}` + "\n",
+		"files":  `{"_id":"f","bot_id":123,"user_id":42,"tg_file_id":"PRIVATE_FILE"}` + "\n",
 	})
 	_, err := s.inspect(t)
 	require.NoError(t, err)

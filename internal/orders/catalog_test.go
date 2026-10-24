@@ -46,7 +46,11 @@ func TestCatalogRejectsAmbiguousReferencesAndInvalidMoneyOrTimes(t *testing.T) {
 		"missing translation":    func(d *orders.CatalogDocument) { d.Items[0].Name.EN = "" },
 		"ambiguous sales window": func(d *orders.CatalogDocument) { d.Offers[0].SalesClosesAt = d.Offers[0].SalesOpensAt },
 		"missing date":           func(d *orders.CatalogDocument) { d.Offers[0].StartsAt = time.Time{} },
-		"lost precision":         func(d *orders.CatalogDocument) { d.Offers[0].StartsAt = d.Offers[0].StartsAt.Add(time.Nanosecond) },
+		"lost precision": func(d *orders.CatalogDocument) {
+			d.Offers[0].StartsAt = d.Offers[0].StartsAt.Add(
+				time.Nanosecond,
+			)
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

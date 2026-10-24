@@ -70,7 +70,8 @@ func TestPairNotificationIntentsSurviveRestartWithoutDuplicatingDecisions(t *tes
 			require.True(t, foundFirst)
 			require.Equal(t, int64(2), changed.InvitationVersion)
 			require.Equal(t, invitation.Invitation.ID, changed.InvitationID)
-			expectedKind := map[string]string{"accept": "accepted", "decline": "declined", "revoke": "revoked", "expired": "expired"}[decision]
+			expectedKind := map[string]string{"accept": "accepted", "decline": "declined", "revoke": "revoked",
+				"expired": "expired"}[decision]
 			require.Equal(t, expectedKind, changed.Kind)
 			expectedRecipient := f.A.UserID
 			if decision == "revoke" {

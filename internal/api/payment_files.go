@@ -58,7 +58,17 @@ func (s *Server) paymentFileFetch(ctx context.Context, in *agentReadRequest[file
 		OperationID string           `json:"operation_id"`
 		Result      files.Metadata   `json:"result"`
 		Artifacts   []fileDescriptor `json:"artifacts"`
-	}{agentSucceeded, in.Body.OperationID, record.Metadata, []fileDescriptor{{ExternalID: id.String(), FetchMethod: fileFetchMethod, DownloadPath: "/internal/payment-evidence/" + id.String() + "/content", MIMEType: fileContentType(raw), SizeBytes: int64(len(raw)), SHA256: hex.EncodeToString(digest[:])}}}
+	}{agentSucceeded,
+		in.Body.OperationID,
+		record.Metadata,
+		[]fileDescriptor{{ExternalID: id.String(),
+			FetchMethod: fileFetchMethod,
+			DownloadPath: "/internal/payment-evidence/" +
+				id.String() +
+				"/content",
+			MIMEType:  fileContentType(raw),
+			SizeBytes: int64(len(raw)),
+			SHA256:    hex.EncodeToString(digest[:])}}}
 	body, err := json.Marshal(result)
 	if err != nil {
 		return nil, huma.Error503ServiceUnavailable("proof descriptor unavailable")

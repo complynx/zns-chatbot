@@ -312,8 +312,8 @@ func TestMassageBindingHTTPRejectsMissingConfirmationFieldsAndExpiredConsent(t *
 	require.Equal(t, http.StatusBadRequest, code, string(raw))
 	body["idempotency_key"] = op
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_massage_binding_operations SET expires_at=clock_timestamp" +
-"()-interval '1 second' WHERE actor_id=$1", actor.UserID)
+		Exec(t.Context(), "UPDATE shuttle_massage_binding_operations SET "+
+			"expires_at=clock_timestamp()-interval '1 second' WHERE actor_id=$1", actor.UserID)
 	require.NoError(t, err)
 	code, raw = adminRequest(
 		t,
@@ -345,7 +345,11 @@ func TestMassageBindingHTTPRejectsMissingConfirmationFieldsAndExpiredConsent(t *
 		nil,
 	)
 	require.Empty(t, page.Proposals)
-	for _, query := range []string{"/app/massage-admin/status/operations/nope", "/app/massage-admin/pending?after=nope", "/app/massage-admin/status/proposals/" + uuid.Nil.String()} {
+	for _, query := range []string{
+		"/app/massage-admin/status/operations/nope",
+		"/app/massage-admin/pending?after=nope",
+		"/app/massage-admin/status/proposals/" + uuid.Nil.String(),
+	} {
 		code, raw, _ = appCall(t, f.H, http.MethodGet, query, "", session.Token, appTestOrigin)
 		require.Equal(t, http.StatusBadRequest, code, string(raw))
 	}
@@ -368,7 +372,10 @@ func TestMassageBindingHTTPRequiresCurrentAdminForWritesPendingAndReceipts(t *te
 		code, raw := adminRequest(t, f.H, f.Owner, http.MethodPost, path, envelope)
 		require.Equal(t, http.StatusForbidden, code, string(raw))
 	}
-	for method, a := range map[string]any{"massage_specialist_pending": map[string]any{}, "massage_specialist_proposal": map[string]any{"proposal_id": prepared.ID}} {
+	for method, a := range map[string]any{
+		"massage_specialist_pending":  map[string]any{},
+		"massage_specialist_proposal": map[string]any{"proposal_id": prepared.ID},
+	} {
 		code, raw := agentAdminRead(t, f.H, f.Owner, method, a)
 		require.Equal(t, http.StatusForbidden, code, string(raw))
 	}
@@ -398,7 +405,11 @@ func TestMassageBindingHTTPRequiresCurrentAdminForWritesPendingAndReceipts(t *te
 		)
 		require.Equal(t, http.StatusForbidden, code, string(raw))
 	}
-	for _, path := range []string{"/app/massage-admin/pending", "/app/massage-admin/status/operations/" + op.String(), "/app/massage-admin/status/proposals/" + prepared.ID.String()} {
+	for _, path := range []string{
+		"/app/massage-admin/pending",
+		"/app/massage-admin/status/operations/" + op.String(),
+		"/app/massage-admin/status/proposals/" + prepared.ID.String(),
+	} {
 		code, raw, _ := appCall(t, f.H, http.MethodGet, path, "", session.Token, appTestOrigin)
 		require.Equal(t, http.StatusForbidden, code, string(raw))
 	}
@@ -450,9 +461,8 @@ func TestMassageBindingHTTPRechecksAdminAfterWaitingForEvent(t *testing.T) {
 	require.Eventually(t, func() bool {
 		var waiting bool
 		e := f.H.store.Pool().
-			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_datab" +
-"ase() AND pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid" +
-")))", blocker.Conn().PgConn().PID()).
+			QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND "+
+				"pid<>pg_backend_pid() AND $1::integer=ANY(pg_blocking_pids(pid)))", blocker.Conn().PgConn().PID()).
 			Scan(&waiting)
 		return e == nil && waiting
 	}, 3*time.Second, 5*time.Millisecond)

@@ -299,49 +299,51 @@ func assignmentMethods() []map[string]any {
 	return append(assignmentProposalMethods(), []map[string]any{
 		administrativeRead(
 			schemaEvents,
-			"List this deployment's event configuration in UUID order. limit defaults"+
-				" to 20, maximum 20; follow next as after. Event times are UTC with an IA"+
-				"NA display timezone. Example: {\"limit\":20}.",
+			"List this deployment's event configuration in UUID order. "+
+				"limit defaults to 20, maximum 20; follow next as after. "+
+				"Event times are UTC with an IANA display timezone. Example: {\"limit\":20}.",
 			pageFields,
 			nil,
 			[]string{schemaEvents},
 		),
 		administrativeRead(
 			"event",
-			"Read event configuration and version by id; registration rules include c"+
-				"apacity, exact price_minor and currency_scale, closing instant and payme"+
-				"nt window. Example: {\"id\":\"00000000-0000-4000-8000-000000000001\"}.",
+			"Read event configuration and version by id; "+
+				"registration rules include capacity, exact price_minor and currency_scale, closing "+
+				"instant and payment window. "+
+				"Example: {\"id\":\"00000000-0000-4000-8000-000000000001\"}.",
 			map[string]any{"id": uuidField},
 			[]string{"id"},
 			[]string{"id", schemaVersion, "document"},
 		),
 		administrativeRead(
 			"registrations",
-			"List registrations and optional assigned passes for event_id in UUID ord"+
-				"er (not waitlist priority). Default limit 20, maximum 20; follow next as"+
-				" after. Use returned IDs and versions for assignment. Example: {\"event_i"+
-				"d\":\"00000000-0000-4000-8000-000000000001\",\"limit\":20}.",
+			"List registrations and optional assigned passes for event_id in UUID order (not waitlist "+
+				"priority). Default limit 20, maximum 20; follow next as after. "+
+				"Use returned IDs and versions for assignment. "+
+				"Example: {\"event_id\":\"00000000-0000-4000-8000-000000000001\",\"limit\":20}.",
 			queueFields,
 			[]string{schemaEventID},
 			[]string{"registrations"},
 		),
 		{
 			"id": "assign",
-			manifestDescription: "Assign an unpaid pass to a waitlisted registration only after an adminis" +
-				"trator request and exact-parameter approval. Required: event_id, registr" +
-				"ation_id, expected_version and expected_event_version from reads. Prepar" +
-				"ation shows recipient, exact price and local payment policy; reserves no" +
-				" capacity. Confirmation expires after at most five minutes. Execution re" +
-				"checks versions, capacity, account and module availability. Price/deadli" +
-				"ne changes require new preparation and approval. No payment is recorded." +
-				" Example: {\"event_id\":\"00000000-0000-4000-8000-000000000001\",\"registrati" +
-				"on_id\":\"00000000-0000-4000-8000-000000000002\",\"expected_version\":1,\"expe" +
-				"cted_event_version\":1}. Reconcile the same operation after uncertainty; " +
-				"missing status is unknown, never blindly replace it. To continue your ow" +
-				"n pending preparation from another interface, supply its original exact " +
-				"arguments and resume_proposal_id. Adoption preserves terms and expiry an" +
-				"d still requires fresh exact approval. Read completed or expired proposa" +
-				"ls instead of adopting them.",
+			manifestDescription: "Assign an unpaid pass to a waitlisted registration only after an " +
+				"administrator request and exact-parameter approval. " +
+				"Required: event_id, registration_id, expected_version and expected_event_version " +
+				"from reads. Preparation shows recipient, exact price and local payment policy; " +
+				"reserves no capacity. Confirmation expires after at most five minutes. " +
+				"Execution rechecks versions, capacity, account and module availability. " +
+				"Price/deadline changes require new preparation and approval. " +
+				"No payment is recorded. " +
+				"Example: {\"event_id\":\"00000000-0000-4000-8000-000000000001\"," +
+				"\"registration_id\":\"00000000-0000-4000-8000-000000000002\",\"expected_version\":1," +
+				"\"expected_event_version\":1}. Reconcile the same operation after uncertainty; " +
+				"missing status is unknown, never blindly replace it. " +
+				"To continue your own pending preparation from another interface, supply its " +
+				"original exact arguments and resume_proposal_id. " +
+				"Adoption preserves terms and expiry and still requires fresh exact approval. " +
+				"Read completed or expired proposals instead of adopting them.",
 			manifestPermissions: []string{},
 			manifestPath:        "/internal/agent/administration/assign",
 			manifestEffect:      effectWrite,

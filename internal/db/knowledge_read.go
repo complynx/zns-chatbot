@@ -400,7 +400,14 @@ func (s *Store) ListKnowledge(
 	scope PaymentScope,
 	r KnowledgeListRequest,
 ) (KnowledgeArticlePage, error) {
-	filter, err := (knowledge.SearchRequest{Collection: r.Collection, EventID: r.EventID, Language: r.Language, Topic: r.Topic, Queries: []string{"browse"}, Limit: r.Limit}).Normalize()
+	filter, err := (knowledge.SearchRequest{
+		Collection: r.Collection,
+		EventID:    r.EventID,
+		Language:   r.Language,
+		Topic:      r.Topic,
+		Queries:    []string{"browse"},
+		Limit:      r.Limit,
+	}).Normalize()
 	if err != nil {
 		return KnowledgeArticlePage{}, err
 	}

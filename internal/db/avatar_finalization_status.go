@@ -31,9 +31,9 @@ func (s *Store) FinalizedAvatarStatus(
 	var raw []byte
 	var delivery uuid.UUID
 	var result AvatarFinalizationView
-	err = tx.QueryRow(ctx, "SELECT a.receipt,n.id,n.state,n.version FROM shuttle_avatars a JOIN shut" +
-"tle_avatar_deliveries n ON n.artifact_id=a.id AND n.user_id=a.user_id WH" +
-"ERE a.id=$1 AND a.user_id=$2 AND a.draft_id IS NOT NULL", id, scope.UserID).
+	err = tx.QueryRow(ctx, "SELECT a.receipt,n.id,n.state,n.version FROM shuttle_avatars a JOIN "+
+		"shuttle_avatar_deliveries n ON n.artifact_id=a.id AND n.user_id=a.user_id WHERE "+
+		"a.id=$1 AND a.user_id=$2 AND a.draft_id IS NOT NULL", id, scope.UserID).
 		Scan(&raw, &delivery, &result.DeliveryState, &result.DeliveryVersion)
 	if err != nil {
 		return result, err
@@ -60,10 +60,9 @@ func (s *Store) ListFinalizedAvatars(ctx context.Context, scope ProfileScope) ([
 	}
 	rows, err := tx.Query(
 		ctx,
-		"SELECT a.id,a.receipt,n.id,n.state,n.version FROM shuttle_avatars a JOIN" +
-" shuttle_avatar_deliveries n ON n.artifact_id=a.id AND n.user_id=a.user_" +
-"id WHERE a.user_id=$1 AND a.draft_id IS NOT NULL ORDER BY a.created_at D" +
-"ESC,a.id DESC LIMIT $2",
+		"SELECT a.id,a.receipt,n.id,n.state,n.version FROM shuttle_avatars a JOIN "+
+			"shuttle_avatar_deliveries n ON n.artifact_id=a.id AND n.user_id=a.user_id WHERE "+
+			"a.user_id=$1 AND a.draft_id IS NOT NULL ORDER BY a.created_at DESC,a.id DESC LIMIT $2",
 		scope.UserID,
 		MaxAvatarsPerOwner,
 	)

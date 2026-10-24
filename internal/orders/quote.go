@@ -22,8 +22,8 @@ var (
 
 type Selection struct {
 	OfferID  string `json:"offer_id" pattern:"^[a-z][a-z0-9_-]{0,31}$"`
-	ItemID   string `json:"item_id"  pattern:"^[a-z][a-z0-9_-]{0,31}$"`
-	Quantity int64  `json:"quantity"                                   minimum:"1" maximum:"1000"`
+	ItemID   string `json:"item_id" pattern:"^[a-z][a-z0-9_-]{0,31}$"`
+	Quantity int64  `json:"quantity" minimum:"1" maximum:"1000"`
 }
 
 type QuoteLine struct {

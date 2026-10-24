@@ -31,19 +31,19 @@ func massageBookingDescription(snapshot db.MassageBookingSnapshot, language stri
 		effect = "Резервирует выбранное время. Оплату не подтверждает."
 	}
 	if snapshot.Purpose == "staff_self" {
-		title, effect = "Reserve your own specialist time?", "Reserves your own time with yourself as client and specialist. This does"+
-			" not confirm payment."
+		title, effect = "Reserve your own specialist time?", "Reserves your own time with yourself as client "+
+			"and specialist. This does not confirm payment."
 		if language == "ru" {
-			title, effect = "Зарезервировать своё время специалиста?", "Резервирует своё время: вы участник и специалист этой записи. Оплату не "+
-				"подтверждает."
+			title, effect = "Зарезервировать своё время специалиста?", "Резервирует своё время: вы "+
+				"участник и специалист этой записи. Оплату не подтверждает."
 		}
 	}
 	if cancel {
-		title, effect = "Cancel this massage booking?", "Releases this reservation and retains history. No refund or payment chan"+
-			"ge is created."
+		title, effect = "Cancel this massage booking?", "Releases this reservation and retains history. "+
+			"No refund or payment change is created."
 		if language == "ru" {
-			title, effect = "Отменить эту запись на массаж?", "Освобождает эту запись и сохраняет историю. Возврат или изменение оплаты"+
-				" не создаётся."
+			title, effect = "Отменить эту запись на массаж?", "Освобождает эту запись и сохраняет "+
+				"историю. Возврат или изменение оплаты не создаётся."
 		}
 	}
 	body := fmt.Sprintf("%s: %s\n%s: %s\n%s: %s\n%s: %s\n%s: %s\n%s: %s\n%s: %s\n%s: %s\n%s", event, snapshot.EventName,

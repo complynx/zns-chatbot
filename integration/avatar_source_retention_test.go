@@ -149,8 +149,8 @@ func TestAvatarBrowserQuotaSerializesDifferentOwnersAndAllowsReplay(t *testing.T
 	require.NoError(
 		t,
 		f.h.store.Pool().
-			QueryRow(t.Context(), "SELECT coalesce(sum(source_size_bytes),0)::bigint FROM shuttle_avatar_dr" +
-"afts WHERE original IS NOT NULL").
+			QueryRow(t.Context(), "SELECT coalesce(sum(source_size_bytes),0)::bigint FROM shuttle_avatar_drafts"+
+				" WHERE original IS NOT NULL").
 			Scan(&total),
 	)
 	require.Equal(t, int64(len(f.raw)), total)
@@ -173,8 +173,8 @@ func TestAvatarBrowserExpiredOriginalReturnsGoneAndCanBeReplaced(t *testing.T) {
 	d := avatarDraftMetadata(t, body)
 	require.NotNil(t, d.SourceExpiresAt)
 	_, err := f.h.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_avatar_drafts SET created_at=clock_timestamp()-interval '" +
-"91 days' WHERE id=$1", d.ID)
+		Exec(t.Context(), "UPDATE shuttle_avatar_drafts SET created_at=clock_timestamp()-interval '91 days'"+
+			" WHERE id=$1", d.ID)
 	require.NoError(t, err)
 	code, raw, _ := appCall(
 		t,

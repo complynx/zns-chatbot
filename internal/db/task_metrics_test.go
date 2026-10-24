@@ -38,8 +38,8 @@ func TestTaskMetricsGroupUnknownStatesAndPreserveRowsAcrossBaselineReplay(t *tes
 			age = -time.Minute
 		}
 		_, err = s.Pool().Exec(ctx,
-			"UPDATE shuttle_tasks SET state=$2,created_at=statement_timestamp()-$3::d"+
-				"ouble precision*interval '1 second' WHERE id=$1",
+			"UPDATE shuttle_tasks SET state=$2,created_at=statement_timestamp()-$3::double "+
+				"precision*interval '1 second' WHERE id=$1",
 			task.ID, state, age.Seconds(),
 		)
 		require.NoError(t, err)
@@ -79,8 +79,8 @@ func TestTaskMetricsGroupUnknownStatesAndPreserveRowsAcrossBaselineReplay(t *tes
 	require.Equal(t, before, after)
 	var exists bool
 	require.NoError(t, s.Pool().QueryRow(ctx,
-		"SELECT EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname=current_schema()"+
-			" AND indexname='shuttle_tasks_unresolved_metrics_idx')",
+		"SELECT EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname=current_schema() AND "+
+			"indexname='shuttle_tasks_unresolved_metrics_idx')",
 	).
 		Scan(&exists))
 	require.True(t, exists)

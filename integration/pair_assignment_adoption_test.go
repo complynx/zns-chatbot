@@ -85,9 +85,8 @@ func TestPairAssignmentAdoptionSharesApprovedTermsAndOneReceiptAcrossRestart(t *
 		"UPDATE shuttle_pair_preparations SET expires_at=clock_timestamp()-interval '1 minute' WHERE proposal_id=$1", prep.ID)
 	require.NoError(t, err)
 	_, err = reopened.Pool().Exec(ctx,
-		"UPDATE shuttle_event_registration_rules SET document=jsonb_set(document," +
-"'{closes_at}',to_jsonb(clock_timestamp()-interval '1 minute')) WHERE eve" +
-"nt_id=$1", f.EventID)
+		"UPDATE shuttle_event_registration_rules SET document=jsonb_set(document,'{closes_at}',"+
+			"to_jsonb(clock_timestamp()-interval '1 minute')) WHERE event_id=$1", f.EventID)
 	require.NoError(t, err)
 	view, err := reopened.PairAssignmentProposal(ctx, admin, prep.ID)
 	require.NoError(t, err)
@@ -142,10 +141,9 @@ func TestPairAssignmentAdoptionRejectsChangedForeignExpiredAndOccupiedOperations
 		operation := "occupied-" + kind
 		// Historical receipts reserve their transport key regardless of receipt kind.
 		_, err = f.H.store.Pool().
-			Exec(ctx, "INSERT INTO shuttle_pair_operations(bot_id,organization_id,actor,operati" +
-"on_id,kind,request_hash,result)\n SELECT bot_id,organization_id,actor,$1," +
-"$2,request_hash,'{}'::jsonb FROM shuttle_pair_preparations WHERE proposa" +
-"l_id=$3", operation, kind, prep.ID)
+			Exec(ctx, "INSERT INTO shuttle_pair_operations(bot_id,organization_id,actor,operation_id,kind,"+
+				"request_hash,result)\n SELECT bot_id,organization_id,actor,$1,$2,request_hash,'{}'::jsonb FROM "+
+				"shuttle_pair_preparations WHERE proposal_id=$3", operation, kind, prep.ID)
 		require.NoError(t, err)
 		_, err = f.H.store.AdoptPairAssignment(ctx, admin, operation, args, prep.ID)
 		require.ErrorIs(t, err, db.ErrConflict, kind)
@@ -189,17 +187,15 @@ func TestPairAssignmentReservedOperationsPreserveExactParticipantReceipts(t *tes
 		require.ErrorIs(t, err, db.ErrConflict)
 		// The previous binary's write shape must also respect reserved aliases.
 		_, err = f.H.store.Pool().
-			Exec(ctx, "INSERT INTO shuttle_pair_operations(bot_id,organization_id,actor,operati" +
-"on_id,kind,request_hash,result)\n SELECT bot_id,organization_id,actor,$1," +
-"'invite',decode(repeat('00',32),'hex'),'{}'::jsonb FROM shuttle_pair_pre" +
-"parations WHERE proposal_id=$2", operation, prep.ID)
+			Exec(ctx, "INSERT INTO shuttle_pair_operations(bot_id,organization_id,actor,operation_id,kind,"+
+				"request_hash,result)\n SELECT bot_id,organization_id,actor,$1,'invite',decode(repeat('00',32),'hex'),"+
+				"'{}'::jsonb FROM shuttle_pair_preparations WHERE proposal_id=$2", operation, prep.ID)
 		require.Error(t, err)
 	}
 	_, err = f.H.store.Pool().
-		Exec(ctx, "INSERT INTO shuttle_pair_preparations(bot_id,organization_id,actor,opera" +
-"tion_id,proposal_id,request_hash,expires_at,document)\n SELECT bot_id,org" +
-"anization_id,actor,'alias',$1,request_hash,expires_at,document FROM shut" +
-"tle_pair_preparations WHERE proposal_id=$2", uuid.New(), prep.ID)
+		Exec(ctx, "INSERT INTO shuttle_pair_preparations(bot_id,organization_id,actor,operation_id,proposal_id,"+
+			"request_hash,expires_at,document)\n SELECT bot_id,organization_id,actor,'alias',$1,request_hash,"+
+			"expires_at,document FROM shuttle_pair_preparations WHERE proposal_id=$2", uuid.New(), prep.ID)
 	require.Error(t, err)
 	after, err := f.H.store.CreatePairInvitation(ctx, f.A, "pair-invite", request)
 	require.NoError(t, err)
@@ -233,8 +229,8 @@ func TestPairAssignmentAdoptionChecksExpiryAfterWaitingForProposal(t *testing.T)
 	require.Eventually(t, func() bool {
 		var blocked bool
 		e := f.H.store.Pool().QueryRow(ctx,
-			"SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::integer=ANY(pg_bl" +
-"ocking_pids(pid)))", writer.Conn().PgConn().PID()).
+			"SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::integer=ANY(pg_blocking_pids(pid)))",
+			writer.Conn().PgConn().PID()).
 			Scan(&blocked)
 		return e == nil && blocked
 	}, 2*time.Second, 10*time.Millisecond)

@@ -27,7 +27,7 @@ type Tier struct {
 	Amount        int32     `json:"amount"`
 	PriceMinor    int64     `json:"price_minor"`
 	StartsAt      time.Time `json:"starts_at"`
-	Promo         bool      `json:"promo"           required:"false"`
+	Promo         bool      `json:"promo" required:"false"`
 	BlockedByDate bool      `json:"blocked_by_date" required:"false"`
 }
 

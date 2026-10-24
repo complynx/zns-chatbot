@@ -211,8 +211,12 @@ func TestMiniAppOrdersSelectionRejectsForeignStaleInvalidAndLoggedOutRequests(t 
 		appTestOrigin,
 	)
 	require.Equal(t, http.StatusConflict, code, string(raw))
-	for _, invalid := range []string{`{"operation_id":"` + uuid.NewString() + "\",\"expected_event_version\":1,\"expected_catalog_version\":1,\"selections\":[" +
-"]}", `{"owner_id":"` + uuid.NewString() + `"}`, ordersAppBody(t, a) + ` {}`, `null`} {
+	for _, invalid := range []string{
+		`{"operation_id":"` + uuid.NewString() + `","expected_event_version":1,"expected_catalog_version":1,"selections":[]}`,
+		`{"owner_id":"` + uuid.NewString() + `"}`,
+		ordersAppBody(t, a) + ` {}`,
+		`null`,
+	} {
 		code, raw, _ = appCall(t, f.H, http.MethodPost, path+"/selection", invalid, session.Token, appTestOrigin)
 		require.Equal(t, http.StatusBadRequest, code, string(raw))
 	}
@@ -237,10 +241,10 @@ func TestMiniAppOrdersSelectionJournalFailureRollsBackEverything(t *testing.T) {
 	f, _, session, a := ordersAppFixture(t)
 	path := ordersAppPath(a.EventID)
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), "CREATE FUNCTION reject_selection_action() RETURNS trigger LANGUAGE plpgs" +
-"ql AS $$ BEGIN RAISE EXCEPTION 'journal unavailable'; END $$; CREATE TRI" +
-"GGER reject_selection_action BEFORE INSERT ON shuttle_miniapp_orders_sel" +
-"ection_actions FOR EACH ROW EXECUTE FUNCTION reject_selection_action()")
+		Exec(t.Context(), "CREATE FUNCTION reject_selection_action() RETURNS trigger LANGUAGE plpgsql AS $$ "+
+			"BEGIN RAISE EXCEPTION 'journal unavailable'; END $$; CREATE TRIGGER "+
+			"reject_selection_action BEFORE INSERT ON shuttle_miniapp_orders_selection_actions "+
+			"FOR EACH ROW EXECUTE FUNCTION reject_selection_action()")
 	require.NoError(t, err)
 	code, raw, _ := appCall(
 		t,
@@ -303,14 +307,15 @@ func TestMiniAppOrdersSelectionRechecksSessionAfterEventLockWait(t *testing.T) {
 	require.Eventually(t, func() bool {
 		var waiting bool
 		probeErr := f.H.store.Pool().
-			QueryRow(t.Context(), "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::integer=ANY(pg_bl" +
-"ocking_pids(pid)))", blocking.Conn().PgConn().PID()).
+			QueryRow(t.Context(), "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE "+
+				"$1::integer=ANY(pg_blocking_pids(pid)))", blocking.Conn().PgConn().PID()).
 			Scan(&waiting)
 		return probeErr == nil && waiting
 	}, 3*time.Second, 5*time.Millisecond)
 	_, err = blocking.Exec(
 		t.Context(),
-		"UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 second' WHERE user_id=$1",
+		"UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 "+
+			"second' WHERE user_id=$1",
 		session.UserID,
 	)
 	require.NoError(t, err)
@@ -391,8 +396,8 @@ func TestMiniAppOrdersEventsKeepPastAssignedUnpaidHistory(t *testing.T) {
 	t.Parallel()
 	f, _, session, a := ordersAppFixture(t)
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), "UPDATE shuttle_events SET starts_at=clock_timestamp()-interval '2 days'," +
-"ends_at=clock_timestamp()-interval '1 day' WHERE id=$1", a.EventID)
+		Exec(t.Context(), "UPDATE shuttle_events SET starts_at=clock_timestamp()-interval '2 days',"+
+			"ends_at=clock_timestamp()-interval '1 day' WHERE id=$1", a.EventID)
 	require.NoError(t, err)
 	code, raw, _ := appCall(t, f.H, http.MethodGet, "/app/orders/events", "", session.Token, "")
 	require.Equal(t, http.StatusOK, code, string(raw))
@@ -450,14 +455,15 @@ func TestMiniAppOrdersReadSuppressesSessionExpiredWhileCatalogBlocked(t *testing
 	require.Eventually(t, func() bool {
 		var waiting bool
 		probeErr := f.H.store.Pool().
-			QueryRow(t.Context(), "SELECT EXISTS(SELECT 1 FROM pg_locks WHERE relation='shuttle_orders_cata" +
-"logs'::regclass AND NOT granted)").
+			QueryRow(t.Context(), "SELECT EXISTS(SELECT 1 FROM pg_locks WHERE "+
+				"relation='shuttle_orders_catalogs'::regclass AND NOT granted)").
 			Scan(&waiting)
 		return probeErr == nil && waiting
 	}, 3*time.Second, 5*time.Millisecond)
 	_, err = blocking.Exec(
 		t.Context(),
-		"UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 second' WHERE user_id=$1",
+		"UPDATE shuttle_miniapp_sessions SET expires_at=clock_timestamp()-interval '1 "+
+			"second' WHERE user_id=$1",
 		session.UserID,
 	)
 	require.NoError(t, err)

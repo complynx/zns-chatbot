@@ -159,19 +159,17 @@ func TestStructuredRegistrationDetailsInterruptedPromptCannotAutoRegister(t *tes
 	role := p.sent[0].ReplyMarkup.(*telegram.InlineKeyboardMarkup).InlineKeyboard[0][0].CallbackData
 	p.mu.Unlock()
 	_, err := h.store.Pool().
-		Exec(t.Context(), "CREATE FUNCTION reject_details_prompt() RETURNS trigger LANGUAGE plpgsql" +
-" AS $$ BEGIN\n IF NEW.payload->>'text' LIKE 'Before registering,%' THEN R" +
-"AISE EXCEPTION 'synthetic interrupted details prompt'; END IF; RETURN NE" +
-"W; END $$;\n CREATE TRIGGER reject_details_prompt BEFORE INSERT ON shuttl" +
-"e_outbox FOR EACH ROW EXECUTE FUNCTION reject_details_prompt()")
+		Exec(t.Context(), "CREATE FUNCTION reject_details_prompt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN\n "+
+			"IF NEW.payload->>'text' LIKE 'Before registering,%' THEN RAISE EXCEPTION 'synthetic interrupted details "+
+			"prompt'; END IF; RETURN NEW; END $$;\n CREATE TRIGGER reject_details_prompt BEFORE INSERT ON "+
+			"shuttle_outbox FOR EACH ROW EXECUTE FUNCTION reject_details_prompt()")
 	require.NoError(t, err)
 	click := registrationButton(t, h, 95911, 1, 456, role)
 	require.Eventually(t, func() bool {
 		var ready bool
 		readErr := h.store.Pool().
-			QueryRow(t.Context(), "SELECT EXISTS(SELECT 1 FROM shuttle_registration_details_request_operati" +
-"ons WHERE operation_id=$1) AND EXISTS(SELECT 1 FROM shuttle_tasks WHERE " +
-"id=$1 AND state<>'completed')", click).
+			QueryRow(t.Context(), "SELECT EXISTS(SELECT 1 FROM shuttle_registration_details_request_operations WHERE "+
+				"operation_id=$1) AND EXISTS(SELECT 1 FROM shuttle_tasks WHERE id=$1 AND state<>'completed')", click).
 			Scan(&ready)
 		return readErr == nil && ready
 	}, 5*time.Second, 10*time.Millisecond)

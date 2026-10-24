@@ -62,7 +62,8 @@ func TestMiniAppOrderReviewContextIsBoundedRedactedAndPermissionFiltered(t *test
 	_, err = f.H.store.RecentMiniAppOrderReviewActions(t.Context(), wrong, after.ID)
 	require.Error(t, err)
 	_, err = f.H.store.Pool().
-		Exec(t.Context(), `DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2`, f.Event.ID, f.AmbassadorID)
+		Exec(t.Context(), `DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2`, f.Event.ID,
+			f.AmbassadorID)
 	require.NoError(t, err)
 	rows, err = f.H.store.RecentMiniAppOrderReviewActions(t.Context(), scope, after.ID)
 	require.NoError(t, err)
@@ -157,7 +158,8 @@ func TestMiniAppOrderReviewContextReachesOnlyExplicitAgentTurn(t *testing.T) {
 		require.NotContains(t, prompt, private)
 	}
 	_, err := f.H.store.Pool().
-		Exec(t.Context(), `DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2`, f.Event.ID, f.AmbassadorID)
+		Exec(t.Context(), `DELETE FROM shuttle_event_authorities WHERE event_id=$1 AND user_id=$2`, f.Event.ID,
+			f.AmbassadorID)
 	require.NoError(t, err)
 	accepted = paymentReviewMessage(t, f.H, 99301, 11003, "Check what I can review now")
 	f.H.await(t, accepted, "completed")
