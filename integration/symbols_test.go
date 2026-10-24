@@ -49,6 +49,16 @@ func TestSymbolIntakeCreatesActiveReactionAndSteersWaitingRun(t *testing.T) {
 				h.await(t, initial, "awaiting_user")
 			}
 			id := submitSymbol(t, h, 9801, true)
+			h.await(t, id, "awaiting_service")
+			p.mu.Lock()
+			inputCountBefore, createCountBefore := len(p.inputs), len(p.createKeys)
+			p.mu.Unlock()
+			require.Zero(t, inputCountBefore)
+			require.Equal(t, map[bool]int{false: 0, true: 1}[waiting], createCountBefore)
+			r, err := h.store.PendingSymbol(t.Context(), 123, symbols.Sticker, "sticker-key")
+			require.NoError(t, err)
+			require.NoError(t, h.store.CompleteSymbolDescription(t.Context(), 123, r,
+				symbols.Description{Text: "A laughing face", Category: "emotion", Reaction: "Possible amusement"}, r.Workflow))
 			h.await(t, id, "completed")
 			p.mu.Lock()
 			var text string
@@ -65,6 +75,7 @@ func TestSymbolIntakeCreatesActiveReactionAndSteersWaitingRun(t *testing.T) {
 			require.Contains(t, text, `"event":"sticker_reaction"`)
 			require.Contains(t, text, "current active user message")
 			require.Contains(t, text, "not a photo/video analysis request")
+			require.Contains(t, text, "A laughing face")
 			require.NotContains(t, text, "private-sticker")
 			require.NotContains(t, text, "😂")
 			require.NotContains(t, text, "Attachment metadata")
@@ -75,30 +86,58 @@ func TestSymbolIntakeCreatesActiveReactionAndSteersWaitingRun(t *testing.T) {
 func TestCustomEmojiDescriptionsPreserveCompositionInAgentInput(t *testing.T) {
 	t.Parallel()
 	p := newPeers(t)
-	p.loomDown = true
 	h := setup(t, p)
 	registrationUser(t, h, 456, false)
 	id := submitSymbol(t, h, 9810, false)
-	h.await(t, id, "awaiting_authorization")
+	h.await(t, id, "awaiting_service")
+	p.mu.Lock()
+	before := len(p.createdInputs)
+	p.mu.Unlock()
+	require.Zero(t, before)
+	h.stop(t)
+	h.start(t)
+	h.await(t, id, "awaiting_service")
 	for _, key := range []string{"10", "11"} {
 		r, err := h.store.PendingSymbol(t.Context(), 123, symbols.Emoji, key)
 		require.NoError(t, err)
 		d := symbols.Description{Text: "Bone end", Category: "fragment", Composition: "Joins the other end"}
 		require.NoError(t, h.store.CompleteSymbolDescription(t.Context(), 123, r, d, r.Workflow))
 	}
-	p.mu.Lock()
-	p.loomDown = false
-	p.mu.Unlock()
 	h.await(t, id, "completed")
 	p.mu.Lock()
 	text := p.createdInputs[0]
+	creates := len(p.createdInputs)
 	p.mu.Unlock()
+	require.Equal(t, 1, creates)
 	require.Contains(t, text, "</custom-emoji><custom-emoji>")
 	require.Contains(t, text, "Bone end")
 	require.NotContains(t, text, "🦴")
 	var count int
 	require.NoError(t, h.store.Pool().QueryRow(t.Context(), "SELECT count(*) FROM shuttle_symbols").Scan(&count))
 	require.Equal(t, 2, count)
+}
+
+func TestUnknownSymbolWaitExpiresWithoutCreatingReplacementWork(t *testing.T) {
+	t.Parallel()
+	p := newPeers(t)
+	h := setup(t, p)
+	registrationUser(t, h, 456, false)
+	id := submitSymbol(t, h, 9811, true)
+	h.await(t, id, "awaiting_service")
+	p.mu.Lock()
+	before := len(p.createdInputs)
+	p.mu.Unlock()
+	require.Zero(t, before)
+	_, err := h.store.Pool().Exec(t.Context(),
+		"UPDATE shuttle_tasks SET created_at=now()-interval '7 minutes' WHERE id=$1", id)
+	require.NoError(t, err)
+	h.await(t, id, "completed")
+	p.mu.Lock()
+	inputs := append([]string(nil), p.createdInputs...)
+	p.mu.Unlock()
+	require.Len(t, inputs, 1)
+	require.Contains(t, inputs[0], "meaning unknown")
+	require.Contains(t, inputs[0], "do not ask the user to resend")
 }
 
 func TestKnownStickerDescriptionRemainsInsideReactionEvent(t *testing.T) {
@@ -140,6 +179,10 @@ func TestRestrictedRunWaitsForCapabilityWithoutUnrestrictedFallback(t *testing.T
 	p.outputValidationUnavailable = false
 	p.mu.Unlock()
 	require.Zero(t, before)
+	// This case exercises the capability gate, not descriptor availability.
+	_, err := h.store.Pool().Exec(t.Context(),
+		"UPDATE shuttle_tasks SET created_at=now()-interval '7 minutes' WHERE id=$1", id)
+	require.NoError(t, err)
 	h.await(t, id, "completed")
 	p.mu.Lock()
 	policies := append([]*loom.OutputPolicy(nil), p.createdOutputPolicies...)

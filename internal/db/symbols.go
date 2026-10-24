@@ -163,6 +163,16 @@ WHERE bot_id=$1 AND kind=$2 AND asset_key=$3 AND description IS NOT NULL`, bot, 
 	return result, nil
 }
 
+// SymbolDescriptionWaitOpen bounds cold-cache waiting from durable intake time.
+// PostgreSQL time preserves the same deadline across retries and process restarts.
+func (s *Store) SymbolDescriptionWaitOpen(ctx context.Context, bot int64, task uuid.UUID) (bool, error) {
+	var open bool
+	err := s.pool.QueryRow(ctx, `SELECT now() < t.created_at + interval '6 minutes'
+FROM shuttle_tasks t JOIN shuttle_users u ON u.id=t.user_id
+WHERE t.id=$1 AND u.bot_id=$2`, task, bot).Scan(&open)
+	return open, err
+}
+
 type SymbolRecord struct {
 	Reference  symbols.Reference
 	Generation uuid.UUID

@@ -3,6 +3,7 @@ package task
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/google/uuid"
@@ -74,6 +75,11 @@ func (s *Service) prepareCreate(ctx context.Context, t *db.Task, c *checkpoint, 
 	}
 	text, err := s.profilePrompt(ctx, *t, i)
 	if err != nil {
+		if errors.Is(err, errSymbolDescriptionPending) {
+			t.State = stateAwaitingService
+			_ = s.save(ctx, t, *c, nil)
+			return s.wait()
+		}
 		s.reportDatabaseFailure(ctx, t.ID, "profile_context", err)
 		return err
 	}
@@ -130,6 +136,11 @@ func (s *Service) prepareControl(ctx context.Context, t *db.Task, c *checkpoint,
 	if input.Text != "" || len(i.Symbols) > 0 {
 		input.Text, err = s.profilePrompt(ctx, *t, i)
 		if err != nil {
+			if errors.Is(err, errSymbolDescriptionPending) {
+				t.State = stateAwaitingService
+				_ = s.save(ctx, t, *c, nil)
+				return s.wait()
+			}
 			s.reportDatabaseFailure(ctx, t.ID, "profile_context", err)
 			return err
 		}
@@ -184,7 +195,7 @@ func (s *Service) profilePrompt(ctx context.Context, t db.Task, i intent) (strin
 	}
 	language := profileLanguage(profile.BotLanguage, i.User.LanguageCode, settings.Document.DefaultLanguage)
 	var text strings.Builder
-	input, err := s.symbolPrompt(ctx, bot, i)
+	input, err := s.symbolPrompt(ctx, bot, t.ID, i)
 	if err != nil {
 		return "", err
 	}

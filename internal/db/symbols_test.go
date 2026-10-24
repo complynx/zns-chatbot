@@ -11,6 +11,23 @@ import (
 	"github.com/complynx/zns-chatbot/internal/symbols"
 )
 
+func TestSymbolDescriptionWaitUsesOriginalScopedIntakeDeadline(t *testing.T) {
+	t.Parallel()
+	s := testStore(t)
+	task := accepted(t, s, 1)
+	open, err := s.SymbolDescriptionWaitOpen(t.Context(), 1, task.ID)
+	require.NoError(t, err)
+	require.True(t, open)
+	_, err = s.SymbolDescriptionWaitOpen(t.Context(), 2, task.ID)
+	require.Error(t, err)
+	_, err = s.Pool().Exec(t.Context(),
+		"UPDATE shuttle_tasks SET created_at=now()-interval '7 minutes' WHERE id=$1", task.ID)
+	require.NoError(t, err)
+	open, err = s.SymbolDescriptionWaitOpen(t.Context(), 1, task.ID)
+	require.NoError(t, err)
+	require.False(t, open)
+}
+
 func TestPendingSymbolQueueIsScopedAndDoesNotRegenerateCompletedEntries(t *testing.T) {
 	t.Parallel()
 	s := testStore(t)

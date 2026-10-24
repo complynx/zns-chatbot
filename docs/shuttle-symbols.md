@@ -63,6 +63,13 @@ do not grant it business authority. Run creation uses the configured account's
 model preferences. Normal intake records an unknown catalog entry; a separate
 explicitly enabled worker owns paid description work.
 
+Before preparing a new agent request or control input, Shuttle waits for missing
+catalog descriptions for up to six minutes from the original durable intake time.
+The task snoozes without starting a model request; other conversations can proceed.
+Retries and restarts retain that deadline. Previously prepared request bodies are
+not rewritten. At the deadline, unresolved descriptions remain explicitly unknown;
+that does not mean the image was lost or require the user to resend it.
+
 `-watch` polls retained unknown entries and runs that same procedure serially.
 A durable active pointer restores the original run even if its catalog entry was
 evicted before a graceful restart. An old completed result remains in its journal
