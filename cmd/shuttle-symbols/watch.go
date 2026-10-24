@@ -14,7 +14,9 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/complynx/zns-chatbot/internal/db"
+	"github.com/complynx/zns-chatbot/internal/loom"
 	"github.com/complynx/zns-chatbot/internal/symboldescribe"
+	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
 const descriptorPoll = 2 * time.Second
@@ -136,7 +138,7 @@ func advanceEntry(ctx context.Context, a arguments, entry db.SymbolRecord,
 	}
 	if stepErr != nil {
 		// Never start a replacement for an uncertain mutation or rejected result.
-		if err := markBlocked(next.journal); err != nil {
+		if err := markBlocked(next.journal, stepErr); err != nil {
 			return false, err
 		}
 		fmt.Fprintln(os.Stderr, "descriptor entry requires reconciliation; original journal retained")
@@ -187,7 +189,8 @@ func descriptorState(directory string) (symboldescribe.State, error) {
 	return state, err
 }
 
-func markBlocked(directory string) error {
+// Retain safe transport diagnostics, never raw errors that may contain credential URLs.
+func markBlocked(directory string, cause error) error {
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		return err
 	}
@@ -196,9 +199,30 @@ func markBlocked(directory string) error {
 		return err
 	}
 	defer f.Close()
-	_, err = f.WriteString("{\"requires_reconciliation\":true}\n")
-	if err != nil {
+	if err = json.NewEncoder(f).Encode(blockedReason(cause)); err != nil {
 		return err
 	}
 	return f.Sync()
+}
+
+type blockedFailure struct {
+	Reconcile bool   `json:"requires_reconciliation"`
+	Type      string `json:"error_type"`
+	Status    int    `json:"status,omitempty"`
+	Outcome   string `json:"outcome,omitempty"`
+}
+
+func blockedReason(cause error) blockedFailure {
+	result := blockedFailure{Reconcile: true, Type: "descriptor"}
+	var tg *telegram.Error
+	var upstream *loom.Error
+	switch {
+	case errors.As(cause, &tg):
+		result.Type, result.Status, result.Outcome = "telegram", tg.StatusCode, string(tg.Outcome)
+	case errors.As(cause, &upstream):
+		result.Type, result.Status, result.Outcome = "loom", upstream.StatusCode, string(upstream.Outcome)
+	case errors.Is(cause, context.DeadlineExceeded):
+		result.Type = "deadline"
+	}
+	return result
 }
