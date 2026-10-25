@@ -27,6 +27,7 @@ const descriptorDonePhase = "done"
 type arguments struct {
 	config, kind, id, journal, actorToken, subjectToken string
 	watch                                               bool
+	concurrency                                         int
 	generation                                          uuid.UUID
 }
 type dependencies struct {
@@ -54,7 +55,8 @@ func parse() arguments {
 	flag.StringVar(&a.journal, "journal", "", "Private procedure directory; reuse to observe original work")
 	flag.StringVar(&a.actorToken, "actor-token-file", "", "Protected Loom service-account or delegation actor token")
 	flag.StringVar(&a.subjectToken, "subject-token-file", "", "Optional protected delegated descriptor token")
-	flag.BoolVar(&a.watch, "watch", false, "Process retained cache misses serially; journal is a private root directory")
+	flag.BoolVar(&a.watch, "watch", false, "Process retained cache misses; journal is a private root directory")
+	flag.IntVar(&a.concurrency, "concurrency", 4, "Maximum simultaneous description procedures (1-4)")
 	flag.Parse()
 	return a
 }

@@ -60,6 +60,8 @@ func (p *descriptorPeers) serve(w http.ResponseWriter, r *http.Request) {
 		id := "second"
 		if p.creates == 1 {
 			id = "first"
+		} else if p.creates > 2 {
+			id = uuid.NewString()
 		}
 		value = loom.Run{ID: id, Status: "running"}
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/runs/"):
@@ -239,4 +241,43 @@ func TestDescriptorWatchDoesNotRepeatUnknownUploadOrBlockAnotherEntry(t *testing
 		defer p.mu.Unlock()
 		return p.uploads != 2 || p.creates != 1
 	}, 150*time.Millisecond, 10*time.Millisecond)
+}
+
+func TestDescriptorWatchBoundsParallelProceduresAndResumesEachOriginal(t *testing.T) {
+	t.Parallel()
+	p := &descriptorPeers{}
+	d := descriptorDependencies(t, p)
+	for _, id := range []string{"one", "two", "three", "four"} {
+		seedDescriptor(t, d, id, uuid.New())
+	}
+	a := arguments{journal: t.TempDir(), concurrency: 2}
+	stop := startDescriptor(t, a, d)
+	require.Eventually(t, func() bool {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return p.creates == 2
+	}, 5*time.Second, 10*time.Millisecond)
+	require.Never(t, func() bool {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return p.creates > 2
+	}, 100*time.Millisecond, 10*time.Millisecond)
+	stop()
+	p.mu.Lock()
+	p.complete = true
+	p.mu.Unlock()
+	stop = startDescriptor(t, a, d)
+	defer stop()
+	require.Eventually(t, func() bool {
+		var remaining int
+		err := d.store.Pool().QueryRow(t.Context(),
+			"SELECT count(*) FROM shuttle_symbols WHERE description IS NULL").Scan(&remaining)
+		return err == nil && remaining == 0
+	}, 5*time.Second, 10*time.Millisecond)
+	stop()
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	require.Equal(t, 4, p.creates)
+	require.Equal(t, 4, p.chats)
+	require.Equal(t, 4, p.uploads)
 }

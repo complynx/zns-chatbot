@@ -66,6 +66,11 @@ const instructions = "Describe only the target Telegram visual symbol. Return on
 	"Open these owned artifacts with modules.artifacts.open inside script, using the full file-tool contracts. " +
 	"Do not attach an animated original as an input image. For still targets or set sheets, inspect the image; " +
 	"for animation, inspect selected composed frame handles with standalone artifact_attach. " +
+	"Attach a still target and the PNG contact sheet directly with artifact_attach, not video_storyboard. " +
+	"The target_animated and target_video flags describe Telegram's media classification. A video stream " +
+	"in video_info alone does not prove animation: static PNG/WebP images also have such streams. " +
+	"When both flags are false, inspect the original as a still image; if attachment reports animation, " +
+	"use frame sampling instead. A single still frame is valid visual evidence, not a decoding failure. " +
 	"Do not interpret the fallback Unicode emoji as evidence. The target may be lettering, a technical sign, " +
 	"a divider, a vignette, or part of a larger object. Use the set contact sheet for design, writing and joining " +
 	"context, but do not assume every adjacent member belongs together. State uncertainty instead of guessing. " +
@@ -199,8 +204,10 @@ func (f Flow) upload(ctx context.Context, auth loom.Auth, s *State, save func(St
 		Position  int      `json:"target_position_in_contact_sheet"`
 		Columns   int      `json:"columns"`
 		Artifacts []string `json:"artifact_ids"`
+		Animated  bool     `json:"target_animated"`
+		Video     bool     `json:"target_video"`
 	}{
-		s.Manifest.TargetPosition, sheetColumns, s.ArtifactIDs,
+		s.Manifest.TargetPosition, sheetColumns, s.ArtifactIDs, s.Manifest.Target.IsAnimated, s.Manifest.Target.IsVideo,
 	})
 	s.Request = &loom.CreateRunRequest{
 		ExecutionProfile: loom.NativeFilesProfile,

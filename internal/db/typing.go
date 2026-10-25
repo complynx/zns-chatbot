@@ -11,6 +11,9 @@ const typingCandidates = `WITH busy AS (
  SELECT t.user_id,c.chat_id FROM shuttle_tasks t
  JOIN shuttle_conversations c ON c.id=t.conversation_id AND c.user_id=t.user_id
  WHERE (t.state IN ('accepted','creating_run','running')
+ OR (t.state='awaiting_service' AND t.run_id=''
+ AND jsonb_typeof(t.request->'symbols')='array' AND t.request->'symbols'<>'[]'::jsonb
+ AND statement_timestamp()<t.created_at+interval '6 minutes')
  OR (t.state='awaiting_authorization' AND t.request->'native_avatar'='true'::jsonb
  AND t.lease_until>statement_timestamp()))
  AND (t.lease_until IS NULL OR t.lease_until>statement_timestamp())

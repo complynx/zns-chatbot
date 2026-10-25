@@ -66,12 +66,17 @@ explicitly enabled worker owns paid description work.
 Before preparing a new agent request or control input, Shuttle waits for missing
 catalog descriptions for up to six minutes from the original durable intake time.
 The task snoozes without starting a model request; other conversations can proceed.
+The typing indicator stays active during this bounded wait.
 Retries and restarts retain that deadline. Previously prepared request bodies are
 not rewritten. At the deadline, unresolved descriptions remain explicitly unknown;
 that does not mean the image was lost or require the user to resend it.
 
-`-watch` polls retained unknown entries and runs that same procedure serially.
-A durable active pointer restores the original run even if its catalog entry was
+`-watch` polls retained unknown entries with up to four concurrent procedures
+(`-concurrency` accepts 1–4, default 4). A generation occupies one slot; duplicate
+uses share its catalog result. Each slot persists its original run before work.
+The original serial active pointer remains slot zero. Reducing concurrency with
+occupied higher slots requires reconciliation. A durable pointer restores the
+original run even if its catalog entry was
 evicted before a graceful restart. An old completed result remains in its journal
 for reconciliation instead of being applied to a replacement generation.
 Its private root holds one journal per catalog generation; completed entries are
@@ -199,3 +204,8 @@ removal, watermark replay, restart after an uncertain send and local revocation
 during credential refresh. HTTP-peer tests establish Shuttle behavior, not actual
 model judgment or real Telegram acceptance. Incoming user reaction updates are
 not yet projected into Loom by this consumer.
+
+Static target and contact-sheet images use direct native attachment. Telegram
+animation/video flags accompany new descriptor requests; a video stream reported
+for a static PNG/WebP is not itself evidence of animation. Animated originals
+still require decoded frame inspection rather than thumbnail substitution.

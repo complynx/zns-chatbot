@@ -54,6 +54,19 @@ func TestTypingTracksProcessingAndQueuedDeliveriesWithoutWaitingOrUnknown(t *tes
 		require.NoError(t, err)
 		check(false)
 	}
+	// Cold symbol descriptions are processing until their original intake deadline.
+	_, err = s.Pool().Exec(ctx, `UPDATE shuttle_tasks SET state='awaiting_service',
+request=jsonb_set(request,'{symbols}','[{"kind":"emoji","id":"1","offset":0,"length":2}]') WHERE id=$1`, task.ID)
+	require.NoError(t, err)
+	check(true)
+	_, err = s.Pool().Exec(ctx, `UPDATE shuttle_tasks SET created_at=now()-interval '7 minutes' WHERE id=$1`, task.ID)
+	require.NoError(t, err)
+	check(false)
+	_, err = s.Pool().Exec(ctx, `UPDATE shuttle_tasks SET created_at=now(),run_id='known-run' WHERE id=$1`, task.ID)
+	require.NoError(t, err)
+	check(false)
+	_, err = s.Pool().Exec(ctx, `UPDATE shuttle_tasks SET state='completed' WHERE id=$1`, task.ID)
+	require.NoError(t, err)
 	outbox := uuid.New()
 	_, err = s.Pool().
 		Exec(ctx, "INSERT INTO shuttle_outbox(id,task_id,dedup_key,chunk_seq,payload) VALUES($1,$2,"+

@@ -89,6 +89,8 @@ func TestDescriptionFlowIsolatedSetContextAndResume(t *testing.T) {
 	require.Contains(t, lc.request.Input.Text, "Do not attach an animated original")
 	require.Contains(t, lc.request.Input.Text, "ornament")
 	require.Contains(t, lc.request.Input.Text, "target_position_in_contact_sheet\":1")
+	require.Contains(t, lc.request.Input.Text, `"target_animated":false`)
+	require.Contains(t, lc.request.Input.Text, `"target_video":false`)
 	require.NotContains(t, lc.request.Input.Text, "private-target")
 	lc.status = "completed"
 	lc.result = `{"description":"Left end of a bone","category":"fragment","composition":"Joins right end"}`

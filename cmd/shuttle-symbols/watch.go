@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -21,8 +22,8 @@ import (
 
 const descriptorPoll = 2 * time.Second
 
-// watch reuses the one-entry procedure and its exact journal. Only one entry can
-// have active work here; errors retain a blocked journal instead of starting a replacement run.
+// watch reuses each one-entry procedure and its exact journal. Bounded slots
+// overlap independent entries; errors block that generation without replacement work.
 func watch(a arguments) error {
 	if a.journal == "" || a.kind != "" || a.id != "" {
 		return errors.New("watch requires a private journal root and no kind/id")
@@ -46,62 +47,146 @@ func watch(a arguments) error {
 }
 
 type descriptorQueue struct {
-	active *db.SymbolRecord
-	cursor uuid.UUID
+	active      *db.SymbolRecord
+	cursor      uuid.UUID
+	pointerRoot string
+	busy        bool
 }
 
+type descriptorResult struct {
+	slot int
+	done bool
+	err  error
+}
+
+// Each slot persists its original generation before work starts. Steps for
+// different slots overlap; a slot never overlaps itself or replaces its run.
 func watchQueue(ctx context.Context, a arguments, d dependencies,
 	step func(context.Context, arguments) error, interval time.Duration,
 ) error {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	active, err := restoreActive(a.journal)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	limit := a.concurrency
+	if limit == 0 {
+		limit = 1
+	}
+	if limit < 1 || limit > 4 {
+		return errors.New("descriptor concurrency must be 1-4")
+	}
+	queues, reserved, err := restoreQueues(a.journal, limit)
+	if err != nil {
 		return err
 	}
-	queue := descriptorQueue{active: active}
+	ctx, cancel := context.WithCancel(ctx)
+	var workers sync.WaitGroup
+	defer func() { cancel(); workers.Wait() }()
+	results := make(chan descriptorResult, limit)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
+		case result := <-results:
+			if err = finishDescriptor(queues, reserved, result); err != nil && ctx.Err() == nil {
+				return err
+			}
 		case <-ticker.C:
-			if err = queue.tick(ctx, a, d, step); err != nil && ctx.Err() == nil {
+			err = startDescriptors(ctx, a, d, queues, reserved, step, results, &workers)
+			if err != nil && ctx.Err() == nil {
 				return err
 			}
 		}
 	}
 }
 
-func (q *descriptorQueue) tick(ctx context.Context, a arguments, d dependencies,
-	step func(context.Context, arguments) error,
+func restoreQueues(root string, limit int) ([]descriptorQueue, map[uuid.UUID]bool, error) {
+	queues := make([]descriptorQueue, limit)
+	reserved := make(map[uuid.UUID]bool)
+	for slot := range 4 {
+		pointerRoot := root
+		if slot > 0 {
+			pointerRoot = filepath.Join(root, fmt.Sprintf("parallel-%d", slot))
+		}
+		active, err := restoreActiveFrom(root, pointerRoot)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return nil, nil, err
+		}
+		if active != nil {
+			if slot >= limit || reserved[active.Generation] {
+				return nil, nil, errors.New("active descriptor slots require reconciliation before changing concurrency")
+			}
+			reserved[active.Generation] = true
+		}
+		if slot < limit {
+			queues[slot] = descriptorQueue{active: active, pointerRoot: pointerRoot}
+		}
+	}
+	return queues, reserved, nil
+}
+
+func (q *descriptorQueue) fill(ctx context.Context, a arguments, d dependencies,
+	reserved map[uuid.UUID]bool,
 ) error {
-	if q.active == nil {
-		var err error
-		q.active, q.cursor, err = nextPending(ctx, d, a.journal, q.cursor)
-		if err != nil {
+	if q.active != nil {
+		return nil
+	}
+	var err error
+	q.active, q.cursor, err = nextPending(ctx, d, a.journal, q.cursor, reserved)
+	if err != nil || q.active == nil {
+		return err
+	}
+	if err = os.MkdirAll(q.pointerRoot, 0700); err != nil {
+		return err
+	}
+	if err = saveActive(q.pointerRoot, *q.active); err != nil {
+		return err
+	}
+	reserved[q.active.Generation] = true
+	return nil
+}
+
+func startDescriptors(ctx context.Context, a arguments, d dependencies,
+	queues []descriptorQueue, reserved map[uuid.UUID]bool,
+	step func(context.Context, arguments) error, results chan<- descriptorResult, workers *sync.WaitGroup,
+) error {
+	for slot := range queues {
+		q := &queues[slot]
+		if q.busy {
+			continue
+		}
+		if err := q.fill(ctx, a, d, reserved); err != nil {
 			return err
 		}
 		if q.active == nil {
-			return nil
+			continue
 		}
-		if err = saveActive(a.journal, *q.active); err != nil {
-			return err
-		}
-	}
-	done, err := advanceEntry(ctx, a, *q.active, step)
-	if err != nil {
-		return err
-	}
-	if done {
-		if err = os.Remove(filepath.Join(a.journal, "active.json")); err != nil {
-			return err
-		}
-		q.active = nil
+		q.busy = true
+		entry := *q.active
+		workers.Go(func() {
+			done, err := advanceEntry(ctx, a, entry, step)
+			results <- descriptorResult{slot: slot, done: done, err: err}
+		})
 	}
 	return nil
 }
 
-func nextPending(ctx context.Context, d dependencies, root string, cursor uuid.UUID) (
+func finishDescriptor(queues []descriptorQueue, reserved map[uuid.UUID]bool, result descriptorResult) error {
+	q := &queues[result.slot]
+	q.busy = false
+	if result.err != nil {
+		return result.err
+	}
+	if !result.done {
+		return nil
+	}
+	if err := os.Remove(filepath.Join(q.pointerRoot, "active.json")); err != nil {
+		return err
+	}
+	delete(reserved, q.active.Generation)
+	q.active = nil
+	return nil
+}
+
+func nextPending(ctx context.Context, d dependencies, root string, cursor uuid.UUID, reserved map[uuid.UUID]bool) (
 	*db.SymbolRecord, uuid.UUID, error,
 ) {
 	entries, err := d.store.PendingSymbols(ctx, d.bot, cursor)
@@ -113,6 +198,9 @@ func nextPending(ctx context.Context, d dependencies, root string, cursor uuid.U
 	}
 	for _, entry := range entries {
 		cursor = entry.Generation
+		if reserved[entry.Generation] {
+			continue
+		}
 		_, statErr := os.Stat(filepath.Join(root, entry.Generation.String(), "blocked.json"))
 		if statErr == nil {
 			continue
@@ -156,8 +244,8 @@ func saveActive(root string, entry db.SymbolRecord) error {
 	})
 }
 
-func restoreActive(root string) (*db.SymbolRecord, error) {
-	raw, err := os.ReadFile(filepath.Join(root, "active.json"))
+func restoreActiveFrom(root, pointerRoot string) (*db.SymbolRecord, error) {
+	raw, err := os.ReadFile(filepath.Join(pointerRoot, "active.json"))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, os.ErrNotExist
 	}
@@ -169,7 +257,7 @@ func restoreActive(root string) (*db.SymbolRecord, error) {
 		return nil, errors.New("invalid active descriptor pointer; reconcile before restart")
 	}
 	if _, err = os.Stat(filepath.Join(root, state.Generation.String(), "blocked.json")); err == nil {
-		if err = os.Remove(filepath.Join(root, "active.json")); err != nil {
+		if err = os.Remove(filepath.Join(pointerRoot, "active.json")); err != nil {
 			return nil, err
 		}
 		return nil, os.ErrNotExist
