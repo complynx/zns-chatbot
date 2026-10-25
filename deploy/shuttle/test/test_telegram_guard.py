@@ -187,13 +187,18 @@ class GuardTests(unittest.TestCase):
         self.assertEqual(self.forwarded[-1], ("/bot999:fake/sendChatAction", choosing))
 
     def test_network_diagnostics_never_include_credentials_or_payload(self):
+        ready, records = threading.Event(), []
+        def record(value, **_):
+            records.append(value)
+            ready.set()
         with patch.object(self.guard.opener, "open", side_effect=urllib.error.URLError("SECRET URL")), \
-                patch("builtins.print") as logged:
+                patch("builtins.print", side_effect=record):
             with self.assertRaises(urllib.error.HTTPError) as error:
                 self.request("/bot999:fake/sendMessage", {"chat_id": 42, "text": "PRIVATE TEXT"})
             self.assertEqual(error.exception.code, 502)
             error.exception.close()
-            event = json.loads(logged.call_args.args[0])
+            self.assertTrue(ready.wait(2), "guard diagnostic was not emitted")
+            event = json.loads(records[0])
         self.assertEqual(event["method"], "sendMessage")
         self.assertEqual(event["status"], 502)
         self.assertEqual(event["error_class"], "URLError")
@@ -201,13 +206,18 @@ class GuardTests(unittest.TestCase):
             self.assertNotIn(secret, json.dumps(event))
 
     def test_bad_upstream_response_closes_with_502(self):
+        ready, records = threading.Event(), []
+        def record(value, **_):
+            records.append(value)
+            ready.set()
         with patch.object(self.guard.opener, "open", side_effect=http.client.BadStatusLine("SECRET")), \
-                patch("builtins.print") as logged:
+                patch("builtins.print", side_effect=record):
             with self.assertRaises(urllib.error.HTTPError) as error:
                 self.request("/bot999:fake/getMe", {})
             self.assertEqual(error.exception.code, 502)
             error.exception.close()
-            event = json.loads(logged.call_args.args[0])
+            self.assertTrue(ready.wait(2), "guard diagnostic was not emitted")
+            event = json.loads(records[0])
         self.assertEqual(event["error_class"], "BadStatusLine")
         self.assertNotIn("SECRET", json.dumps(event))
 
