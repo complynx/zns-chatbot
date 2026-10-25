@@ -209,3 +209,7 @@ Static target and contact-sheet images use direct native attachment. Telegram
 animation/video flags accompany new descriptor requests; a video stream reported
 for a static PNG/WebP is not itself evidence of animation. Animated originals
 still require decoded frame inspection rather than thumbnail substitution.
+
+Descriptions may identify a recognizable character or mascot by name and source
+when visible traits support the match. Tentative matches remain explicit guesses;
+otherwise the description records appearance without inventing an identity.
