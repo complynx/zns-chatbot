@@ -4,15 +4,22 @@ package symboldescribe
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 	"image/jpeg"
 	"image/png"
+	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/disintegration/imaging"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/image/webp"
 
 	"github.com/complynx/zns-chatbot/internal/files"
@@ -58,7 +65,7 @@ func target(ctx context.Context, tg Telegram, ref symbols.Reference) (telegram.S
 }
 
 func visual(ctx context.Context, tg Telegram, s telegram.Sticker) (media, error) {
-	raw, err := tg.ReadFile(ctx, s.FileID, files.MaxReadBytes)
+	raw, err := readVisualFile(ctx, tg, s.FileID)
 	if err != nil {
 		return media{}, err
 	}
@@ -87,13 +94,14 @@ func contactSheet(ctx context.Context, tg Telegram, set telegram.StickerSet) (me
 	canvas := previewCanvas(image.Rect(0, 0, columns*tile, ((len(set.Stickers)+columns-1)/columns)*tile))
 	total := 0
 	for n, s := range set.Stickers {
+		descriptorLog(ctx).DebugContext(ctx, "prepare set preview", "index", n+1, "set_size", len(set.Stickers))
 		id := s.FileID
 		if s.Thumbnail != nil {
 			id = s.Thumbnail.FileID
 		} else if s.IsAnimated || s.IsVideo {
 			return media{}, errors.New("set member preview unavailable")
 		}
-		raw, err := tg.ReadFile(ctx, id, files.MaxReadBytes)
+		raw, err := readVisualFile(ctx, tg, id)
 		if err != nil {
 			return media{}, err
 		}
@@ -113,6 +121,69 @@ func contactSheet(ctx context.Context, tg Telegram, set telegram.StickerSet) (me
 	var out bytes.Buffer
 	err := png.Encode(&out, canvas)
 	return media{out.Bytes(), "image/png"}, err
+}
+
+// Only Telegram file reads are retried. A transient preview fetch must not
+// immediately strand an acknowledged original upload. Loom effects are never replayed here.
+func readVisualFile(ctx context.Context, tg Telegram, id string) ([]byte, error) {
+	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("shuttle-symbols").Start(ctx, "symbols.read_file")
+	defer span.End()
+	const attempts = 3
+	const retryDelay = 250 * time.Millisecond
+	for attempt := range attempts {
+		started := time.Now()
+		raw, err := tg.ReadFile(ctx, id, files.MaxReadBytes)
+		status, outcome := 0, ""
+		if upstream, ok := errors.AsType[*telegram.Error](err); ok {
+			status, outcome = upstream.StatusCode, string(upstream.Outcome)
+		}
+		span.AddEvent("read_attempt", trace.WithAttributes(attribute.Int("attempt", attempt+1),
+			attribute.Int("http.response.status_code", status), attribute.Bool("success", err == nil),
+			attribute.Int("bytes", len(raw))))
+		descriptorLog(ctx).DebugContext(ctx, "read visual file", "file_key", fmt.Sprintf("%x", sha256.Sum256([]byte(id))),
+			"attempt", attempt+1, "elapsed_ms", time.Since(started).Milliseconds(), "bytes", len(raw),
+			"success", err == nil, "status", status, "outcome", outcome, "retryable", retryableFileRead(err))
+		if err == nil || attempt == attempts-1 || !retryableFileRead(err) {
+			if err != nil {
+				span.SetStatus(codes.Error, "visual file read failed")
+			}
+			return raw, err
+		}
+		delay := time.Duration(attempt+1) * retryDelay
+		if upstream, ok := errors.AsType[*telegram.Error](err); ok && upstream.RetryAfter > delay {
+			delay = upstream.RetryAfter
+		}
+		if delay > 2*time.Second {
+			span.SetStatus(codes.Error, "visual file backoff exceeds bound")
+			return nil, err
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			span.SetStatus(codes.Error, "visual file read cancelled")
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+	panic("unreachable file read")
+}
+
+type descriptorLogKey struct{}
+
+func descriptorLog(ctx context.Context) *slog.Logger {
+	if logger, ok := ctx.Value(descriptorLogKey{}).(*slog.Logger); ok {
+		return logger
+	}
+	return slog.Default()
+}
+
+func retryableFileRead(err error) bool {
+	if errors.Is(err, telegram.ErrFileUnavailable) {
+		return true
+	}
+	upstream, ok := errors.AsType[*telegram.Error](err)
+	return ok && (upstream.Retryable || upstream.StatusCode >= 500 && upstream.StatusCode <= 599)
 }
 
 func previewCanvas(bounds image.Rectangle) *image.RGBA {

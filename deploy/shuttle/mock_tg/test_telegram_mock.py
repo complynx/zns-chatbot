@@ -278,6 +278,7 @@ class MockTest(unittest.TestCase):
         self.assertTrue(self.bot('setChatMenuButton', {'chat_id': 101, 'menu_button': {'type': 'default'}}))
         self.assertEqual(self.bot('getChatMenuButton', {'chat_id': 101}), {'type': 'default'})
         self.assertTrue(self.bot('sendChatAction', {'chat_id': 101, 'action': 'typing'}))
+        self.assertTrue(self.bot('sendChatAction', {'chat_id': 101, 'action': 'choose_sticker'}))
         self.assertEqual(self.call('/bot' + self.config['token'] + '/sendChatAction',
                                    {'chat_id': 101, 'action': 'unknown'})[0], 400)
         self.assertEqual(self.state()['messages'], [])

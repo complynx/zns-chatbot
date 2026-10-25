@@ -122,5 +122,13 @@ func (s *Service) watchTyping(ctx context.Context, done chan struct{}) {
 		},
 		func(ctx context.Context, id int64) (bool, error) {
 			return s.store.NeedsTyping(ctx, s.options.BotID, organization, id)
-		}, s.tg.SendChatAction)
+		}, func(ctx context.Context, id int64) error {
+			active, choosingSticker, err := s.store.ChatActivity(ctx, s.options.BotID, organization, id)
+			if err != nil || !active {
+				return err
+			}
+			err = s.tg.SendActivity(ctx, id, choosingSticker)
+			s.logger.DebugContext(ctx, "Telegram activity refresh", "choosing_sticker", choosingSticker, "success", err == nil)
+			return err
+		})
 }

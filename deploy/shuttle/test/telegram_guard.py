@@ -1,8 +1,11 @@
 """Owned-stand Telegram egress: only configured accounts can receive messages."""
+import http.client
 import json
 import os
 import re
 import ssl
+import time
+import uuid
 import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
@@ -115,7 +118,8 @@ class GuardHandler(BaseHTTPRequestHandler):
             return
         if method == "sendChatAction" and not (
                 set(data) == {"chat_id", "action"} and type(data["chat_id"]) is int
-                and data["chat_id"] in self.server.recipients and data["action"] == "typing"):
+                and data["chat_id"] in self.server.recipients
+                and data["action"] in ("typing", "choose_sticker")):
             self.reject(403)
             return
         if method == "sendMessage":
@@ -239,21 +243,48 @@ class GuardHandler(BaseHTTPRequestHandler):
         self.forward(None, MAX_FILE)
 
     def forward(self, body, limit, content_type="application/json"):
+        started = time.monotonic()
+        event = {"event": "telegram_forward", "request_id": uuid.uuid4().hex,
+                 "method": "file_download" if self.command == "GET" else self.path.rsplit("/", 1)[-1],
+                 "status": 0, "bytes": 0}
+        if event["method"] == "sendChatAction" and body is not None:
+            event["action"] = json.loads(body)["action"]
+        try:
+            self.forward_request(body, limit, content_type, event)
+        except (OSError, http.client.HTTPException) as error:
+            event["error_class"] = type(error).__name__
+            self.close_connection = True
+            if not event["status"]:
+                event["status"] = 502
+                self.reject(502)
+        finally:
+            event["elapsed_ms"] = round((time.monotonic() - started) * 1000)
+            event["at_unix_ms"] = round(time.time() * 1000)
+            print(json.dumps(event), flush=True)
+
+    def forward_request(self, body, limit, content_type, event):
         request = urllib.request.Request(self.server.upstream + self.path, data=body,
             headers={"Content-Type": content_type}, method=self.command)
         try:
             response = self.server.opener.open(request, timeout=20)
         except urllib.error.HTTPError as error:
             response = error
-        except OSError:
+        except OSError as error:
+            event.update(status=502, error_class=type(error).__name__)
+            reason = getattr(error, "reason", None)
+            if isinstance(reason, BaseException):
+                event["reason_class"] = type(reason).__name__
             self.reject(502)
             return
         with response:
+            event["upstream_status"] = response.code
             length = response.headers.get("Content-Length")
             if length is not None and (not length.isdecimal() or int(length) > limit):
+                event.update(status=502, error_class="ResponseSizeLimit")
                 self.reject(502)
                 return
             self.send_response(response.code)
+            event["status"] = response.code
             self.send_header("Content-Type", response.headers.get("Content-Type", "application/octet-stream"))
             if length is not None:
                 self.send_header("Content-Length", length)
@@ -270,11 +301,13 @@ class GuardHandler(BaseHTTPRequestHandler):
                         self.wfile.write(b"0\r\n\r\n")
                     break
                 if len(chunk) > remaining:
+                    event["error_class"] = "ResponseSizeLimit"
                     # No terminal chunk: clients must reject the incomplete body.
                     break
                 if length is None:
                     self.wfile.write(f"{len(chunk):x}\r\n".encode())
                 self.wfile.write(chunk)
+                event["bytes"] += len(chunk)
                 if length is None:
                     self.wfile.write(b"\r\n")
                 remaining -= len(chunk)

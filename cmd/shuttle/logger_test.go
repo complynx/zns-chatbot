@@ -29,3 +29,14 @@ func TestApplicationLoggerCorrelatesContextWithoutChangingPlainLogs(t *testing.T
 	require.NotContains(t, plain, "trace_id")
 	require.NotContains(t, plain, "span_id")
 }
+
+func TestApplicationDebugLoggingIsOptIn(t *testing.T) {
+	for _, level := range []string{"", "debug"} {
+		t.Run(level, func(t *testing.T) {
+			t.Setenv("SHUTTLE_LOG_LEVEL", level)
+			var output bytes.Buffer
+			newLogger(&output).Debug("technical stage", "attempt", 1)
+			require.Equal(t, level == "debug", output.Len() > 0)
+		})
+	}
+}

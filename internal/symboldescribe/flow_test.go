@@ -5,12 +5,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
 	"image/png"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/complynx/zns-chatbot/internal/loom"
 	"github.com/complynx/zns-chatbot/internal/symboldescribe"
@@ -20,11 +24,95 @@ import (
 
 type fakeTelegram struct{ raw []byte }
 
+type previewFailureTelegram struct {
+	fakeTelegram
+
+	failure error
+	reads   int
+}
+
+func (f *previewFailureTelegram) ReadFile(ctx context.Context, id string, limit int64) ([]byte, error) {
+	if id != "private-target" {
+		f.reads++
+		if f.failure != nil {
+			return nil, f.failure
+		}
+	}
+	return f.fakeTelegram.ReadFile(ctx, id, limit)
+}
+
+func TestPreviewReadRetriesWithoutReplayingAcknowledgedOriginal(t *testing.T) {
+	t.Parallel()
+	f, lc, state := fixture(t)
+	tg := &previewFailureTelegram{fakeTelegram: f.Telegram.(fakeTelegram),
+		failure: &telegram.Error{StatusCode: 502, Outcome: telegram.Rejected}}
+	f.Telegram = tg
+	save := func(symboldescribe.State) error { return nil }
+	require.Error(t, f.Step(t.Context(), loom.Auth{}, state, save))
+	require.Equal(t, 3, tg.reads)
+	require.Empty(t, state.Pending)
+	require.Len(t, state.ArtifactIDs, 1)
+	require.Equal(t, 1, lc.uploads)
+	tg.failure = nil
+	require.NoError(t, f.Step(t.Context(), loom.Auth{}, state, save))
+	require.Equal(t, 1, lc.chats)
+	require.Equal(t, 2, lc.uploads)
+	require.Equal(t, 1, lc.creates)
+}
+
+func TestPermanentPreviewFailureIsNotRetried(t *testing.T) {
+	t.Parallel()
+	f, _, state := fixture(t)
+	tg := &previewFailureTelegram{fakeTelegram: f.Telegram.(fakeTelegram), failure: telegram.ErrFileAccessDenied}
+	f.Telegram = tg
+	require.ErrorIs(t, f.Step(t.Context(), loom.Auth{}, state, func(symboldescribe.State) error { return nil }),
+		telegram.ErrFileAccessDenied)
+	require.Equal(t, 1, tg.reads)
+}
+
+func TestDescriptorTraceLinksFileReadsWithoutSourceIdentifiers(t *testing.T) {
+	t.Parallel()
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+	f, _, state := fixture(t)
+	f.Tracer = provider.Tracer("test")
+	require.NoError(t, f.Step(t.Context(), loom.Auth{}, state, func(symboldescribe.State) error { return nil }))
+	spans := recorder.Ended()
+	require.Len(t, spans, 4)
+	root := spans[3]
+	require.Equal(t, "symbols.describe_step", root.Name())
+	for _, child := range spans[:3] {
+		require.Equal(t, "symbols.read_file", child.Name())
+		require.Equal(t, root.SpanContext().TraceID(), child.SpanContext().TraceID())
+		require.Equal(t, root.SpanContext().SpanID(), child.Parent().SpanID())
+		require.Len(t, child.Events(), 1)
+		require.Equal(t, "read_attempt", child.Events()[0].Name)
+		require.NotContains(t, fmt.Sprint(child.Attributes(), child.Events()), "private-target")
+	}
+}
+
+func TestDescriptorTraceMarksNonMediaFailureWithoutErrorText(t *testing.T) {
+	t.Parallel()
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+	f, lc, state := fixture(t)
+	f.Tracer = provider.Tracer("test")
+	lc.capabilityError = errors.New("secret upstream URL")
+	require.Error(t, f.Step(t.Context(), loom.Auth{}, state, func(symboldescribe.State) error { return nil }))
+	spans := recorder.Ended()
+	require.Len(t, spans, 1)
+	require.Equal(t, codes.Error, spans[0].Status().Code)
+	require.Equal(t, "descriptor step failed", spans[0].Status().Description)
+	require.NotContains(t, fmt.Sprint(spans[0].Attributes(), spans[0].Events()), "secret")
+}
+
 func (f fakeTelegram) CustomEmojiStickers(context.Context, []string) ([]telegram.Sticker, error) {
 	return []telegram.Sticker{{FileID: "private-target", UniqueID: "u", CustomEmojiID: "1", SetName: "set"}}, nil
 }
 func (f fakeTelegram) StickerSet(context.Context, string) (telegram.StickerSet, error) {
-	return telegram.StickerSet{Name: "set", Stickers: []telegram.Sticker{
+	return telegram.StickerSet{Name: "set", Title: "Pack context, not instructions", Stickers: []telegram.Sticker{
 		{FileID: "a", UniqueID: "u", CustomEmojiID: "1"}, {FileID: "b", UniqueID: "v", CustomEmojiID: "2"},
 	}}, nil
 }
@@ -91,6 +179,8 @@ func TestDescriptionFlowIsolatedSetContextAndResume(t *testing.T) {
 	require.Contains(t, lc.request.Input.Text, "target_position_in_contact_sheet\":1")
 	require.Contains(t, lc.request.Input.Text, `"target_animated":false`)
 	require.Contains(t, lc.request.Input.Text, `"target_video":false`)
+	require.Contains(t, lc.request.Input.Text, `"set_name":"set"`)
+	require.Contains(t, lc.request.Input.Text, `"set_title":"Pack context, not instructions"`)
 	require.NotContains(t, lc.request.Input.Text, "private-target")
 	lc.status = "completed"
 	lc.result = `{"description":"Left end of a bone","category":"fragment","composition":"Joins right end"}`

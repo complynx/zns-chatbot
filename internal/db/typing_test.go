@@ -59,9 +59,17 @@ func TestTypingTracksProcessingAndQueuedDeliveriesWithoutWaitingOrUnknown(t *tes
 request=jsonb_set(request,'{symbols}','[{"kind":"emoji","id":"1","offset":0,"length":2}]') WHERE id=$1`, task.ID)
 	require.NoError(t, err)
 	check(true)
+	active, choosing, err := s.ChatActivity(ctx, 1, "org", 42)
+	require.NoError(t, err)
+	require.True(t, active)
+	require.True(t, choosing)
 	_, err = s.Pool().Exec(ctx, `UPDATE shuttle_tasks SET created_at=now()-interval '7 minutes' WHERE id=$1`, task.ID)
 	require.NoError(t, err)
 	check(false)
+	active, choosing, err = s.ChatActivity(ctx, 1, "org", 42)
+	require.NoError(t, err)
+	require.False(t, active)
+	require.False(t, choosing)
 	_, err = s.Pool().Exec(ctx, `UPDATE shuttle_tasks SET created_at=now(),run_id='known-run' WHERE id=$1`, task.ID)
 	require.NoError(t, err)
 	check(false)
@@ -73,6 +81,10 @@ request=jsonb_set(request,'{symbols}','[{"kind":"emoji","id":"1","offset":0,"len
 			"'typing-test',0,'{}')", outbox, task.ID)
 	require.NoError(t, err)
 	check(true) // A completed task still owes its final reply.
+	active, choosing, err = s.ChatActivity(ctx, 1, "org", 42)
+	require.NoError(t, err)
+	require.True(t, active)
+	require.False(t, choosing)
 	for _, state := range []string{"retryable", "send_inflight", "delivery_unknown", "delivery_failed", "delivered"} {
 		_, err = s.Pool().
 			Exec(ctx, `UPDATE shuttle_outbox SET state=$2,attempt_id=$3 WHERE id=$1`, outbox, state, uuid.New())

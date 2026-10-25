@@ -25,15 +25,20 @@ func TestSendChatActionTypingAndCancellation(t *testing.T) {
 		if !assert.NoError(t, json.NewDecoder(r.Body).Decode(&body)) {
 			return
 		}
-		assert.Equal(t, map[string]any{"chat_id": float64(42), "action": "typing"}, body)
+		action := "typing"
+		if calls.Load() == 2 {
+			action = "choose_sticker"
+		}
+		assert.Equal(t, map[string]any{"chat_id": float64(42), "action": action}, body)
 		_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
 	}))
 	defer server.Close()
 	client, err := telegram.New(server.URL, "123:secret", server.Client())
 	require.NoError(t, err)
 	require.NoError(t, client.SendChatAction(context.Background(), 42))
+	require.NoError(t, client.SendActivity(context.Background(), 42, true))
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	require.Error(t, client.SendChatAction(ctx, 42))
-	require.EqualValues(t, 1, calls.Load())
+	require.EqualValues(t, 2, calls.Load())
 }

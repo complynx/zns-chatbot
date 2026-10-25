@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/complynx/zns-chatbot/internal/symbols"
 )
@@ -35,6 +37,11 @@ func (s *Service) symbolPrompt(ctx context.Context, bot int64, task uuid.UUID, i
 	if err != nil {
 		return "", err
 	}
+	s.logger.DebugContext(ctx, "visual symbol catalog lookup", "task_id", task,
+		"references", len(i.Symbols), "known_descriptions", len(descriptions))
+	span := trace.SpanFromContext(ctx)
+	span.AddEvent("symbols.catalog", trace.WithAttributes(attribute.Int("symbol.references", len(i.Symbols)),
+		attribute.Int("symbol.known_descriptions", len(descriptions))))
 	for _, item := range i.Symbols {
 		if _, ok := descriptions[item.Kind+":"+item.ID]; ok {
 			continue
@@ -44,8 +51,12 @@ func (s *Service) symbolPrompt(ctx context.Context, bot int64, task uuid.UUID, i
 			return "", waitErr
 		}
 		if open {
+			span.AddEvent("symbols.wait", trace.WithAttributes(attribute.Bool("deadline_open", true)))
+			s.logger.DebugContext(ctx, "visual symbol description wait", "task_id", task, "deadline_open", true)
 			return "", errSymbolDescriptionPending
 		}
+		s.logger.DebugContext(ctx, "visual symbol description wait", "task_id", task, "deadline_open", false)
+		span.AddEvent("symbols.wait", trace.WithAttributes(attribute.Bool("deadline_open", false)))
 		break
 	}
 	text, err := symbols.Replace(i.Text, i.Symbols, func(r symbols.Reference) (symbols.Description, bool) {

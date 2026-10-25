@@ -8,7 +8,9 @@ const TypingPageSize = 64
 // recovery of an uncertain send is not processing. Queued sends remain active
 // after their task has completed, including separately queued native avatars.
 const typingCandidates = `WITH busy AS (
- SELECT t.user_id,c.chat_id FROM shuttle_tasks t
+ SELECT t.user_id,c.chat_id,
+ (jsonb_typeof(t.request->'symbols')='array' AND t.request->'symbols'<>'[]'::jsonb) AS choosing_sticker
+ FROM shuttle_tasks t
  JOIN shuttle_conversations c ON c.id=t.conversation_id AND c.user_id=t.user_id
  WHERE (t.state IN ('accepted','creating_run','running')
  OR (t.state='awaiting_service' AND t.run_id=''
@@ -18,7 +20,7 @@ const typingCandidates = `WITH busy AS (
  AND t.lease_until>statement_timestamp()))
  AND (t.lease_until IS NULL OR t.lease_until>statement_timestamp())
  UNION
- SELECT t.user_id,c.chat_id FROM shuttle_outbox o
+ SELECT t.user_id,c.chat_id,false FROM shuttle_outbox o
  JOIN shuttle_tasks t ON t.id=o.task_id
  JOIN shuttle_conversations c ON c.id=t.conversation_id AND c.user_id=t.user_id
  WHERE o.state IN ('pending','retryable','send_inflight')
@@ -26,12 +28,14 @@ const typingCandidates = `WITH busy AS (
  AND NOT EXISTS(SELECT 1 FROM shuttle_outbox prior WHERE prior.task_id=o.task_id
  AND prior.chunk_seq<o.chunk_seq AND prior.state IN ('delivery_unknown','delivery_failed'))
  UNION
- SELECT user_id,telegram_user_id FROM shuttle_avatar_deliveries
+ SELECT user_id,telegram_user_id,false FROM shuttle_avatar_deliveries
  WHERE state IN ('pending','retryable','send_inflight')
 ), eligible AS (
- SELECT DISTINCT b.chat_id FROM busy b JOIN shuttle_users u ON u.id=b.user_id
+ SELECT b.chat_id,bool_or(coalesce(b.choosing_sticker,false)) AS choosing_sticker
+ FROM busy b JOIN shuttle_users u ON u.id=b.user_id
  WHERE u.bot_id=$1 AND NOT u.revoked AND u.tg_user_id>0 AND b.chat_id=u.tg_user_id
  AND (u.zitadel_org=$2 OR (u.zitadel_org='' AND u.zitadel_subject=''))
+ GROUP BY b.chat_id
 ) `
 
 // TypingChats returns a bounded keyset page, never message contents or identity
@@ -71,4 +75,15 @@ func (s *Store) NeedsTyping(ctx context.Context, botID int64, organization strin
 	).
 		Scan(&needed)
 	return needed, err
+}
+
+// ChatActivity rechecks eligibility and chooses the current cosmetic action.
+// Symbol processing takes priority over other active tasks in the same chat.
+func (s *Store) ChatActivity(ctx context.Context, botID int64, organization string, chatID int64) (
+	bool, bool, error,
+) {
+	var active, choosingSticker bool
+	err := s.pool.QueryRow(ctx, typingCandidates+`SELECT count(*)>0,coalesce(bool_or(choosing_sticker),false)
+ FROM eligible WHERE chat_id=$3`, botID, organization, chatID).Scan(&active, &choosingSticker)
+	return active, choosingSticker, err
 }

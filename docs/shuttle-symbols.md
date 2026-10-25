@@ -66,7 +66,9 @@ explicitly enabled worker owns paid description work.
 Before preparing a new agent request or control input, Shuttle waits for missing
 catalog descriptions for up to six minutes from the original durable intake time.
 The task snoozes without starting a model request; other conversations can proceed.
-The typing indicator stays active during this bounded wait.
+The `choose_sticker` indicator stays active during this bounded wait and active
+symbol-task processing. Other processing and queued deliveries use `typing`.
+Both signals refresh every four seconds and stop when no eligible work remains.
 Retries and restarts retain that deadline. Previously prepared request bodies are
 not rewritten. At the deadline, unresolved descriptions remain explicitly unknown;
 that does not mean the image was lost or require the user to resend it.
@@ -86,6 +88,22 @@ entry receives a private blocked marker and needs reconciliation; it does not
 start a replacement run or hold other entries. A stale process lock after a crash
 also needs reconciliation before restarting. Catalog eviction leaves journals
 intact and cannot make an old result overwrite a new generation.
+
+Transient Telegram media reads receive at most three attempts with a short,
+bounded backoff. Explicit missing/access-denied files are not retried. This
+applies only to reads: acknowledged uploads remain journaled, and unknown Loom
+chat/upload outcomes still require reconciliation.
+
+For technical diagnostics, set `SHUTTLE_LOG_LEVEL=debug` on Shuttle or the
+descriptor (`-debug` also enables descriptor diagnostics). Logs include task or
+procedure correlation, catalog counts, wait deadlines, preview positions,
+hashed file keys, attempts, durations and safe transport outcomes. They exclude
+message text, media bytes, credentials and credential-bearing URLs. Enable log
+rotation when using debug for an extended acceptance run.
+The configured OTLP exporter also receives descriptor-step and media-read spans,
+with per-attempt results. Catalog lookup and description-wait events use the
+message processing span. This telemetry contains technical counts and outcomes,
+not message text, source file IDs, media or credentials.
 
 The procedure requires authenticated capability negotiation for Loom's
 `native_files` execution profile and persists that profile in its creation
@@ -117,6 +135,9 @@ ornaments, dividers, vignettes and multi-piece objects. A target index identifie
 the member being described. Set context is evidence, not proof that neighboring
 members necessarily form one object. The description records a category,
 visible literal text, supported composition hints and a tentative reaction.
+The descriptor also receives the set's available name and title as untrusted
+context. Bot API does not provide a separate set description. Pack metadata
+alone cannot establish character identity or override the procedure instructions.
 
 The conversational input preserves adjacent tags, whitespace and line breaks.
 Fragments can therefore be interpreted together in the actual message order.

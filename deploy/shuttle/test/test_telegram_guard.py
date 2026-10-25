@@ -181,6 +181,35 @@ class GuardTests(unittest.TestCase):
         with self.request("/bot999:fake/sendChatAction", valid) as response:
             self.assertTrue(json.load(response)["ok"])
         self.assertEqual(self.forwarded, [("/bot999:fake/sendChatAction", valid)])
+        choosing = {**valid, "action": "choose_sticker"}
+        with self.request("/bot999:fake/sendChatAction", choosing) as response:
+            self.assertTrue(json.load(response)["ok"])
+        self.assertEqual(self.forwarded[-1], ("/bot999:fake/sendChatAction", choosing))
+
+    def test_network_diagnostics_never_include_credentials_or_payload(self):
+        with patch.object(self.guard.opener, "open", side_effect=urllib.error.URLError("SECRET URL")), \
+                patch("builtins.print") as logged:
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                self.request("/bot999:fake/sendMessage", {"chat_id": 42, "text": "PRIVATE TEXT"})
+            self.assertEqual(error.exception.code, 502)
+            error.exception.close()
+            event = json.loads(logged.call_args.args[0])
+        self.assertEqual(event["method"], "sendMessage")
+        self.assertEqual(event["status"], 502)
+        self.assertEqual(event["error_class"], "URLError")
+        for secret in ("999:fake", "SECRET", "PRIVATE TEXT"):
+            self.assertNotIn(secret, json.dumps(event))
+
+    def test_bad_upstream_response_closes_with_502(self):
+        with patch.object(self.guard.opener, "open", side_effect=http.client.BadStatusLine("SECRET")), \
+                patch("builtins.print") as logged:
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                self.request("/bot999:fake/getMe", {})
+            self.assertEqual(error.exception.code, 502)
+            error.exception.close()
+            event = json.loads(logged.call_args.args[0])
+        self.assertEqual(event["error_class"], "BadStatusLine")
+        self.assertNotIn("SECRET", json.dumps(event))
 
     def test_crop_document_requires_exact_configured_launch_and_unique_parts(self):
         launch = "https://example.invalid/testbot/app/"

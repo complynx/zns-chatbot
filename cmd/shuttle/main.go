@@ -45,7 +45,11 @@ func main() {
 }
 
 func newLogger(output io.Writer) *slog.Logger {
-	return slog.New(observability.WithTraceContext(slog.NewJSONHandler(output, nil)))
+	options := &slog.HandlerOptions{}
+	if os.Getenv("SHUTTLE_LOG_LEVEL") == "debug" {
+		options.Level = slog.LevelDebug
+	}
+	return slog.New(observability.WithTraceContext(slog.NewJSONHandler(output, options)))
 }
 
 func run(logger *slog.Logger) error {

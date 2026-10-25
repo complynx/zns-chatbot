@@ -7,16 +7,19 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/complynx/zns-chatbot/internal/config"
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/loom"
+	"github.com/complynx/zns-chatbot/internal/observability"
 	"github.com/complynx/zns-chatbot/internal/symboldescribe"
 	"github.com/complynx/zns-chatbot/internal/telegram"
 )
@@ -27,8 +30,10 @@ const descriptorDonePhase = "done"
 type arguments struct {
 	config, kind, id, journal, actorToken, subjectToken string
 	watch                                               bool
+	debug                                               bool
 	concurrency                                         int
 	generation                                          uuid.UUID
+	tracer                                              trace.Tracer
 }
 type dependencies struct {
 	store *db.Store
@@ -56,6 +61,7 @@ func parse() arguments {
 	flag.StringVar(&a.actorToken, "actor-token-file", "", "Protected Loom service-account or delegation actor token")
 	flag.StringVar(&a.subjectToken, "subject-token-file", "", "Optional protected delegated descriptor token")
 	flag.BoolVar(&a.watch, "watch", false, "Process retained cache misses; journal is a private root directory")
+	flag.BoolVar(&a.debug, "debug", false, "Log technical descriptor stages without message or media contents")
 	flag.IntVar(&a.concurrency, "concurrency", 4, "Maximum simultaneous description procedures (1-4)")
 	flag.Parse()
 	return a
@@ -90,12 +96,33 @@ func connect(ctx context.Context, a arguments) (dependencies, error) {
 	if err != nil {
 		return d, errors.New("open catalog database")
 	}
-	return dependencies{store, symboldescribe.Flow{Telegram: tg, Loom: lc}, c.Telegram.BotID,
+	return dependencies{store, symboldescribe.Flow{Telegram: tg, Loom: lc, Tracer: a.tracer}, c.Telegram.BotID,
 		loom.Auth{ServiceToken: actor, SubjectToken: subject}}, nil
 }
 
 func run() error {
 	a := parse()
+	if a.debug || os.Getenv("SHUTTLE_LOG_LEVEL") == "debug" {
+		slog.SetDefault(slog.New(observability.WithTraceContext(
+			slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))))
+	}
+	c, err := config.Load(a.config)
+	if err != nil {
+		return err
+	}
+	telemetry, err := observability.New(context.Background(), observability.Options{
+		OTLPEndpoint: c.OTel.Endpoint, ServiceName: c.OTel.ServiceName + "-symbols",
+		SampleRatio: c.OTel.SampleRatio, MaxQueueSize: c.OTel.MaxQueueSize, Timeout: c.OTel.Timeout,
+	})
+	if err != nil {
+		return err
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), c.OTel.Timeout)
+		defer cancel()
+		_ = telemetry.Shutdown(ctx)
+	}()
+	a.tracer = telemetry.Tracer()
 	if a.watch {
 		return watch(a)
 	}
