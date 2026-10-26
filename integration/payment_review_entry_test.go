@@ -38,12 +38,14 @@ func TestStructuredPaymentReviewEntryUsesCurrentRightsWithoutLoom(t *testing.T) 
 	p.loomDown = true
 	f := setupPayment(t, p)
 	for n, step := range []struct {
-		user int64
-		text string
-	}{{11003, "/payment_reviews"}, {11003, "/menu"}, {11002, "/payment_reviews"}, {11002, "/menu"}} {
+		user    int64
+		text    string
+		replies int
+	}{{11003, "/payment_reviews", 1}, {11003, "/menu", 3},
+		{11002, "/payment_reviews", 4}, {11002, "/menu", 6}} {
 		accepted := paymentReviewMessage(t, f.H, 97500+int64(n), step.user, step.text)
 		f.H.await(t, accepted, "completed")
-		f.H.awaitReplies(t, n+1)
+		f.H.awaitReplies(t, step.replies)
 	}
 	p.mu.Lock()
 	sent := append([]telegram.SendMessageRequest(nil), p.sent...)
@@ -54,9 +56,14 @@ func TestStructuredPaymentReviewEntryUsesCurrentRightsWithoutLoom(t *testing.T) 
 	require.Equal(t, "Review payments", button.Text)
 	require.Equal(t, appTestOrigin+"/app/#payment-review", button.WebApp.URL)
 	require.Empty(t, button.CallbackData)
-	require.NotContains(t, sent[1].Text, "/payment_reviews")
-	require.Contains(t, sent[2].Text, "requires current event reviewer access")
-	require.NotContains(t, sent[3].Text, "/payment_reviews")
+	require.Len(t, sent, 6)
+	require.IsType(t, &telegram.ReplyKeyboardRemove{}, sent[1].ReplyMarkup)
+	require.IsType(t, &telegram.InlineKeyboardMarkup{}, sent[2].ReplyMarkup)
+	require.NotContains(t, sent[2].Text, "/payment_reviews")
+	require.Contains(t, sent[3].Text, "requires current event reviewer access")
+	require.IsType(t, &telegram.ReplyKeyboardRemove{}, sent[4].ReplyMarkup)
+	require.IsType(t, &telegram.InlineKeyboardMarkup{}, sent[5].ReplyMarkup)
+	require.NotContains(t, sent[5].Text, "/payment_reviews")
 	require.Zero(t, runs)
 	require.Zero(t, unavailable)
 	user, err := f.H.store.GetUser(t.Context(), f.OwnerID)
@@ -67,9 +74,9 @@ func TestStructuredPaymentReviewEntryUsesCurrentRightsWithoutLoom(t *testing.T) 
 	f.H.iam.Invalidate(user.Subject)
 	accepted := paymentReviewMessage(t, f.H, 97504, 11002, "/payment_reviews")
 	f.H.await(t, accepted, "completed")
-	f.H.awaitReplies(t, 5)
+	f.H.awaitReplies(t, 7)
 	p.mu.Lock()
-	adminEntry := p.sent[4]
+	adminEntry := p.sent[6]
 	p.mu.Unlock()
 	require.IsType(t, &telegram.InlineKeyboardMarkup{}, adminEntry.ReplyMarkup)
 	p.mu.Lock()
@@ -78,9 +85,9 @@ func TestStructuredPaymentReviewEntryUsesCurrentRightsWithoutLoom(t *testing.T) 
 	f.H.iam.Invalidate(user.Subject)
 	accepted = paymentReviewMessage(t, f.H, 97505, 11002, "/payment_reviews")
 	f.H.await(t, accepted, "completed")
-	f.H.awaitReplies(t, 6)
+	f.H.awaitReplies(t, 8)
 	p.mu.Lock()
-	revoked := p.sent[5]
+	revoked := p.sent[7]
 	p.mu.Unlock()
 	require.Contains(t, revoked.Text, "requires current event reviewer access")
 }
