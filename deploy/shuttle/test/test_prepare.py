@@ -70,9 +70,10 @@ class PreparationTests(unittest.TestCase):
                 (commands / 'docker').write_text('#!/bin/sh\nprintf invoked >' + shlex.quote(str(record)) + '\nexit 86\n')
                 for command in commands.iterdir():
                     command.chmod(0o700)
+            # Allow slower process startup on CI; Docker/state assertions enforce the preflight boundary.
             result = subprocess.run([shutil.which('pwsh'), '-NoProfile', '-File', str(scripts / 'run.ps1'), 'Start'],
                                     cwd=root, env=dict(os.environ, PATH=str(commands)),
-                                    capture_output=True, text=True, timeout=15)
+                                    capture_output=True, text=True, timeout=60)
             self.assertNotEqual(result.returncode, 0)
             self.assertFalse(record.exists(), 'Start called Docker on an initialized stand')
             self.assertIn('already initialized', result.stdout + result.stderr)
