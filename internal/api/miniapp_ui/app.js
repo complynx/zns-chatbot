@@ -15,10 +15,10 @@
   // Telegram appends initialization parameters inside the requested fragment.
   const launchTarget = (window.location?.hash || "").slice(1).split("?")[0];
   const words = {
-    en: { connecting: "Connecting…", connected: "Connected", reopen: "Close Зинуся and open it again from Telegram.",
-      unavailable: "Could not connect. Try again.", outside: "Open this page from the Зинуся Telegram bot.", retry: "Retry connection" },
-    ru: { connecting: "Подключаюсь…", connected: "Подключено", reopen: "Закрой Зинусю и открой её заново из Telegram.",
-      unavailable: "Не удалось подключиться. Попробуй ещё раз.", outside: "Открой эту страницу из Telegram-бота Зинуся.", retry: "Повторить подключение" }
+    en: { connecting: "Connecting…", connected: "Connected", reopen: "Close ZiNuSya and open it again from Telegram.",
+      unavailable: "Could not connect. Try again.", outside: "Open this page from the ZiNuSya Telegram bot.", retry: "Retry connection" },
+    ru: { connecting: "Подключаюсь…", connected: "Подключено", reopen: "Закрой ЗиНуСю и открой её заново из Telegram.",
+      unavailable: "Не удалось подключиться. Попробуй ещё раз.", outside: "Открой эту страницу из Telegram-бота ЗиНуСя.", retry: "Повторить подключение" }
   };
   const accountWords = {
     en: { title: "My registrations", loading: "Loading…", empty: "No registrations.", updated: "Updated", refresh: "Refresh",

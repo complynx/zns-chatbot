@@ -101,12 +101,15 @@ Only the proposer and currently authorized reviewers can read pending content.
 
 ## Native and mixed workflows
 
-Provide `/knowledge` entry and Mini App collection/event/topic browsing, search,
-article/section reading, suggestion submission and decision status. Authorized
-moderators and event administrators have pending-review and exact edit/review
-forms; global administrators can manage named moderator assignments. Ordinary
-users can complete a suggestion and a different authorized reviewer can decide
-it without Loom. All API and agent methods share the same article, revision,
+The `/knowledge` command goes to the agent and is absent from the command menu.
+Ordinary users read published material and submit suggestions through the agent.
+Native collection/event/topic browsing, search, article reading and suggestion
+forms require the current editor capability. Authorized moderators and event
+administrators have pending-review and exact edit/review forms; global
+administrators can manage named moderator assignments within their existing
+capabilities. An ordinary user's agent-created suggestion can be reviewed by a
+different authorized editor through the Mini App. All API and agent methods
+share the same article, revision,
 suggestion and operation identities. Native forms can continue agent-created
 suggestions/preparations with fresh exact consent, and the agent can discover
 native-origin work without creating replacement business objects.

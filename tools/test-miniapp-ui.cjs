@@ -99,7 +99,7 @@ test("missing Telegram proof gives launch instructions without a login or retry 
   await app.settle();
   assert.equal(app.calls.length, 0);
   assert.equal(app.elements.retry.hidden, true);
-  assert.match(app.elements.status.textContent, /from the Зинуся Telegram bot/);
+  assert.match(app.elements.status.textContent, /from the ZiNuSya Telegram bot/);
 });
 
 test("only transient bootstrap failures offer connection retry", async () => {
@@ -299,7 +299,7 @@ test("a page outside Telegram does not resume a stored capability", async () => 
   const app = browser("", { launch: launch("proof"), token, nonce }, []);
   await app.settle();
   assert.equal(app.calls.length, 0);
-  assert.match(app.elements.status.textContent, /from the Зинуся Telegram bot/);
+  assert.match(app.elements.status.textContent, /from the ZiNuSya Telegram bot/);
 });
 
 
