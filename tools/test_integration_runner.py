@@ -143,7 +143,11 @@ class ProcessDeadline(unittest.TestCase):
             # An orphan may remain a zombie briefly until the container's init reaps it.
             status = Path(f'/proc/{pid}/stat')
             for _ in range(50):
-                if not status.exists() or status.read_text().split()[2] == 'Z':
+                try:
+                    child_state = status.read_text().split()[2]
+                except FileNotFoundError:
+                    break
+                if child_state == 'Z':
                     break
                 time.sleep(0.02)
             else:
