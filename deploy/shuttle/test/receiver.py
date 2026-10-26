@@ -268,7 +268,10 @@ def main():
                     commit(root, state, pending={'method': method})
                     response = retry_post(opener, base + method, {}, method, lambda: authorized() == control)
                     assert response['ok']
-                    assert response['result']['id'] == config['bot_id'] if method == 'getMe' else not response['result']['url']
+                    if method == 'getMe':
+                        assert response['result']['id'] == config['bot_id']
+                    else:
+                        assert not response['result']['url']
                     commit(root, state, pending=None)
                 commit(root, state, identity_checked=True)
             pending = retained_updates(root, state['next_offset'])

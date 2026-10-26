@@ -227,7 +227,16 @@ class ReceiverTests(unittest.TestCase):
             'session': 'synthetic', 'initial_offset': 10, 'webhook_url': base + '/webhook'}
         cfg = self.root / 'config.json'
         cfg.write_text(json.dumps(config))
-        code = "import receiver; original=receiver.post\ndef post(o,url,*a,**kw):\n if url.startswith('https://api.telegram.org/'):url=" + repr(base) + "+'/' +url.rsplit('/',1)[-1]\n return original(o,url,*a,**kw)\nreceiver.post=post;receiver.main()"
+        code = (
+            "import receiver\n"
+            "original = receiver.post\n"
+            "def post(opener, url, *args, **kwargs):\n"
+            " if url.startswith('https://api.telegram.org/'):\n"
+            f"  url = {base!r} + '/' + url.rsplit('/', 1)[-1]\n"
+            " return original(opener, url, *args, **kwargs)\n"
+            "receiver.post = post\n"
+            "receiver.main()\n"
+        )
         def start():
             control = self.root / 'authorization.json'
             if control.exists():
