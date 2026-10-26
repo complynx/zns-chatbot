@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/complynx/zns-chatbot/internal/config"
@@ -94,7 +95,7 @@ func connect(ctx context.Context, a arguments) (dependencies, error) {
 	}
 	store, err := db.Open(ctx, c.DatabaseURL)
 	if err != nil {
-		return d, errors.New("open catalog database")
+		return d, &descriptorCatalogReadError{err}
 	}
 	return dependencies{store, symboldescribe.Flow{Telegram: tg, Loom: lc, Tracer: a.tracer}, c.Telegram.BotID,
 		loom.Auth{ServiceToken: actor, SubjectToken: subject}}, nil
@@ -185,6 +186,11 @@ func readJournal(a arguments, path string, entry db.SymbolRecord, lookupErr erro
 			s.ProcedureID == uuid.Nil || a.generation != uuid.Nil && s.Generation != a.generation {
 			return s, errors.New("journal does not match requested symbol")
 		}
+		// A failed lookup does not prove eviction. Retain the original journal
+		// and retry the catalog read before claiming or observing external work.
+		if lookupErr != nil && !errors.Is(lookupErr, pgx.ErrNoRows) {
+			return s, &descriptorCatalogReadError{lookupErr}
+		}
 		return s, nil
 	}
 	if !errors.Is(err, os.ErrNotExist) {
@@ -222,7 +228,8 @@ func claim(ctx context.Context, d dependencies, s *symboldescribe.State, r *db.S
 	}
 	marker, _ := json.Marshal(ownership{s.ProcedureID})
 	if err := d.store.SaveSymbolWorkflow(ctx, d.bot, *r, r.Workflow, marker); err != nil {
-		return err
+		// The next lookup confirms ownership if the CAS acknowledgement was lost.
+		return &descriptorCatalogReadError{err}
 	}
 	r.Workflow = marker
 	return nil
@@ -238,7 +245,11 @@ func apply(ctx context.Context, d dependencies, s symboldescribe.State, r db.Sym
 	if s.Result == nil {
 		return errors.New("completed journal has no description")
 	}
-	return d.store.CompleteSymbolDescription(ctx, d.bot, r, *s.Result, r.Workflow)
+	if err := d.store.CompleteSymbolDescription(ctx, d.bot, r, *s.Result, r.Workflow); err != nil {
+		// Completion accepts the exact same generation, workflow and description.
+		return &descriptorCatalogReadError{err}
+	}
+	return nil
 }
 
 func token(path string) (string, error) {

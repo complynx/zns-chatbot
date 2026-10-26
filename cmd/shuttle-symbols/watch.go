@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -13,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/loom"
@@ -23,7 +26,7 @@ import (
 const descriptorPoll = 2 * time.Second
 
 // watch reuses each one-entry procedure and its exact journal. Bounded slots
-// overlap independent entries; errors block that generation without replacement work.
+// overlap independent entries; safe read retries retain the original generation.
 func watch(a arguments) error {
 	if a.journal == "" || a.kind != "" || a.id != "" {
 		return errors.New("watch requires a private journal root and no kind/id")
@@ -51,6 +54,7 @@ type descriptorQueue struct {
 	cursor      uuid.UUID
 	pointerRoot string
 	busy        bool
+	readRetry   descriptorRetry
 }
 
 type descriptorResult struct {
@@ -150,12 +154,18 @@ func startDescriptors(ctx context.Context, a arguments, d dependencies,
 ) error {
 	for slot := range queues {
 		q := &queues[slot]
-		if q.busy {
+		if q.busy || time.Now().Before(q.readRetry.After) {
 			continue
 		}
 		if err := q.fill(ctx, a, d, reserved); err != nil {
+			var readErr *descriptorCatalogReadError
+			if errors.As(err, &readErr) && transientCatalogRead(readErr.error) {
+				q.readRetry = nextDescriptorRetry(q.readRetry, err, time.Now())
+				continue
+			}
 			return err
 		}
+		q.readRetry = descriptorRetry{}
 		if q.active == nil {
 			continue
 		}
@@ -191,7 +201,7 @@ func nextPending(ctx context.Context, d dependencies, root string, cursor uuid.U
 ) {
 	entries, err := d.store.PendingSymbols(ctx, d.bot, cursor)
 	if err != nil {
-		return nil, cursor, err
+		return nil, cursor, &descriptorCatalogReadError{err}
 	}
 	if len(entries) == 0 {
 		return nil, uuid.Nil, nil
@@ -220,20 +230,133 @@ func advanceEntry(ctx context.Context, a arguments, entry db.SymbolRecord,
 	next.kind, next.id = entry.Reference.Kind, entry.Reference.ID
 	next.generation = entry.Generation
 	next.journal = filepath.Join(a.journal, entry.Generation.String())
+	retry, err := readDescriptorRetry(next.journal)
+	if err != nil {
+		return false, err
+	}
+	if time.Now().Before(retry.After) {
+		return false, nil
+	}
 	stepErr := step(ctx, next)
 	if ctx.Err() != nil {
 		return false, ctx.Err()
 	}
 	if stepErr != nil {
+		state, readErr := descriptorState(next.journal)
+		if readErr == nil && state.ProcedureID != uuid.Nil && state.Generation == entry.Generation &&
+			state.Reference.Kind == entry.Reference.Kind && state.Reference.ID == entry.Reference.ID &&
+			state.Pending == "" && transientDescriptorRead(stepErr) {
+			retry = nextDescriptorRetry(retry, stepErr, time.Now())
+			return false, saveDescriptorRetry(next.journal, retry)
+		}
 		// Never start a replacement for an uncertain mutation or rejected result.
-		if err := markBlocked(next.journal, stepErr); err != nil {
+		if err = markBlocked(next.journal, stepErr); err != nil {
 			return false, err
 		}
 		fmt.Fprintln(os.Stderr, "descriptor entry requires reconciliation; original journal retained")
 		return true, nil
 	}
+	if err = os.Remove(filepath.Join(next.journal, "retry.json")); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return false, err
+	}
 	state, err := descriptorState(next.journal)
 	return state.Phase == descriptorDonePhase, err
+}
+
+// Retry metadata is separate from effect receipts. Restarts honor RetryAfter and
+// never replace a generation, chat, artifact, request or run to recover a read.
+type descriptorRetry struct {
+	Failures int       `json:"failures"`
+	After    time.Time `json:"not_before"`
+}
+
+func nextDescriptorRetry(previous descriptorRetry, cause error, now time.Time) descriptorRetry {
+	const maxFailures = 9
+	const maxDelay = 5 * time.Minute
+	failures := min(previous.Failures+1, maxFailures)
+	delay := min(descriptorPoll*time.Duration(1<<uint(failures-1)), maxDelay)
+	if tg, ok := errors.AsType[*telegram.Error](cause); ok && tg.RetryAfter > delay {
+		delay = tg.RetryAfter
+	}
+	return descriptorRetry{Failures: failures, After: now.Add(delay)}
+}
+
+func readDescriptorRetry(directory string) (descriptorRetry, error) {
+	var retry descriptorRetry
+	raw, err := os.ReadFile(filepath.Join(directory, "retry.json"))
+	if errors.Is(err, os.ErrNotExist) {
+		return retry, nil
+	}
+	if err != nil {
+		return retry, err
+	}
+	if json.Unmarshal(raw, &retry) != nil || retry.Failures < 1 || retry.Failures > 9 || retry.After.IsZero() {
+		return retry, errors.New("invalid descriptor retry metadata; reconcile original journal")
+	}
+	return retry, nil
+}
+
+func saveDescriptorRetry(directory string, retry descriptorRetry) error {
+	raw, err := json.Marshal(retry)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(directory, "retry.json")
+	f, err := os.OpenFile(path+".next", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err != nil {
+		return err
+	}
+	if _, err = f.Write(raw); err == nil {
+		err = f.Sync()
+	}
+	closeErr := f.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	return os.Rename(path+".next", path)
+}
+
+func transientDescriptorRead(cause error) bool {
+	if readErr, ok := errors.AsType[*descriptorCatalogReadError](cause); ok {
+		return transientCatalogRead(readErr.error)
+	}
+	if errors.Is(cause, context.DeadlineExceeded) || errors.Is(cause, telegram.ErrFileUnavailable) {
+		return true
+	}
+	if tg, ok := errors.AsType[*telegram.Error](cause); ok {
+		return tg.StatusCode != http.StatusUnauthorized && tg.StatusCode != http.StatusForbidden &&
+			(tg.Retryable && tg.StatusCode == 0 || transientDescriptorStatus(tg.StatusCode))
+	}
+	if upstream, ok := errors.AsType[*loom.Error](cause); ok {
+		return upstream.Retryable && (upstream.StatusCode == 0 && upstream.Outcome != loom.Rejected ||
+			transientDescriptorStatus(upstream.StatusCode))
+	}
+	return false
+}
+
+func transientDescriptorStatus(status int) bool {
+	return status == 408 || status == 429 || status >= 500 && status <= 599
+}
+
+type descriptorCatalogReadError struct{ error }
+
+func (e *descriptorCatalogReadError) Error() string { return "read catalog database failed" }
+
+func (e *descriptorCatalogReadError) Unwrap() error { return e.error }
+
+func transientCatalogRead(cause error) bool {
+	if errors.Is(cause, context.DeadlineExceeded) {
+		return true
+	}
+	if pg, ok := errors.AsType[*pgconn.PgError](cause); ok {
+		return len(pg.Code) == 5 && (pg.Code[:2] == "08" || pg.Code[:2] == "53" ||
+			pg.Code == "40001" || pg.Code == "40P01" || pg.Code == "57P01" || pg.Code == "57P02" || pg.Code == "57P03")
+	}
+	var network net.Error
+	return errors.As(cause, &network) || pgconn.SafeToRetry(cause)
 }
 
 // The pointer is durable before any external effect, including when the catalog

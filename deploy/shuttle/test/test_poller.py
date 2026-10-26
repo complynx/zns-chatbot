@@ -14,6 +14,33 @@ import poller
 
 
 class IngressTests(unittest.TestCase):
+    def test_storage_failure_never_advances_acknowledgment_offset(self):
+        offsets = []
+        update = {'update_id': 1, 'message': {'from': {'id': 10}, 'chat': {'id': -10, 'type': 'group'}}}
+        with tempfile.TemporaryDirectory() as temporary:
+            cursor = Path(temporary) / 'offset'
+            actual_save = poller.save_offset
+            saves = []
+            def save(path, offset):
+                saves.append(offset)
+                if len(saves) == 1:
+                    raise OSError('synthetic disk failure')
+                actual_save(path, offset)
+            def post(url, body):
+                offsets.append(body['offset'])
+                if body['offset'] == 2:
+                    raise SystemExit(0)
+                return {'result': [update]}
+            with patch.dict(os.environ, {'TEST_TELEGRAM_USER_ID': '10', 'SHUTTLE_TELEGRAM_TOKEN': '999:fake'}), \
+                    patch.object(poller, 'check_bot', return_value={'id': 999}), \
+                    patch.object(poller, 'post', side_effect=post), \
+                    patch.object(poller, 'save_offset', side_effect=save), \
+                    patch.object(poller.signal, 'signal'), patch.object(poller.time, 'sleep'):
+                with self.assertRaises(SystemExit):
+                    poller.main(base='http://synthetic.invalid/', cursor=cursor)
+            self.assertEqual(offsets, [0, 0, 2])
+            self.assertEqual(cursor.read_text(), '2')
+
     def test_wrong_bot_preflight_stops_before_other_requests(self):
         requests = []
 

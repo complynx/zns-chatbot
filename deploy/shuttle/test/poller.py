@@ -37,6 +37,21 @@ def check_bot(base=None):
         raise RuntimeError("Existing webhook: stop its owner before enabling test polling")
     return me
 
+
+def save_offset(cursor, offset):
+    temporary = cursor.with_suffix('.tmp')
+    with temporary.open('w') as stream:
+        stream.write(str(offset))
+        stream.flush()
+        os.fsync(stream.fileno())
+    temporary.replace(cursor)
+    if os.name != 'nt':
+        descriptor = os.open(cursor.parent, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
 def main(base=None, cursor=None):
     def stop(*_):
         # Interrupt HTTP waits. An uncommitted cursor replays safely on restart.
@@ -68,10 +83,9 @@ def main(base=None, cursor=None):
                     }, timeout=5)
                 else:
                     print("Ignored update outside the test account", update["update_id"], flush=True)
-                offset = update["update_id"] + 1
-                temporary = cursor.with_suffix(".tmp")
-                temporary.write_text(str(offset))
-                temporary.replace(cursor)
+                next_offset = update["update_id"] + 1
+                save_offset(cursor, next_offset)
+                offset = next_offset
             if not startup_reported:
                 print("Test ingress polling cycle completed", flush=True)
                 startup_reported = True

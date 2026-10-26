@@ -83,15 +83,20 @@ evicted before a graceful restart. An old completed result remains in its journa
 for reconciliation instead of being applied to a replacement generation.
 Its private root holds one journal per catalog generation; completed entries are
 not selected again. It does not use a user's conversation or credentials. The
-protected service/descriptor token files can be rotated between steps. A failed
-entry receives a private blocked marker and needs reconciliation; it does not
-start a replacement run or hold other entries. A stale process lock after a crash
+protected service/descriptor token files can be rotated between steps. Transient
+read failures retain their original generation and journal, with a durable retry
+deadline. Backoff grows from two seconds to five minutes; a longer Telegram
+`RetryAfter` takes precedence. Temporary catalog database-read failures pause the
+affected discovery slot without stopping healthy active slots. Permanent failures
+and unknown mutation outcomes receive a private blocked marker for reconciliation;
+they do not start replacement work or hold other entries. A stale process lock after a crash
 also needs reconciliation before restarting. Catalog eviction leaves journals
 intact and cannot make an old result overwrite a new generation.
 
 Transient Telegram media reads receive at most three attempts with a short,
 bounded backoff. Explicit missing/access-denied files are not retried. This
-applies only to reads: acknowledged uploads remain journaled, and unknown Loom
+applies only to reads; exhausted transient reads return to the worker's durable
+backoff. Acknowledged uploads remain journaled, and unknown Loom
 chat/upload outcomes still require reconciliation.
 
 For technical diagnostics, set `SHUTTLE_LOG_LEVEL=debug` on Shuttle or the

@@ -28,6 +28,37 @@ File checks include owner isolation, explicit source loss versus transient failu
 
 ## Execution and custody
 
+### Local ingress recovery
+
+`deploy/shuttle/test/receiver.py` is an owned-stand receiver with durable raw
+batches, per-update receipts and a persisted acknowledgment cursor. It starts
+HELD and verifies bot identity and webhook ownership before polling. Temporary
+network failures, HTTP 408/429 and selected 5xx responses retry with bounded
+backoff at the same cursor. Telegram `RetryAfter` is respected. Authentication,
+consumer conflicts, certificate failures, invalid state and storage failures
+remain held with content-free diagnostics.
+
+A retained batch is resumed before polling, including updates without individual
+receipts. Capture-only records are distinct from pending forwarding. Exact
+webhook submissions may repeat only against Shuttle's durable bot/update inbox
+deduplication; paid requests and uncertain message sends have no such retry
+permission. Changed webhook targets or ambiguous legacy receipts need inspection.
+The cursor advances only after classification or durable inbox acknowledgment and
+successful local persistence. Test response loss after inbox acceptance, process
+restart, storage failure and withdrawal of forwarding authority.
+
+These fixtures prove local ingress contracts. They do not prove external model
+quality or production telemetry ingestion.
+
+| Operation | Recover automatically | Keep held |
+| --- | --- | --- |
+| Telegram reads | Transport, 408/429, selected 5xx; same durable cursor | Wrong bot, 401/403/409, invalid certificate |
+| Shuttle inbox | Repeat exact retained update against durable dedup | Changed target, invalid ACK, legacy ambiguity |
+| Cursor storage | Reuse last successfully persisted cursor | Disk or malformed-state failure |
+| Descriptor reads | Same generation/run/artifacts; durable backoff | Invalid result, auth failure, unknown mutation |
+| Telegram delivery | Existing known-safe outbox retry policy | Uncertain send outcome |
+| Paid provider | Existing completed-response receipt | Reserved/orphaned/unknown paid dispatch |
+
 Review a one-shot fixture before running it. Pin immutable inputs, constrain effects and external-call budgets, and persist intent before dispatch. A missing or uncertain receipt is not permission to rerun. Retain the failed original attempt; use a separately reviewed observation when final state can be proved without mutation.
 
 After the observed flow, archive and fully decode owned databases before removing only identified fixture resources. Verify remaining resource counts independently. A successful flow with cleanup still pending is not a cleanup PASS. Keep private payloads and credentials out of public summaries.
