@@ -1,7 +1,6 @@
 package task
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -74,26 +73,39 @@ func TestStructuredPaginationCallbackIsOwnerBoundAndNeverAnApproval(t *testing.T
 	require.ErrorIs(t, err, ErrUnsupportedUpdate)
 }
 
-// The native entry point must introduce the same named assistant without hiding
-// the service commands behind the conversational introduction.
-func TestStructuredMenuIntroducesAssistantAndKeepsCommands(t *testing.T) {
+func TestMenuCommandsFollowAvailability(t *testing.T) {
 	t.Parallel()
-	service := &Service{}
 	for _, ru := range []bool{false, true} {
-		for _, command := range []string{startCommand, menuCommand} {
-			text, next, err := service.structuredView(context.Background(), db.ProfileScope{}, command, ru)
-			require.NoError(t, err)
-			require.Nil(t, next)
-			require.Contains(t, text, "Zouk Non Stop")
-			if ru {
-				require.Contains(t, text, "Я ЗиНуСя, помощница")
-			} else {
-				require.Contains(t, text, "I’m Zinusya, your assistant")
-			}
-			for _, available := range []string{profileCommand, registrationsCommand, registerCommand,
-				ordersCommand, massageCommand, avatarCommand, pairsCommand, paymentsCommand, knowledgeCommand} {
-				require.Contains(t, text, available+" — ")
-			}
+		base := startCommands(ru, db.TelegramMenuAvailability{}, false)
+		require.Equal(t, []string{"menu", "profile", "name"}, commandNames(base))
+		all := startCommands(
+			ru,
+			db.TelegramMenuAvailability{
+				Registrations: true,
+				Register:      true,
+				Orders:        true,
+				Massage:       true,
+				Pairs:         true,
+				Payments:      true,
+			},
+			true,
+		)
+		require.Equal(
+			t,
+			[]string{"menu", "profile", "name", "registrations", "register", "orders", "massage", "avatar", "pairs", "payments"},
+			commandNames(all),
+		)
+		for _, c := range all {
+			require.NotEmpty(t, c.Description)
 		}
 	}
+	require.False(t, structuredCommand("/knowledge"))
+}
+
+func commandNames(commands []telegram.BotCommand) []string {
+	names := make([]string, 0, len(commands))
+	for _, c := range commands {
+		names = append(names, c.Command)
+	}
+	return names
 }

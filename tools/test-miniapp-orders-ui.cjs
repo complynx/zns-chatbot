@@ -53,7 +53,7 @@ function browser(api, { storage = new Map(), app = false, proof = false, failSet
   function element(tag = "div") {
     const e = { tag, children: [], hidden: false, disabled: false, value: "", listeners: {},
       append(...nodes) { this.children.push(...nodes); }, replaceChildren(...nodes) { this.children = nodes; },
-      addEventListener(name, fn) { this.listeners[name] = fn; }, removeAttribute(name) { delete this[name]; } };
+      addEventListener(name, fn) { this.listeners[name] = fn; }, removeAttribute(name) { delete this[name]; }, scrollIntoView() {} };
     let text = "", id;
     Object.defineProperties(e, {
       textContent: { get: () => text, set: value => { text = String(value); e.children = []; } },
@@ -77,6 +77,7 @@ function browser(api, { storage = new Map(), app = false, proof = false, failSet
   };
   const env = { continuation, request, setBusy: value => controller?.setBusy(value), denied() { controller.clear(); } };
   context.fetch = async (path, options) => {
+    if (path === "./profile" && api.sessionExpired) return { ok: false, status: 401 };
     const body = options.body ? JSON.parse(options.body) : undefined;
     let result;
     try {
@@ -88,7 +89,6 @@ function browser(api, { storage = new Map(), app = false, proof = false, failSet
       else if (path === "./profile") result = { version: 0, full_name: "Owner", bot_language: "en" };
       else if (path === "./account") result = { events: [], has_more: false, observed_at: "2026-10-16T14:00:00Z" };
       else if (path === "./registration-details") return { ok: false, status: 404 };
-      else if (path === "./session/logout") return { ok: true, status: 204 };
       else throw new Error("Unexpected app request " + path);
       return { ok: true, status: 200, json: async () => result };
     } catch (error) { return { ok: false, status: error.status || 503 }; }
@@ -196,10 +196,10 @@ test("delayed previous-owner read cannot repaint cleared UI", async () => {
   assert.equal(b.get("orders").hidden, true); assert.equal(b.text("orders-saved"), ""); assert.equal(b.text("orders-items"), "");
 });
 
-test("real app hook gives the module its verified owner/session and logout clears rendered values", async () => {
+test("real app hook gives the module its verified owner/session and session invalidation clears rendered values", async () => {
   const api = backend(), b = browser(api, { app: true }); await b.settled(); await b.select(); await b.quantity(2); await b.submit();
   assert.equal(posts(b).length, 1); assert.equal(posts(b)[0].authorization, "ZinusyaSession " + "a".repeat(43));
-  await b.click("logout"); assert.equal(b.get("orders").hidden, true); assert.equal(b.text("orders-saved"), ""); assert.equal(b.text("orders-items"), "");
+  api.sessionExpired = true; await b.click("profile-refresh"); assert.equal(b.get("orders").hidden, true); assert.equal(b.text("orders-saved"), ""); assert.equal(b.text("orders-items"), "");
   for (const write of b.writes.filter(w => w.key.startsWith("zinusya-orders-pending-v1:"))) assert.doesNotMatch(write.value, /session_token|Authorization|aaaaaaaa/);
 });
 
@@ -479,7 +479,7 @@ test("real app connects order selection, proof preview and owner-bound submissio
   assert.equal(b.get("order-proof").hidden,false);b.get("op-file").value=file;await b.click("op-file","change");await b.click("op-preview");assert.equal(b.get("op-download").hidden,false);
   await b.click("op-form","submit");assert.equal(claim.order_id,id);assert.equal(claim.file_id,file);assert.equal(claim.amount_minor,2468);
   for(const call of b.calls.filter(c=>c.path.includes("/proof-files")||c.path.includes("/payment-evidence")))assert.equal(call.authorization,"ZinusyaSession "+"a".repeat(43));
-  await b.click("logout");assert.equal(b.get("order-proof").hidden,true);assert.equal(b.text("op-target"),"");assert.equal(b.get("op-download").hidden,true);
+  api.sessionExpired = true; await b.click("profile-refresh");assert.equal(b.get("order-proof").hidden,true);assert.equal(b.text("op-target"),"");assert.equal(b.get("op-download").hidden,true);
 });
 
 function linkedPreparation(api) {
@@ -544,6 +544,7 @@ test("real app passes the authenticated order operation fragment to the form",as
  const api=submissionBackend(),link=linkedPreparation(api);
  const b=browser(api,{app:true,hash:"#orders?event="+eventID+"&operation="+link.body.operation_id+"&tgWebAppVersion=9.0"});
  await b.settled();for(let n=0;n<100&&!b.text("orders-preview");n++)await new Promise(r=>setTimeout(r,5));
+ assert.equal(b.get("status").textContent,"Connected");
  assert.match(b.text("orders-preview"),/BYN 25.68/);
  assert.equal(b.calls.filter(c=>c.method==="POST").length,0);
 });

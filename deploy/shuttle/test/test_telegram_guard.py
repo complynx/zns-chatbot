@@ -137,6 +137,12 @@ class GuardTests(unittest.TestCase):
             with self.request("/bot999:fake/" + method, body) as response:
                 self.assertTrue(json.load(response)["ok"])
         self.assertEqual(len(self.forwarded), 3)
+        for scope in ("default", "all_private_chats"):
+            for language in ("", "ru"):
+                with self.request("/bot999:fake/setMyCommands", {"commands": [], "scope": {"type": scope}, "language_code": language}) as response:
+                    self.assertTrue(json.load(response)["ok"])
+        with self.request("/bot999:fake/setMyCommands", {**valid, "commands": []}) as response:
+            self.assertTrue(json.load(response)["ok"])
         rejected = [
             ("setMyCommands", {"commands": commands}),
             ("setMyCommands", {**valid, "scope": {"type": "default"}}),
@@ -153,7 +159,7 @@ class GuardTests(unittest.TestCase):
                 self.request("/bot999:fake/" + method, body)
             self.assertEqual(error.exception.code, 403)
             error.exception.close()
-        self.assertEqual(len(self.forwarded), 3)
+        self.assertEqual(len(self.forwarded), 8)
 
     def test_duplicate_json_recipients_never_reach_upstream(self):
         for raw in (b'{"chat_id":43,"chat_id":42,"text":"x"}',

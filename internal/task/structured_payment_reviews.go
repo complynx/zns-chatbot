@@ -8,7 +8,7 @@ import (
 
 func structuredFormLabel(command string, ru bool) string {
 	if command == menuCommand || command == startCommand {
-		return structuredText(ru, "Open meals", "Открыть питание")
+		return structuredText(ru, "Open ZiNuSya", "Открыть ЗиНуСю")
 	}
 	if command == paymentsCommand {
 		return structuredText(ru, "Open pass payment", "Открыть оплату пасса")

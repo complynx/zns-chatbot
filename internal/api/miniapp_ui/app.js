@@ -4,7 +4,6 @@
   const status = document.getElementById("status");
   const name = document.getElementById("name");
   const retry = document.getElementById("retry");
-  const logout = document.getElementById("logout");
   const accountSection = document.getElementById("account");
   const accountTitle = document.getElementById("account-title");
   const accountStatus = document.getElementById("account-status");
@@ -16,12 +15,10 @@
   // Telegram appends initialization parameters inside the requested fragment.
   const launchTarget = (window.location?.hash || "").slice(1).split("?")[0];
   const words = {
-    en: { connecting: "Connecting…", connected: "Signed in", reopen: "Open Зинуся again from Telegram to sign in.",
-      unavailable: "Could not connect. You can retry the same sign-in.", outside: "Open this page from the Зинуся Telegram bot.",
-      signedOut: "Signed out. Open Зинуся again from Telegram to sign in.", retry: "Retry", logout: "Sign out" },
-    ru: { connecting: "Подключаюсь…", connected: "Вход выполнен", reopen: "Открой Зинусю заново из Telegram, чтобы войти.",
-      unavailable: "Не удалось подключиться. Можно повторить тот же вход.", outside: "Открой эту страницу из Telegram-бота Зинуся.",
-      signedOut: "Выход выполнен. Для нового входа открой Зинусю заново из Telegram.", retry: "Повторить", logout: "Выйти" }
+    en: { connecting: "Connecting…", connected: "Connected", reopen: "Close Зинуся and open it again from Telegram.",
+      unavailable: "Could not connect. Try again.", outside: "Open this page from the Зинуся Telegram bot.", retry: "Retry connection" },
+    ru: { connecting: "Подключаюсь…", connected: "Подключено", reopen: "Закрой Зинусю и открой её заново из Telegram.",
+      unavailable: "Не удалось подключиться. Попробуй ещё раз.", outside: "Открой эту страницу из Telegram-бота Зинуся.", retry: "Повторить подключение" }
   };
   const accountWords = {
     en: { title: "My registrations", loading: "Loading…", empty: "No registrations.", updated: "Updated", refresh: "Refresh",
@@ -211,7 +208,7 @@
     // One module finishing startup must not unlock the remaining initialization.
     value = value || connecting;
     busy = value;
-    for (const button of [retry, logout, accountRetry, accountFirst, accountNext]) button.disabled = value;
+    for (const button of [retry, accountRetry, accountFirst, accountNext]) button.disabled = value;
     const pending = session.profileChange;
     profileFirstName.disabled = profileLastName.disabled = profileLanguage.disabled = value || !!pending;
     profileSaveName.disabled = value || profileVersion === undefined || (!!pending && pending.kind !== "name");
@@ -255,6 +252,7 @@
     pairAssignmentsUI?.clear();
     clearDetails();
     profileSection.hidden = true;
+    profileFirstName.value = profileLastName.value = profileLanguage.value = "";
     profileVersion = undefined;
     accountEvents.replaceChildren();
     accountSection.hidden = true;
@@ -265,7 +263,6 @@
     document.documentElement.lang = language;
     status.textContent = words[language][key];
     retry.textContent = words[language].retry;
-    logout.textContent = words[language].logout;
     retry.hidden = !canRetry;
   }
 
@@ -277,8 +274,13 @@
   async function request(path, method, body, token) {
     const headers = { "Content-Type": "application/json" };
     if (token) headers.Authorization = "ZinusyaSession " + token;
-    const response = await fetch(path, { method, headers, credentials: "omit", cache: "no-store",
-      body: body === undefined ? undefined : JSON.stringify(body) });
+    let response;
+    try {
+      response = await fetch(path, { method, headers, credentials: "omit", cache: "no-store",
+        body: body === undefined ? undefined : JSON.stringify(body) });
+    } catch {
+      throw { transient: true };
+    }
     if (!response.ok) throw { status: response.status };
     return response.status === 204 ? null : response.json();
   }
@@ -289,7 +291,6 @@
     setBusy(true);
     clearAccount();
     name.hidden = true;
-    logout.hidden = true;
     show("connecting");
     try {
       const initData = window.Telegram?.WebApp?.initData;
@@ -325,7 +326,6 @@
       name.textContent = typeof account.full_name === "string" ? account.full_name : "";
       name.hidden = !name.textContent;
       show("connected");
-      logout.hidden = false;
       if (cropUI && session.token) {
         await cropUI.start(account.user_id, language);
         return;
@@ -354,12 +354,12 @@
         if (section && !section.hidden) section.scrollIntoView({ block: "start" });
       }
     } catch (error) {
-      if (error.status === 401 || error.status === 409) {
-        delete session.token;
-        save();
-        show("reopen");
-      } else {
+      if (error.transient || error.status === 408 || error.status === 429 || error.status >= 500) {
         show("unavailable", true);
+      } else if (error.status) {
+        detailsDenied();
+      } else {
+        show("unavailable");
       }
     } finally {
       connecting = false;
@@ -460,8 +460,7 @@
         if (error.status === 409) profileVersion = undefined;
         profileStatus.textContent = profileWords[language][error.status === 409 ? "conflict" : "invalid"];
       } else if (error.status === 401) {
-        delete session.token; delete session.profileChange; save();
-        clearAccount(); name.hidden = true; logout.hidden = true; show("reopen");
+        detailsDenied();
       } else profileStatus.textContent = profileWords[language].retry;
     } finally { setBusy(false); }
   }
@@ -471,7 +470,7 @@
   profileRefresh.addEventListener("click", async () => {
     if (busy) return;
     setBusy(true);
-    try { await readProfile(); } catch { show("reopen"); clearAccount(); }
+    try { await readProfile(); } catch { detailsDenied(); }
     finally { setBusy(false); }
   });
 
@@ -535,9 +534,12 @@
   }
 
   function detailsDenied() {
-    delete session.token; save();
+    delete session.token;
+    delete session.profileChange;
+    save();
     clearAccount();
-    name.hidden = logout.hidden = true;
+    name.textContent = "";
+    name.hidden = true;
     show("reopen");
   }
 
@@ -690,11 +692,7 @@
       accountNext.hidden = !accountNextCursor;
     } catch (error) {
       if (error.status === 401) {
-        delete session.token;
-        save();
-        clearAccount();
-        logout.hidden = name.hidden = true;
-        show("reopen");
+        detailsDenied();
       } else {
         accountStatus.textContent = w.unavailable;
       }
@@ -707,31 +705,6 @@
     try { await readAccount(after); } finally { setBusy(false); }
   }
 
-  logout.addEventListener("click", async () => {
-    if (busy || !session.token) return;
-    setBusy(true);
-    clearDetails();
-    try {
-      await request("./session/logout", "POST", {}, session.token);
-      session = { detailsChange: session.detailsChange };
-      save();
-      clearAccount();
-      logout.hidden = name.hidden = true;
-      show("signedOut");
-    } catch (error) {
-      if (error.status === 401) {
-        session = { detailsChange: session.detailsChange };
-        save();
-        clearAccount();
-        logout.hidden = name.hidden = true;
-        show("signedOut");
-      } else {
-        show("unavailable", true);
-      }
-    } finally {
-      setBusy(false);
-    }
-  });
   retry.addEventListener("click", connect);
   accountRetry.addEventListener("click", () => accountPage(accountAfter));
   accountFirst.addEventListener("click", () => accountPage());

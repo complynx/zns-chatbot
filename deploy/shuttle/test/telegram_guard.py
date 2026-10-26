@@ -161,13 +161,15 @@ class GuardHandler(BaseHTTPRequestHandler):
         if set(data) - {"commands", "scope", "language_code"} or data.get("language_code", "") not in ("", "ru"):
             return False
         scope = data.get("scope")
+        if scope in ({"type": "default"}, {"type": "all_private_chats"}):
+            return data.get("commands") == []
         if not isinstance(scope, dict) or set(scope) != {"type", "chat_id"} or scope["type"] != "chat" \
                 or type(scope["chat_id"]) is not int or scope["chat_id"] not in self.server.recipients:
             return False
         commands = data.get("commands")
-        if not isinstance(commands, list) or not 0 < len(commands) <= 100:
+        if not isinstance(commands, list) or not 0 <= len(commands) <= 100:
             return False
-        supported = {"start", "menu", "profile", "name", "registrations", "register", "orders", "massage", "avatar", "pairs", "payments", "knowledge"}
+        supported = {"menu", "profile", "name", "registrations", "register", "orders", "massage", "avatar", "pairs", "payments"}
         return all(isinstance(command, dict) and set(command) == {"command", "description"}
             and isinstance(command.get("command"), str) and command["command"] in supported and isinstance(command.get("description"), str)
             and 0 < len(command["description"]) <= 256 for command in commands)

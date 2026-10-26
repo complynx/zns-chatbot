@@ -31,7 +31,7 @@ type commandsMenuButton struct {
 // SetChatCommands replaces only one chat's command list. Reapplying the same list
 // after a lost response is safe; it does not send a message or run a command.
 func (c *Client) SetChatCommands(ctx context.Context, chatID int64, language string, commands []BotCommand) error {
-	if chatID <= 0 || (language != "" && language != "ru") || len(commands) == 0 || len(commands) > maxMenuCommands {
+	if chatID <= 0 || (language != "" && language != "ru") || len(commands) > maxMenuCommands {
 		return &Error{Outcome: NotStarted}
 	}
 	for _, command := range commands {
@@ -41,11 +41,35 @@ func (c *Client) SetChatCommands(ctx context.Context, chatID int64, language str
 		}
 	}
 	var result bool
+	if commands == nil {
+		commands = []BotCommand{}
+	}
 	err := c.call(ctx, "setMyCommands", struct {
 		Commands []BotCommand     `json:"commands"`
 		Scope    chatCommandScope `json:"scope"`
 		Language string           `json:"language_code,omitempty"`
 	}{Commands: commands, Scope: chatCommandScope{Type: "chat", ChatID: chatID}, Language: language}, &result, true)
+	if err == nil && !result {
+		return &Error{Outcome: Rejected}
+	}
+	return err
+}
+
+// ClearDefaultCommands removes inherited global commands without publishing a global menu.
+func (c *Client) ClearDefaultCommands(ctx context.Context, scope, language string) error {
+	if (scope != "default" && scope != "all_private_chats") || (language != "" && language != "ru") {
+		return &Error{Outcome: NotStarted}
+	}
+	var result bool
+	err := c.call(ctx, "setMyCommands", struct {
+		Commands []BotCommand `json:"commands"`
+		Scope    struct {
+			Type string `json:"type"`
+		} `json:"scope"`
+		Language string `json:"language_code,omitempty"`
+	}{Commands: []BotCommand{}, Scope: struct {
+		Type string `json:"type"`
+	}{Type: scope}, Language: language}, &result, true)
 	if err == nil && !result {
 		return &Error{Outcome: Rejected}
 	}

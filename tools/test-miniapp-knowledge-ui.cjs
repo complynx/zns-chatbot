@@ -14,7 +14,7 @@ class Element {
   querySelectorAll(selector) { return this.children.flatMap(n => [...(selector.split(/,\s*/).includes(n.tagName) ? [n] : []), ...n.querySelectorAll(selector)]); }
 }
 function backend() {
-  const b = { owner: randomUUID(), articleID: randomUUID(), rows: [], caps: {}, calls: [], receipts: new Map(), effects: 0, moderators: [], preps: new Map() };
+  const b = { owner: randomUUID(), articleID: randomUUID(), rows: [], caps: { can_edit: true, event_administrator: true }, calls: [], receipts: new Map(), effects: 0, moderators: [], preps: new Map() };
   b.article = { id: b.articleID, revision: 2, current_revision: 2, slug: "test", title: "Zouk <img>", body: "# Text\n<script>alert(1)</script>", language: "en", topics: ["dance"], sources: [{ label: "Source", url: "https://example.org/" }], historical: false, event_name: "Event" };
   b.rows = [b.article];
   b.request = async (path, method, args) => {
@@ -76,7 +76,7 @@ function harness(b = backend(), store = new Map(), suggestionID) {
   const window = {}; let ui;
   runInNewContext(source, { window, document: { getElementById: get, createElement: tag => new Element(tag) }, sessionStorage: storage, crypto: { randomUUID }, TextEncoder, Date, console });
   const h = { b, store, get: id => get(id.startsWith("kb-") || id === "knowledge" ? id : "kb-" + id), ui: undefined, failStorage: false, denied: 0 };
-  ui = window.createZinusyaKnowledge({ suggestionID, request: b.request, setBusy: value => ui.setBusy(value), denied: () => h.denied++ }); h.ui = ui;
+  ui = window.createZinusyaKnowledge({ suggestionID, request: b.request, setBusy: value => { h.busy = value; ui.setBusy(value); }, denied: () => h.denied++ }); h.ui = ui;
   h.start = (id = b.owner, locale = "en") => ui.start(id, locale);
   h.click = async id => { const e = h.get(id); assert.equal(e.disabled, false, id + " disabled"); assert.equal(e.hidden, false, id + " hidden"); await e.listeners.click(); };
   h.text = id => { const flatten = e => e.textContent + e.children.map(flatten).join(" "); return flatten(h.get(id)); };
@@ -85,11 +85,30 @@ function harness(b = backend(), store = new Map(), suggestionID) {
   h.fill = () => { for (const [key, value] of Object.entries({ slug: "zouk", name: "Zouk", text: "Dance knowledge", reason: "Useful community reference" })) h.get(key).value = value; };
   return h;
 }
+test("ordinary users cannot open native knowledge and optional denial does not sign out", async () => {
+  for (const forbidden of [false, true]) {
+    const b = backend(); b.caps = {};
+    if (forbidden) b.hook = async () => { throw { status: 403 }; };
+    const h = harness(b, new Map(), randomUUID()); await h.start();
+    assert.equal(h.get("knowledge").hidden, true); assert.equal(h.denied, 0);
+    assert.deepEqual(b.calls.map(c => c.path), ["./knowledge/capabilities"]);
+    assert.equal(b.effects, 0);
+  }
+});
+test("revoked editor access hides native knowledge and preserves the original request", async () => {
+  const h = harness(); await h.start(); await h.click("new"); h.fill(); await h.click("prepare");
+  h.b.hook = async () => { throw { status: 403 }; };
+  await h.click("recover");
+  assert.equal(h.get("knowledge").hidden, true); assert.equal(h.denied, 0);
+  assert.equal(h.busy, false);
+  assert.equal(h.store.size, 1); assert.equal(h.b.effects, 0);
+  assert.equal(h.text("preview"), ""); assert.equal(h.text("results"), "");
+});
 test("read exact text and old revision safely without executing Markdown HTML", async () => {
   const h = harness(); await h.start(); await h.choose("results"); assert.match(h.text("body"), /<script>/); assert.equal(h.get("body").querySelectorAll("script").length, 0); assert.match(h.text("provenance"), /Revision: 2/);
   await h.click("history"); await h.choose("revisions"); assert.match(h.text("provenance"), /Revision: 1/); assert.equal(h.get("correct").hidden, true); await h.click("current"); assert.equal(h.get("correct").hidden, false);
 });
-test("ordinary suggestion only commits after exact preparation and fresh explicit consent", async () => {
+test("editor suggestion only commits after exact preparation and fresh explicit consent", async () => {
   const h = harness(); await h.start(); await h.click("new"); h.fill(); await h.click("prepare"); assert.equal(h.b.effects, 0); assert.equal(h.get("confirm").disabled, true); assert.match(h.text("preview"), /Dance knowledge/); h.consent(); await h.click("confirm"); assert.equal(h.b.effects, 1); assert.equal(h.store.size, 0); assert.match(h.text("receipt"), /historical/);
 });
 test("lost prepare response reload reads original preparation without automatic consent or another prepare", async () => {
@@ -111,14 +130,14 @@ test("review cannot approve own suggestion and another reviewer uses current rev
 });
 test("pagination retains original query and late old-owner reads do not leak", async () => {
   const h = harness(); h.b.next = "cursor"; await h.start(); h.get("query").value = "dance"; await h.click("search"); h.get("query").value = "changed"; await h.click("next"); assert.deepEqual(h.b.calls.at(-1).args.queries, ["dance"]); assert.equal(h.b.calls.at(-1).args.cursor, "cursor");
-  let release; const wait = new Promise(r => { release = r; }); let first = true;
+  let release, entered; const wait = new Promise(r => { release = r; }), started = new Promise(r => { entered = r; }); let first = true;
   const oldEvent = randomUUID(), newEvent = randomUUID();
   h.b.hook = async path => {
     if (!path.endsWith("overview")) return;
-    if (first) { first = false; await wait; return { items: [{ collection: "event", event_id: oldEvent, event_name: "Old owner's event" }] }; }
+    if (first) { first = false; entered(); await wait; return { items: [{ collection: "event", event_id: oldEvent, event_name: "Old owner's event" }] }; }
     return { items: [{ collection: "event", event_id: newEvent, event_name: "New owner's event" }] };
   };
-  const old = h.start(); await h.start(randomUUID());
+  const old = h.start(); await started; await h.start(randomUUID());
   const collectionValues = () => Array.from(h.get("collection").children, option => option.value);
   assert.deepEqual(collectionValues(), ["all", "general", "event:" + newEvent]);
   release(); await old;
@@ -207,13 +226,13 @@ test("first preparation conflict or access rejection preserves an editable draft
 });
 
 
-test("moderator management is unavailable to ordinary users without fetching the directory", async () => {
+test("moderator management is unavailable to event administrators without fetching the directory", async () => {
  const h = harness(); await h.start(); assert.equal(h.get("moderators").hidden, true); assert.equal(h.get("moderator-prepare").disabled, true);
  assert.equal(h.b.calls.filter(c => c.path.endsWith("/moderators")).length, 0);
 });
 
 test("new moderator assignment previews scope and only changes access after exact consent", async () => {
- const b = backend(); b.caps = { global_administrator: true }; const target = randomUUID();
+ const b = backend(); b.caps = { can_edit: true, global_administrator: true }; const target = randomUUID();
  const h = harness(b); await h.start(); assert.equal(h.get("moderators").hidden, false);
  h.get("moderator-user").value = target; h.get("moderator-reason").value = "Maintain general references";
  await h.click("moderator-prepare"); assert.equal(b.effects, 0); assert.equal(h.get("confirm").disabled, true);
@@ -224,7 +243,7 @@ test("new moderator assignment previews scope and only changes access after exac
 });
 
 test("revoke uses the selected current assignment version and refreshes self permissions", async () => {
- const b = backend(); b.caps = { global_administrator: true, moderator: true }; b.moderators = [{ user_id: b.owner, enabled: true, version: 4 }];
+ const b = backend(); b.caps = { can_edit: true, global_administrator: true, moderator: true }; b.moderators = [{ user_id: b.owner, enabled: true, version: 4 }];
  const h = harness(b); await h.start(); await h.click("moderators-reload"); await h.choose("moderators-list");
  assert.equal(h.get("moderator-user").readOnly, true); assert.match(h.text("moderator-version"), /4/);
  h.get("moderator-enabled").checked = false; h.get("moderator-reason").value = "End moderation duty";
@@ -234,7 +253,7 @@ test("revoke uses the selected current assignment version and refreshes self per
 });
 
 test("moderator preparation loss reloads the same operation and still needs fresh consent", async () => {
- const b = backend(); b.caps = { global_administrator: true }; const target = randomUUID(); const h = harness(b); await h.start();
+ const b = backend(); b.caps = { can_edit: true, global_administrator: true }; const target = randomUUID(); const h = harness(b); await h.start();
  h.get("moderator-user").value = target; h.get("moderator-reason").value = "Knowledge maintenance"; b.losePrepare = true; await h.click("moderator-prepare");
  const original = JSON.parse([...h.store.values()][0]).operation_id; const restored = harness(b, h.store); await restored.start();
  assert.ok(restored.text("preview").includes(target)); assert.equal(restored.get("confirm").disabled, true); assert.equal(b.effects, 0);
@@ -243,25 +262,25 @@ test("moderator preparation loss reloads the same operation and still needs fres
 });
 
 test("lost moderator confirmation reconciles its receipt without a second change", async () => {
- const b = backend(); b.caps = { global_administrator: true }; const h = harness(b); await h.start();
+ const b = backend(); b.caps = { can_edit: true, global_administrator: true }; const h = harness(b); await h.start();
  h.get("moderator-user").value = randomUUID(); h.get("moderator-reason").value = "Review references"; await h.click("moderator-prepare"); h.consent(); b.loseConfirm = true; await h.click("confirm");
  const restored = harness(b, h.store); await restored.start(); assert.equal(b.effects, 1); assert.equal(b.calls.filter(c => c.path.endsWith("/confirm")).length, 1);
  assert.match(restored.text("receipt"), /Enabled/); assert.equal(restored.get("confirm").hidden, true); assert.equal(restored.store.size, 0);
 });
 
 test("agent moderator preparation can be continued natively with current global rights", async () => {
- const b = backend(), op = randomUUID(), target = randomUUID(); b.caps = { global_administrator: true };
+ const b = backend(), op = randomUUID(), target = randomUUID(); b.caps = { can_edit: true, global_administrator: true };
  b.recent = [{ kind: "set_moderator", operation_id: op, state: "prepared", created_at: new Date().toISOString() }];
  b.preps.set(op, { arguments: { moderator_user_id: target, moderator_enabled: true, expected_moderator_version: 0, reason: "Agent prepared terms" }, preconditions: { proposal_id: randomUUID() }, description: "Exact named moderator access", expires_at: new Date(Date.now() + 300000).toISOString() });
  const h = harness(b); await h.start(); await h.click("recent"); await h.choose("recent-list"); assert.ok(h.text("preview").includes(target)); h.consent();
- b.caps = { global_administrator: false }; await h.click("recover"); assert.equal(h.get("moderators").hidden, true); h.consent(); assert.equal(h.get("confirm").disabled, true); assert.equal(b.effects, 0);
- b.caps = { global_administrator: true }; await h.click("recover"); assert.equal(h.get("confirm").disabled, true); h.consent(); await h.click("confirm");
+ b.caps = { can_edit: true, global_administrator: false }; await h.click("recover"); assert.equal(h.get("moderators").hidden, true); h.consent(); assert.equal(h.get("confirm").disabled, true); assert.equal(b.effects, 0);
+ b.caps = { can_edit: true, global_administrator: true }; await h.click("recover"); assert.equal(h.get("confirm").disabled, true); h.consent(); await h.click("confirm");
  assert.equal(b.effects, 1); assert.equal(b.calls.filter(c => c.path.endsWith("/prepare")).length, 0);
  assert.equal(b.calls.find(c => c.path.endsWith("/confirm")).args.operation_id, op);
 });
 
 test("moderator pagination is explicit and a stale assignment stays editable after rejection", async () => {
- const b = backend(), target = randomUUID(), first = randomUUID(); b.caps = { global_administrator: true }; b.moderators = [{ user_id: target, enabled: false, version: 3 }];
+ const b = backend(), target = randomUUID(), first = randomUUID(); b.caps = { can_edit: true, global_administrator: true }; b.moderators = [{ user_id: target, enabled: false, version: 3 }];
  b.hook = async (path, args) => path.endsWith("/moderators") ? (args.after ? { items: b.moderators } : { items: [{ user_id: first, enabled: true, version: 1 }], next: first }) : undefined;
  const h = harness(b); await h.start(); await h.click("moderators-reload"); await h.click("moderators-next"); await h.choose("moderators-list");
  h.get("moderator-enabled").checked = true; h.get("moderator-reason").value = "Resume moderation"; b.moderators[0].version = 4;
@@ -270,7 +289,7 @@ test("moderator pagination is explicit and a stale assignment stays editable aft
 });
 
 test("moderator fields and rows clear on signout and translated history has no internal action tags", async () => {
- const b = backend(); b.caps = { global_administrator: true }; b.moderators = [{ user_id: randomUUID(), enabled: true, version: 1 }]; const h = harness(b); await h.start(b.owner, "uk");
+ const b = backend(); b.caps = { can_edit: true, global_administrator: true }; b.moderators = [{ user_id: randomUUID(), enabled: true, version: 1 }]; const h = harness(b); await h.start(b.owner, "uk");
  assert.match(h.text("moderators-heading"), /Модераторы/); assert.match(h.text("moderator-version"), /Новое назначение/); await h.click("moderators-reload"); await h.choose("moderators-list");
  await h.choose("results"); await h.click("history"); assert.match(h.text("revisions"), /Редактирование/); assert.doesNotMatch(h.text("revisions"), / · edit · /);
  h.ui.clear(); assert.equal(h.get("moderators").hidden, true); assert.equal(h.get("moderator-user").value, ""); assert.equal(h.get("moderators-list").children.length, 0);
@@ -278,7 +297,7 @@ test("moderator fields and rows clear on signout and translated history has no i
 
 
 test("notification link reads the exact authorized suggestion without preparation or consent", async () => {
- const b=backend();b.suggestion={id:randomUUID(),article_id:b.articleID,base_revision:2,proposer_id:randomUUID(),state:"pending",content:{title:"Linked proposal",language:"en",sources:[]}};b.caps={moderator:true};
+ const b=backend();b.suggestion={id:randomUUID(),article_id:b.articleID,base_revision:2,proposer_id:randomUUID(),state:"pending",content:{title:"Linked proposal",language:"en",sources:[]}};b.caps={can_edit:true,moderator:true};
  const h=harness(b,new Map(),b.suggestion.id);await h.start();assert.match(h.text("suggestion"),/Linked proposal/);assert.equal(h.get("review").hidden,false);assert.equal(b.preps.size,0);assert.equal(b.effects,0);assert.equal(h.get("confirm").hidden,true);
 });
 

@@ -57,7 +57,7 @@ func firstOnboardingBeforeWelcome(t *testing.T, initial string) {
 	h.await(t, accepted.ID, "awaiting_user")
 	deliveredNamePrompt(t, h, accepted.ID)
 	p.mu.Lock()
-	require.Empty(t, p.menuCalls, "Menu must wait for confirmed name")
+	require.Empty(t, visibleMenuCalls(p.menuCalls), "Visible menu must wait for confirmed name")
 	require.Len(t, p.sent, 1, "Only the name question is delivered before onboarding")
 	require.Contains(t, p.createdInputs[0], `"telegram_language_code":"pt-BR"`)
 	require.Contains(t, p.createdInputs[0], `"needs_real_name":true`)
@@ -95,12 +95,17 @@ func firstOnboardingBeforeWelcome(t *testing.T, initial string) {
 	require.NoError(t, err)
 	require.Equal(t, "João da Silva", profile.FullName)
 	p.mu.Lock()
-	require.Len(t, p.menuCalls, 3)
-	require.Empty(t, p.menuCalls[0].Language)
-	require.Equal(t, "ru", p.menuCalls[1].Language)
-	require.Equal(t, int64(456), p.menuCalls[2].ChatID)
-	require.Equal(t, "commands", p.menuCalls[2].Menu.Type)
-	require.Contains(t, p.sent[2].Text, "Zinusya")
+	require.Len(t, visibleMenuCalls(p.menuCalls), 2)
+	menus := visibleMenuCalls(p.menuCalls)
+	require.Empty(t, menus[0].Language)
+	require.Equal(t, "ru", menus[1].Language)
+	require.Equal(t, int64(456), menus[0].Scope.ChatID)
+	for _, menu := range menus {
+		for _, command := range menu.Commands {
+			require.NotContains(t, []string{"start", "knowledge", "payment_reviews"}, command.Command)
+		}
+	}
+	require.Contains(t, p.sent[2].Text, "ZiNuSya")
 	require.Contains(t, p.sent[2].Text, "/menu")
 	launch := p.sent[2].ReplyMarkup.(*telegram.InlineKeyboardMarkup)
 	require.Equal(t, appTestOrigin+"/app/", launch.InlineKeyboard[0][0].WebApp.URL)
@@ -113,7 +118,7 @@ func firstOnboardingBeforeWelcome(t *testing.T, initial string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	require.Len(t, p.sent, 3)
-	require.Len(t, p.menuCalls, 3)
+	require.GreaterOrEqual(t, len(visibleMenuCalls(p.menuCalls)), 2)
 }
 
 func TestStartCompletionWithoutConfirmedNameDoesNotSendWelcome(t *testing.T) {
@@ -125,6 +130,70 @@ func TestStartCompletionWithoutConfirmedNameDoesNotSendWelcome(t *testing.T) {
 	deliveredNamePrompt(t, h, id)
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	require.Empty(t, p.menuCalls)
+	require.Empty(t, visibleMenuCalls(p.menuCalls))
 	require.Len(t, p.sent, 1, "A model completion is not proof of name onboarding")
+}
+
+func visibleMenuCalls(calls []menuCall) []menuCall {
+	var result []menuCall
+	for _, call := range calls {
+		if len(call.Commands) > 0 {
+			result = append(result, call)
+		}
+	}
+	return result
+}
+
+func TestMenuAvailabilityRefreshesWithoutIncomingMessages(t *testing.T) {
+	t.Parallel()
+	p := newPeers(t)
+	p.miniAppOrigin = appTestOrigin
+	h := setup(t, p)
+	h.stop(t)
+	owner, event := uuid.New(), uuid.New()
+	_, err := h.store.Pool().Exec(t.Context(), `INSERT INTO shuttle_users
+ (id,bot_id,tg_user_id,zitadel_org,zitadel_subject) VALUES($1,123,456,'org','user')`, owner)
+	require.NoError(t, err)
+	_, err = h.store.Pool().Exec(t.Context(), `INSERT INTO shuttle_user_profiles
+ (user_id,version,full_name,first_name,last_name,name_source) VALUES($1,1,'Test Owner','Test','Owner','user')`, owner)
+	require.NoError(t, err)
+	h.start(t)
+	require.Eventually(
+		t,
+		func() bool { p.mu.Lock(); defer p.mu.Unlock(); return len(visibleMenuCalls(p.menuCalls)) == 2 },
+		5*time.Second,
+		10*time.Millisecond,
+	)
+	p.mu.Lock()
+	for _, call := range visibleMenuCalls(p.menuCalls) {
+		for _, command := range call.Commands {
+			require.NotEqual(t, "register", command.Command)
+		}
+	}
+	p.mu.Unlock()
+	_, err = h.store.Pool().Exec(t.Context(), `INSERT INTO shuttle_events
+ (id,bot_id,organization_id,name,timezone,starts_at,ends_at,modules)
+ VALUES($1,123,'org','Dance','UTC',now(),now()+interval '2 days',ARRAY['registrations'])`, event)
+	require.NoError(t, err)
+	_, err = h.store.Pool().Exec(t.Context(), `INSERT INTO shuttle_event_registration_rules(event_id,document)
+ VALUES($1,jsonb_build_object('closes_at',now()+interval '1 day'))`, event)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		menus := visibleMenuCalls(p.menuCalls)
+		if len(menus) < 4 {
+			return false
+		}
+		for _, command := range menus[len(menus)-1].Commands {
+			if command.Command == "register" {
+				return true
+			}
+		}
+		return false
+	}, 40*time.Second, 50*time.Millisecond)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	require.Empty(t, p.sent, "menu synchronization must not send messages")
+	require.Empty(t, p.createdInputs, "menu synchronization must not start an agent run")
 }

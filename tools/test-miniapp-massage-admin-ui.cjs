@@ -82,6 +82,7 @@ function browser(api, { storage = new Map(), app = false } = {}) {
     const create = context.window.createZinusyaMassageAdmin;
     context.window.createZinusyaMassageAdmin = env => { controller = create(env); return controller; };
     context.fetch = async (path, options) => {
+    if (path === "./profile" && api.sessionExpired) return { ok: false, status: 401 };
       try {
         let reply;
         if (path.startsWith("./massage-admin/")) { const body = options.body && JSON.parse(options.body); calls.push({ path, method: options.method, body, authorization: options.headers.Authorization }); reply = await api.request(path, options.method, body); }
@@ -89,7 +90,6 @@ function browser(api, { storage = new Map(), app = false } = {}) {
         else if (path === "./profile") reply = { version: 0, full_name: "Owner", bot_language: "en" };
         else if (path === "./account") reply = { events: [], has_more: false, observed_at: "2026-10-18T00:00:00Z" };
         else if (path === "./registration-details") return { ok: false, status: 404 };
-        else if (path === "./session/logout") return { ok: true, status: 204 };
         else throw new Error("Unexpected app request " + path);
         return { ok: true, status: 200, json: async () => reply };
       } catch (error) { return { ok: false, status: error.status || 503 }; }
@@ -217,9 +217,9 @@ test("binding and pending-choice pages are bounded explicit navigation, and remo
   await b.chooseEvent(); assert.equal(b.get("ma-alias").value, "aaa_removed"); await b.click("ma-bindings-next"); assert.equal(b.get("ma-alias").value, "zzz_removed"); await b.click("ma-bindings-first"); assert.equal(b.get("ma-alias").value, "aaa_removed");
 });
 
-test("Russian exact preview and app wiring use session authentication; logout clears private data", async () => {
+test("Russian exact preview and app wiring use session authentication; session invalidation clears private data", async () => {
   const api = backend(), ru = browser(api); await ru.start(owner, "ru"); await ru.prepare(); assert.match(ru.text("ma-preview"), /Выдать доступ/); assert.match(ru.text("ma-title"), /Доступ специалистов/); ru.controller.setLanguage("en"); assert.match(ru.text("ma-preview"), /Grant access/);
-  const b = browser(backend(), { app: true }); await b.settle(); assert.ok(b.calls.some(c => c.path === "./massage-admin/events" && c.authorization === "ZinusyaSession " + "a".repeat(43))); await b.prepare(); await b.click("logout"); assert.equal(b.get("massage-admin").hidden, true); assert.equal(b.text("ma-preview"), ""); assert.equal(b.text("ma-target"), "");
+  const appAPI = backend(), b = browser(appAPI, { app: true }); await b.settle(); assert.ok(b.calls.some(c => c.path === "./massage-admin/events" && c.authorization === "ZinusyaSession " + "a".repeat(43))); await b.prepare(); appAPI.sessionExpired = true; await b.click("profile-refresh"); assert.equal(b.get("massage-admin").hidden, true); assert.equal(b.text("ma-preview"), ""); assert.equal(b.text("ma-target"), "");
 });
 
 

@@ -47,7 +47,8 @@ func newKnowledgeHTTPFixture(t *testing.T) knowledgeHTTPFixture {
 	}
 	f.ownerScope = knowledgeHTTPScope(t, h, f.owner)
 	f.reviewerScope = knowledgeHTTPScope(t, h, f.reviewer)
-	// Trusted fixture provisioning grants only the reviewer a persisted moderator assignment.
+	// Both native authors and reviewers need editing access. Independent assignments
+	// retain the own-suggestion and per-operation authority checks below.
 	admin := f.ownerScope
 	admin.GlobalAdmin = true
 	enabled := true
@@ -62,6 +63,10 @@ func newKnowledgeHTTPFixture(t *testing.T) knowledgeHTTPFixture {
 			Reason:           "Provision independent HTTP reviewer",
 		},
 	)
+	knowledgeApply(t, knowledgeFixture{h: h}, admin, db.KnowledgeChange{
+		Kind: "set_moderator", ModeratorUserID: f.owner.UserID,
+		ModeratorEnabled: &enabled, Reason: "Provision native HTTP author",
+	})
 	return f
 }
 
@@ -153,9 +158,9 @@ func TestKnowledgeHTTPNativeSuggestionAgentReviewAndRecovery(t *testing.T) {
 	recent := knowledgeNativeCall(t, f, f.owner, "recent_actions", struct{}{}, http.StatusOK)
 	require.Contains(t, string(recent), op)
 	require.NotContains(t, string(recent), "Native proposal body canary")
-	other := knowledgeNativeCall(t, f, f.other, "recent_actions", struct{}{}, http.StatusOK)
+	other := knowledgeNativeCall(t, f, f.reviewer, "recent_actions", struct{}{}, http.StatusOK)
 	require.NotContains(t, string(other), op)
-	other = knowledgeNativeCall(t, f, f.other, "suggest/status", map[string]any{"operation_id": op}, http.StatusOK)
+	other = knowledgeNativeCall(t, f, f.reviewer, "suggest/status", map[string]any{"operation_id": op}, http.StatusOK)
 	require.Contains(t, string(other), `"status":"unknown"`)
 	require.NotContains(t, string(other), "Native proposal body canary")
 	submitted := knowledgeNativeCall(

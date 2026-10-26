@@ -1,6 +1,16 @@
 # Embedded account session
 
-The embedded Mini App provides account bootstrap, profile and logout plus domain forms through owner-scoped APIs. IAM calls stay server-side. Saving or reading a form does not start an unsolicited Loom run. See [registration details](shuttle-miniapp-registration-details.md), [order selection](shuttle-orders-selection.md) and [account status](shuttle-account-status.md).
+The embedded Mini App provides account bootstrap, profile and domain forms through
+owner-scoped APIs. IAM calls stay server-side. Saving or reading a form does not
+start an unsolicited Loom run. See [registration details](shuttle-miniapp-registration-details.md),
+[order selection](shuttle-orders-selection.md) and [account status](shuttle-account-status.md).
+
+Telegram launches authenticate automatically using verified initData. The embedded
+interface has no sign-in or sign-out controls; leaving it means closing the Mini
+App. Closing does not revoke the server session, which keeps its absolute expiry.
+The logout endpoint remains available to protocol clients. Expired or invalid
+sessions require reopening from Telegram. A temporary transport or backend error
+may offer a retry without implying that the user must sign in again.
 
 ## Enablement
 

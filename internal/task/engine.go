@@ -48,6 +48,7 @@ type checkpoint struct {
 }
 
 func (s *Service) save(ctx context.Context, t *db.Task, c checkpoint, out []db.Outbound) error {
+	out = s.appendStartClosing(ctx, *t, out)
 	// Outbox keys are global, and all messages of a task share one delivery order.
 	if len(out) > 0 {
 		existing, err := s.store.ListOutbox(ctx, t.ID)
@@ -123,7 +124,7 @@ func (s *Service) work(parent context.Context, id uuid.UUID) error {
 	ctx, end := s.traceAttempt(ctx, i)
 	defer end()
 	if terminal(t.State) || t.State == stateAuthUnknown {
-		return s.deliver(ctx, &t, c)
+		return s.deliverAndContinueStart(ctx, &t, c, i)
 	}
 	if c.Reauthorizing {
 		return s.finish(ctx, &t, c, i, stateAuthUnknown, stateAuthUnknown)
@@ -422,7 +423,7 @@ func (s *Service) completeRun(ctx context.Context, t *db.Task, c checkpoint, i i
 	if err = s.save(ctx, t, c, out); err != nil {
 		return s.wait()
 	}
-	return s.deliver(ctx, t, c)
+	return s.deliverAndContinueStart(ctx, t, c, i)
 }
 
 func (s *Service) identityError(ctx context.Context, t *db.Task, c checkpoint, i intent, err error) error {
@@ -504,7 +505,7 @@ func (s *Service) control(ctx context.Context, t *db.Task, c checkpoint, i inten
 	if err = s.save(ctx, t, c, nil); err != nil {
 		return s.wait()
 	}
-	return s.deliver(ctx, t, c)
+	return s.deliverAndContinueStart(ctx, t, c, i)
 }
 
 func (s *Service) finishedTarget(

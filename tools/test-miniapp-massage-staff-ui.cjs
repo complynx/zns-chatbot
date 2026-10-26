@@ -90,6 +90,7 @@ function browser(api, { app = false, hash = "", storage = new Map() } = {}) {
       return controller;
     };
     context.fetch = async (path, options) => {
+    if (path === "./profile" && api.sessionExpired) return { ok: false, status: 401 };
       try {
         let reply;
         if (path.startsWith("./massage-staff/")) { const body = options.body && JSON.parse(options.body); calls.push({ path, method: options.method, body, authorization: options.headers.Authorization }); reply = await api.request(path, options.method, body); }
@@ -97,7 +98,6 @@ function browser(api, { app = false, hash = "", storage = new Map() } = {}) {
         else if (path === "./profile") reply = { version: 0, full_name: "Owner", bot_language: "en" };
         else if (path === "./account") reply = { events: [], has_more: false, observed_at: "2026-10-18T00:00:00Z" };
         else if (path === "./registration-details") return { ok: false, status: 404 };
-        else if (path === "./session/logout") return { ok: true, status: 204 };
         else throw new Error("Unexpected app request " + path);
         return { ok: true, status: 200, json: async () => reply };
       } catch (error) { return { ok: false, status: error.status || 503 }; }
@@ -215,11 +215,11 @@ test("connection failure can be reloaded without any agent or business mutation"
   assert.match(b.text("ms-rows"), /PRIVATE_CLIENT/); assert.ok(b.calls.filter(call => call.method === "POST").every(call => (call.path.endsWith("/timetable") || call.path.endsWith("/windows"))));
 });
 
-test("Mini App wiring uses the authenticated session, then logout clears all specialist data", { timeout: 5000 }, async () => {
+test("Mini App wiring uses the authenticated session, then session invalidation clears all specialist data", { timeout: 5000 }, async () => {
   const api = backend(), b = browser(api, { app: true }); await b.started; await b.settle();
   assert.equal(b.get("massage-staff").hidden, false); await b.select(); await b.click(b.buttons("ms-rows")[0]);
   assert.ok(b.calls.every(call => call.authorization === "ZinusyaSession " + "a".repeat(43)));
-  await b.click("logout"); assert.equal(b.get("massage-staff").hidden, true); assert.equal(b.text("ms-rows"), ""); assert.equal(b.text("ms-detail"), "");
+  api.sessionExpired = true; await b.click("profile-refresh"); assert.equal(b.get("massage-staff").hidden, true); assert.equal(b.text("ms-rows"), ""); assert.equal(b.text("ms-detail"), "");
   assert.ok([...b.storage.values()].every(value => !value.includes("PRIVATE_CLIENT") && !value.includes("tg://user")));
 });
 

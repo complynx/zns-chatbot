@@ -33,34 +33,18 @@ const (
 	registrationCommandParts = 2
 )
 
-const structuredWelcomeEN = "Hi! I’m Zinusya, your assistant for the Zouk Non Stop community and events. " +
-	"I can help with registrations, passes and the services below.\n" +
-	"\n/profile — My profile\n" +
-	"/registrations — My registrations and passes\n" +
-	"/register — Register for an event\n" +
-	"/orders — Saved order selection\n" +
-	"/massage — Massage bookings\n" +
-	"/avatar — My avatar\n" +
-	"/pairs — Pair invitations\n" +
-	"/payments — Pass payment\n/knowledge — Community and event knowledge"
+const structuredWelcomeEN = "Hi! I’m ZiNuSya, your assistant for the Zouk Non Stop community and events. " +
+	"Write what you need, or choose an available service below.\n"
 
 const structuredWelcomeRU = "Привет! Я ЗиНуСя, помощница сообщества и мероприятий Zouk Non Stop. " +
-	"Помогу с регистрациями, пассами и сервисами ниже.\n" +
-	"\n/profile — Мой профиль\n" +
-	"/registrations — Мои регистрации и пассы\n" +
-	"/register — Регистрация на эвент\n" +
-	"/orders — Сохранённый выбор для заказа\n" +
-	"/massage — Записи на массаж\n" +
-	"/avatar — Моя аватарка\n" +
-	"/pairs — Приглашения в пару\n" +
-	"/payments — Оплата пасса\n/knowledge — База знаний сообщества и эвентов"
+	"Напиши, что тебе нужно, или выбери доступный сервис ниже.\n"
 
 func structuredCommand(text string) bool {
 	text = strings.TrimSpace(text)
 	return text == registerCommand || strings.HasPrefix(text, registerCommand+" ") ||
 		text == startCommand || text == pairsCommand || text == avatarCommand || text == menuCommand ||
 		text == ordersCommand || text == massageCommand || text == paymentReviewsCommand ||
-		text == knowledgeCommand || text == paymentsCommand || text == profileCommand ||
+		text == paymentsCommand || text == profileCommand ||
 		text == registrationsCommand ||
 		strings.HasPrefix(text, registrationsCommand+" ")
 }
@@ -82,11 +66,7 @@ func (s *Service) structured(ctx context.Context, t *db.Task, c checkpoint, i in
 	if err != nil {
 		return s.identityError(ctx, t, c, i, err)
 	}
-	if i.StructuredCommand == startCommand {
-		if err = s.refreshStartMenu(ctx, i.ChatID); err != nil {
-			return s.wait()
-		}
-	}
+	s.refreshMenuQuietly(ctx, i.ChatID)
 	scope := db.ProfileScope{
 		BotID:        s.options.BotID,
 		Organization: user.Organization,
@@ -109,25 +89,11 @@ func (s *Service) structured(ctx context.Context, t *db.Task, c checkpoint, i in
 	if err != nil {
 		return s.identityError(ctx, t, c, i, err)
 	}
-	if (i.StructuredCommand == menuCommand || i.StructuredCommand == startCommand) && s.options.MiniAppURL != "" {
-		text += structuredText(
-			ru,
-			"\nOpen the meal draft form below. Saving does not place an order or confirm payment.",
-			"\nЧерновик питания — в форме ниже. Сохранение не оформляет заказ и не подтверждает оплату.",
-		)
-		allowed, lookupErr := s.store.HasPaymentAuthority(ctx, s.taskPaymentScope(user, principal))
-		if lookupErr != nil {
-			return s.identityError(ctx, t, c, i, lookupErr)
-		}
-		if allowed {
-			text += structuredText(ru, "\n/payment_reviews — Review payments", "\n/payment_reviews — Проверка платежей")
-		}
-	}
 	formURL := ""
 	if s.options.MiniAppURL != "" {
 		switch i.StructuredCommand {
 		case menuCommand, startCommand:
-			formURL = s.options.MiniAppURL + "#meals"
+			formURL = s.options.MiniAppURL
 		case paymentsCommand:
 			formURL = s.options.MiniAppURL + "#pass-payments"
 		case pairsCommand:
@@ -176,11 +142,8 @@ func (s *Service) structuredView(
 ) (string, *uuid.UUID, error) {
 	switch command {
 	case menuCommand, startCommand:
-		return structuredText(
-			ru,
-			structuredWelcomeEN,
-			structuredWelcomeRU,
-		), nil, nil
+		text, err := s.menuText(ctx, scope, ru)
+		return text, nil, err
 	case paymentsCommand:
 		return s.structuredPaymentsView(ru), nil, nil
 	case pairsCommand:
@@ -317,17 +280,7 @@ func structuredEvent(event db.AccountEvent, ru bool) string {
 }
 
 func structuredOutput(i intent, text string, next *uuid.UUID, ru bool, formURL string) []db.Outbound {
-	keyboard := &telegram.ReplyKeyboardMarkup{Keyboard: [][]telegram.KeyboardButton{
-		{
-			{Text: menuCommand},
-			{Text: profileCommand},
-		},
-		{{Text: registrationsCommand}, {Text: nameCommand}},
-		{{Text: registerCommand}, {Text: ordersCommand}},
-		{{Text: massageCommand}, {Text: avatarCommand}},
-		{{Text: pairsCommand}, {Text: paymentsCommand}},
-		{{Text: knowledgeCommand}},
-	}, ResizeKeyboard: true}
+	keyboard := &telegram.ReplyKeyboardRemove{RemoveKeyboard: true}
 	chunks := render.Plain(text)
 	out := make([]db.Outbound, 0, len(chunks))
 	for n, chunk := range chunks {

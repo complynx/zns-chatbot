@@ -20,6 +20,7 @@ import (
 
 const routeNewRun = "new_run"
 const routeStructured = "structured"
+const taskStateCompleted = "completed"
 
 type Store struct {
 	pool *pgxpool.Pool
@@ -338,7 +339,7 @@ func (s *Store) Save(ctx context.Context, t Task, owner string, fence int64, out
 	if e = appendOutbox(ctx, tx, t.ID, out); e != nil {
 		return Task{}, e
 	}
-	if saved.Route == routeNewRun && saved.State == "completed" && saved.RunID != "" && len(out) > 0 {
+	if saved.Route == routeNewRun && saved.State == taskStateCompleted && saved.RunID != "" && len(out) > 0 {
 		keys := make([]string, len(out))
 		for n, item := range out {
 			keys[n] = item.DedupKey
@@ -358,7 +359,7 @@ func (s *Store) Save(ctx context.Context, t Task, owner string, fence int64, out
 
 func terminalTask(state string) bool {
 	switch state {
-	case "completed", "failed", "cancelled", deliveryUnknown, deliveryFailed, "closed":
+	case taskStateCompleted, "failed", "cancelled", deliveryUnknown, deliveryFailed, "closed":
 		return true
 	default:
 		return false

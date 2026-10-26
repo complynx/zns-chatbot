@@ -82,3 +82,34 @@ func TestChatMenuUnknownResponseCanReapplySameSettings(t *testing.T) {
 	require.Len(t, bodies, 2)
 	require.JSONEq(t, string(bodies[0]), string(bodies[1]))
 }
+
+func TestMenuCleanupUsesEmptyListsAndExplicitFallbackScopes(t *testing.T) {
+	t.Parallel()
+	var calls []map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if !assert.NoError(t, json.NewDecoder(r.Body).Decode(&body)) {
+			return
+		}
+		calls = append(calls, body)
+		fmt.Fprint(w, `{"ok":true,"result":true}`)
+	}))
+	defer server.Close()
+	client, err := telegram.New(server.URL, "123:secret", server.Client())
+	require.NoError(t, err)
+	for _, scope := range []string{"default", "all_private_chats"} {
+		for _, language := range []string{"", "ru"} {
+			require.NoError(t, client.ClearDefaultCommands(t.Context(), scope, language))
+		}
+	}
+	require.NoError(t, client.SetChatCommands(t.Context(), 42, "", nil))
+	require.Len(t, calls, 5)
+	for _, call := range calls {
+		require.Equal(t, []any{}, call["commands"])
+	}
+	require.Equal(t, map[string]any{"type": "default"}, calls[0]["scope"])
+	require.Equal(t, map[string]any{"type": "all_private_chats"}, calls[2]["scope"])
+	require.Error(t, client.ClearDefaultCommands(t.Context(), "chat", ""))
+	require.Error(t, client.ClearDefaultCommands(t.Context(), "default", "en"))
+	require.Len(t, calls, 5)
+}

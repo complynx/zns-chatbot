@@ -22,7 +22,7 @@ function browser(proof, stored, replies, accountReplies = [], profileReplies = [
       addEventListener(event, callback) { this.listeners[event] = callback; }
     };
   }
-  const elements = Object.fromEntries(["status", "name", "retry", "logout", "account", "account-title", "account-status",
+  const elements = Object.fromEntries(["status", "name", "retry", "account", "account-title", "account-status",
     "account-events", "account-retry", "account-first", "account-next", "profile", "profile-title", "profile-status", "profile-first-name", "profile-last-name", "profile-language", "profile-first-name-label", "profile-last-name-label", "profile-language-label", "profile-save-name", "profile-save-language", "profile-refresh", "profile-form", "details", "details-title", "details-note", "details-status", "details-name", "details-passport", "details-name-label", "details-passport-label", "details-name-presence", "details-passport-presence", "details-save-name", "details-save-passport", "details-refresh", "details-name-form", "details-passport-form"].map(id => [id, element()]));
   const scrolls = [];
   const launchFactories = { knowledge: "createZinusyaKnowledge", pairs: "createZinusyaPairs", avatars: "createZinusyaAvatars", orders: "createZinusyaOrders", meals: "createZinusyaMeals", massage: "createZinusyaMassage", "payment-review": "createZinusyaPaymentReviews" };
@@ -73,7 +73,7 @@ function browser(proof, stored, replies, accountReplies = [], profileReplies = [
     elements, calls, accountCalls, profileCalls, detailsCalls, storageWrites, scrolls, stored: () => JSON.parse(saved),
     async settle() {
       for (let i = 0; i < 100; i++) {
-        if (!elements.retry.disabled && !elements.logout.disabled) return;
+        if (!elements.retry.disabled) return;
         await new Promise(resolve => setTimeout(resolve, 5));
       }
       assert.fail("Client did not finish its request");
@@ -83,6 +83,41 @@ function browser(proof, stored, replies, accountReplies = [], profileReplies = [
 
 const account = { user_id: "510e58dd-e547-48d4-b9fa-571d24953218", full_name: "Daniel <test>", first_name: "Daniel", last_name: "<test>", bot_language: "en", session_token: token };
 const emptyPage = { observed_at: "2026-10-15T00:00:00Z", events: [], has_more: false };
+
+test("Telegram entry bootstraps automatically without sign-in or sign-out controls", async () => {
+  const html = readFileSync(resolve(__dirname, "../internal/api/miniapp_ui/index.html"), "utf8");
+  assert.doesNotMatch(html, /id="(?:login|logout)"/);
+  const app = browser("proof", {}, [{ status: 200, body: account }]);
+  await app.settle();
+  assert.equal(app.calls[0].path, "./session/bootstrap");
+  assert.equal(app.elements.retry.hidden, true);
+  assert.equal(app.elements.status.textContent, "Connected");
+});
+
+test("missing Telegram proof gives launch instructions without a login or retry action", async () => {
+  const app = browser("", {}, []);
+  await app.settle();
+  assert.equal(app.calls.length, 0);
+  assert.equal(app.elements.retry.hidden, true);
+  assert.match(app.elements.status.textContent, /from the Зинуся Telegram bot/);
+});
+
+test("only transient bootstrap failures offer connection retry", async () => {
+  for (const status of [400, 401, 403, 409, 422]) {
+    const app = browser("proof", {}, [{ status }]);
+    await app.settle();
+    assert.equal(app.elements.retry.hidden, true, String(status));
+    assert.equal(app.stored().token, undefined);
+  }
+  for (const status of [408, 429, 500, 503]) {
+    const app = browser("proof", {}, [{ status }]);
+    await app.settle();
+    assert.equal(app.elements.retry.hidden, false, String(status));
+  }
+  const malformed = browser("proof", {}, [{ status: 200, body: {} }]);
+  await malformed.settle();
+  assert.equal(malformed.elements.retry.hidden, true);
+});
 
 test("startup keeps controls locked after pass payments load until the last module is ready", { timeout: 5000 }, async () => {
   let entered, release;
@@ -106,15 +141,14 @@ test("startup keeps controls locked after pass payments load until the last modu
     assert.deepEqual(app.calls.filter(call => call.path.startsWith("./pass-payments/")).map(call => call.path),
       ["./pass-payments/targets", "./pass-payments/recent"]);
     assert.equal(app.elements["pp-status"].textContent, "Choose the file, amount and purpose explicitly before sharing.");
-    assert.equal(app.elements.logout.hidden, false);
-    assert.equal(app.elements.logout.disabled, true);
+    assert.equal(app.elements.retry.disabled, true);
     assert.equal(app.elements["profile-save-name"].disabled, true);
     assert.equal(app.elements["pp-recent"].disabled, true);
   } finally {
     release();
     await app.settle();
   }
-  assert.equal(app.elements.logout.disabled, false);
+  assert.equal(app.elements.retry.disabled, false);
   assert.equal(app.elements["profile-save-name"].disabled, false);
   assert.equal(app.elements["pp-recent"].disabled, false);
 });
@@ -132,7 +166,7 @@ test("a fresh launch replaces another account's stored capability", async () => 
   assert.equal(JSON.parse(app.calls[0].body).init_data, "new signed proof");
   assert.notEqual(app.stored().nonce, nonce);
   assert.equal(app.elements.name.textContent, "Daniel <test>");
-  assert.equal(app.elements.status.textContent, "Signed in");
+  assert.equal(app.elements.status.textContent, "Connected");
   assert.ok(!JSON.stringify(app.stored()).includes("signed proof"));
 });
 
@@ -160,7 +194,7 @@ test("a lost bootstrap reply retries the same proof and nonce", async () => {
   assert.equal(app.elements.retry.hidden, false);
   await app.elements.retry.listeners.click();
   assert.equal(app.calls[0].body, app.calls[1].body);
-  assert.equal(app.elements.status.textContent, "Signed in");
+  assert.equal(app.elements.status.textContent, "Connected");
 });
 
 test("an IAM outage retains the capability and retries the owner read", async () => {
@@ -171,16 +205,20 @@ test("an IAM outage retains the capability and retries the owner read", async ()
   assert.deepEqual(app.calls.map(call => call.path), ["./me", "./me"]);
 });
 
-test("logout clears the local capability after the server consumes it", async () => {
-  const app = browser("proof", { launch: launch("proof"), token, nonce }, [{ status: 200, body: account }, { status: 204 }]);
+test("profile refresh authentication failure clears capability and private presentation", async () => {
+  const app = browser("proof", { launch: launch("proof"), token, nonce }, [{ status: 200, body: account }], [],
+    [{ status: 200, body: { version: 0, first_name: account.first_name, full_name: account.full_name } }, { status: 401 }]);
   await app.settle();
-  await app.elements.logout.listeners.click();
-  assert.equal(app.calls[1].path, "./session/logout");
-  assert.deepEqual(app.stored(), {});
+  app.elements["profile-first-name"].value = "Unsent private name";
+  await app.elements["profile-refresh"].listeners.click();
+  assert.equal(app.stored().token, undefined);
+  assert.equal(app.elements["profile-first-name"].value, "");
+  assert.equal(app.elements.name.textContent, "");
   assert.equal(app.elements.name.hidden, true);
   assert.equal(app.elements.account.hidden, true);
   assert.equal(app.elements["account-events"].children.length, 0);
-  assert.match(app.elements.status.textContent, /Signed out/);
+  assert.match(app.elements.status.textContent, /again from Telegram/);
+  assert.equal(app.elements.retry.hidden, true);
 });
 
 const event = {
@@ -523,19 +561,21 @@ test("recovering an uncertain field keeps the other unsent draft",async()=>{
 });
 
 
-test("logout clears private drafts even when server logout is temporarily unavailable",async()=>{
- const app=browser("proof",signedSession(),[{status:200,body:account},{status:503}],[],[],[
+test("authentication failure clears private drafts and retains only recovery metadata",async()=>{
+ const app=browser("proof",signedSession(),[{status:200,body:account}],[],[
+  {status:200,body:{version:0,first_name:account.first_name,full_name:account.full_name}}, {status:401}], [
   {status:200,body:detailsState(0)},{error:new Error("Reply lost")}]);
  await app.settle();
  app.elements["details-name"].value="Synthetic Logout Name";
  app.elements["details-passport"].value="SYNTHETIC-LOGOUT-PASSPORT";
  await submit(app,"name");await app.settle();
  const operation=app.stored().detailsChange.operation_id;
- await app.elements.logout.listeners.click();await app.settle();
+ await app.elements["profile-refresh"].listeners.click();await app.settle();
  assert.equal(app.elements["details-name"].value,"");
  assert.equal(app.elements["details-passport"].value,"");
  assert.equal(app.elements.details.hidden,true);
- assert.equal(app.elements.retry.hidden,false);
+ assert.equal(app.elements.retry.hidden,true);
+ assert.equal(app.stored().token,undefined);
  assert.equal(app.stored().detailsChange.operation_id,operation);
  assertNoPrivateStorage(app,"Synthetic Logout Name","SYNTHETIC-LOGOUT-PASSPORT");
 });
@@ -556,7 +596,7 @@ test("native launch targets restore their section after Telegram appends auth pa
     for (const hash of ["#" + section, "#" + section + "?tgWebAppData=fixture&tgWebAppVersion=9.6"]) {
       const app = browser("proof", {}, [{ status: 200, body: account }], [], [], [], { hash, launchSection: section });
       await app.settle();
-      assert.equal(app.elements.status.textContent, "Signed in");
+      assert.equal(app.elements.status.textContent, "Connected");
       assert.deepEqual(app.scrolls, [{ id: section, visible: true }]);
       assert.equal(app.calls.length, 1);
     }
@@ -589,7 +629,7 @@ test("verified meal and order forms receive only their original operation fragme
     });
     await app.settle();
     assert.equal(continuation.event_id, event); assert.equal(continuation.operation_id, operation);
-    assert.equal(app.elements.status.textContent, "Signed in"); assert.equal(app.calls.length, 1);
+    assert.equal(app.elements.status.textContent, "Connected"); assert.equal(app.calls.length, 1);
   }
 });
 

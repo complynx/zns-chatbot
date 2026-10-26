@@ -64,6 +64,9 @@ type Service struct {
 	watchDone                     chan struct{}
 	typingDone                    chan struct{}
 	reactionDone                  chan struct{}
+	menuDone                      chan struct{}
+	menuMu                        sync.Mutex
+	menuApplied                   map[int64]string
 	failures                      chan error
 	diagnosticMu                  sync.Mutex
 	nextDatabaseDiagnostic        time.Time
@@ -279,9 +282,11 @@ func (s *Service) Start(ctx context.Context) error {
 	s.watchDone = make(chan struct{})
 	s.typingDone = make(chan struct{})
 	s.reactionDone = make(chan struct{})
+	s.menuDone = make(chan struct{})
 	go s.watchLock(watchCtx, conn, s.watchDone)
 	go s.watchTyping(watchCtx, s.typingDone)
 	go s.watchReactions(watchCtx, s.reactionDone)
+	go s.watchMenus(watchCtx, s.menuDone)
 	return nil
 }
 func (s *Service) releaseLock(parent context.Context) {
@@ -369,6 +374,11 @@ func (s *Service) Stop(ctx context.Context) error {
 		}
 		select {
 		case <-s.reactionDone:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		select {
+		case <-s.menuDone:
 		case <-ctx.Done():
 			return ctx.Err()
 		}

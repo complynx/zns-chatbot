@@ -78,6 +78,7 @@ function browser(api, storage = new Map(), { app = false, hash = "" } = {}) {
     const create = context.window.createZinusyaMassage;
     context.window.createZinusyaMassage = env => { controller = create(env); return controller; };
     context.fetch = async (path, options) => {
+    if (path === "./profile" && api.sessionExpired) return { ok: false, status: 401 };
       try {
         let result;
         if (path.startsWith("./massage/")) {
@@ -88,7 +89,6 @@ function browser(api, storage = new Map(), { app = false, hash = "" } = {}) {
         else if (path === "./profile") result = { version: 0, full_name: "Owner", bot_language: "en" };
         else if (path === "./account") result = { events: [], has_more: false, observed_at: "2026-10-17T13:00:00Z" };
         else if (path === "./registration-details") return { ok: false, status: 404 };
-        else if (path === "./session/logout") return { ok: true, status: 204 };
         else throw new Error("Unexpected app request " + path);
         return { ok: true, status: 200, json: async () => result };
       } catch (error) { return { ok: false, status: error.status || 503 }; }
@@ -200,12 +200,12 @@ test("preview expiring while idle reports expiry without dispatch and still perm
   assert.equal(applies(b).length, 0); assert.match(b.text("massage-status"), /preview has expired/); assert.equal(b.get("massage-confirm").disabled, true); assert.equal(b.get("massage-discard").disabled, false);
 });
 
-test("real app wiring supplies current bearer and clears native presentation on logout", async () => {
+test("real app wiring supplies current bearer and clears native presentation on session invalidation", async () => {
   const api = backend(), b = browser(api, new Map(), { app: true });
-  for (let i = 0; i < 100 && (b.get("massage").hidden || b.get("logout").disabled); i++) await new Promise(resolve => setTimeout(resolve, 5));
+  for (let i = 0; i < 100 && (b.get("massage").hidden || b.get("retry").disabled); i++) await new Promise(resolve => setTimeout(resolve, 5));
   assert.equal(b.get("massage").hidden, false); await b.select(); await b.prepare(); await b.click("massage-confirm");
   assert.equal(applies(b)[0].authorization, "ZinusyaSession " + "a".repeat(43));
-  await b.click("logout"); assert.equal(b.get("massage").hidden, true); assert.equal(b.text("massage-preview"), ""); assert.equal(b.text("massage-history"), "");
+  api.sessionExpired = true; await b.click("profile-refresh"); assert.equal(b.get("massage").hidden, true); assert.equal(b.text("massage-preview"), ""); assert.equal(b.text("massage-history"), "");
   for (const call of applies(b)) assert.doesNotMatch(call.storedBefore, /session_token|Authorization|aaaaaaaa/);
 });
 
@@ -239,7 +239,7 @@ test("off-page unknown apply retains visible event identity and the identical ap
 
 test("authenticated massage launch reaches the visible module without submitting a write", async () => {
   const api = backend(), b = browser(api, new Map(), { app: true, hash: "#massage?tgWebAppData=non-authorizing-fixture" });
-  for (let i = 0; i < 100 && (b.get("massage").hidden || b.get("logout").disabled); i++) await new Promise(resolve => setTimeout(resolve, 5));
+  for (let i = 0; i < 100 && (b.get("massage").hidden || b.get("retry").disabled); i++) await new Promise(resolve => setTimeout(resolve, 5));
   assert.ok(b.scrolled > 0); assert.equal(b.get("massage").hidden, false); assert.equal(applies(b).length, 0); assert.equal(api.preparations.size, 0);
   const otherModule = browser(api, new Map(), { hash: "#orders" }); await otherModule.start(); assert.equal(otherModule.scrolled, 0);
 });

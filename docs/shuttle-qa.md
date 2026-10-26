@@ -28,6 +28,27 @@ File checks include owner isolation, explicit source loss versus transient failu
 
 ## Execution and custody
 
+### Entry and navigation
+
+- Compare bare `/start` with `/start /profile` and `/start <agent request>` for
+  named and unnamed users. Only a bare first start shows the service welcome
+  after onboarding. A deferred request runs after successful onboarding delivery,
+  followed by its closing invitation. The agent keeps the response language.
+- Restart between onboarding completion, delivery and continuation acceptance.
+  Repeat the original update. Confirm one child request and no duplicate native
+  closing. An uncertain onboarding delivery must not start the continuation.
+- Send another start payload while onboarding is active. It must not introduce
+  a generic welcome before the deferred request. Cancellation or an unconfirmed
+  name must not dispatch it.
+- Open and close registration, change pass availability and revoke an owner.
+  Observe command menus update without another incoming message. An unchanged
+  menu must not generate repeated Telegram settings calls. Menu API failure must
+  not block business output. Check both supported command-list languages and
+  inherited fallback scopes.
+- Launch the Mini App with verified Telegram initData. Confirm automatic entry
+  with no sign-in or sign-out controls. Ordinary users must not load native
+  knowledge; authorized editors retain the existing per-operation checks.
+
 ### Local ingress recovery
 
 `deploy/shuttle/test/receiver.py` is an owned-stand receiver with durable raw

@@ -8,7 +8,27 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/complynx/zns-chatbot/internal/db"
+	"github.com/complynx/zns-chatbot/internal/miniapp"
 )
+
+func TestMiniAppKnowledgeSessionErrorsDistinguishEditorAccessFromAuthentication(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		err    error
+		status int
+	}{
+		{db.ErrKnowledgeDenied, http.StatusForbidden},
+		{miniapp.ErrInvalid, http.StatusUnauthorized},
+		{db.ErrMiniAppDenied, http.StatusUnauthorized},
+		{db.ErrConflict, http.StatusConflict},
+	} {
+		response := httptest.NewRecorder()
+		miniAppKnowledgeSessionError(response, tc.err)
+		require.Equal(t, tc.status, response.Code)
+	}
+}
 
 func TestMiniAppKnowledgeInputRejectsAmbiguousOrOversizedRequests(t *testing.T) {
 	t.Parallel()

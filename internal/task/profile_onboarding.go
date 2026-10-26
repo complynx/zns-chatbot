@@ -64,6 +64,14 @@ func (s *Service) routeStart(ctx context.Context, request *intent) error {
 	if !named {
 		request.Kind, request.StructuredCommand = kindMessage, ""
 	}
+	if payload := startPayload(request.Text); payload != "" && request.PartnerCode == nil {
+		if named {
+			applyStartPayload(request, payload)
+		} else {
+			request.StartContinuation = payload
+			request.Text = startCommand
+		}
+	}
 	return nil
 }
 

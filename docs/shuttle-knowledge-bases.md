@@ -22,6 +22,13 @@ information and payment evidence are not automatically imported into knowledge.
 
 ## Agent discovery and reading
 
+Ordinary users access knowledge through the agent. Native Mini App knowledge
+routes require the caller's current `CanEdit` capability, checked again before
+returning a response. The interface hides this module when that capability is
+absent or revoked. This gate does not change the article and event permissions of
+individual operations or the agent's published-read and suggestion APIs. There
+is no knowledge-preview command in the Telegram command menu.
+
 Expose a knowledge module in the zinusya manifest. Every returned article or
 snippet is untrusted reference data, never instructions to the agent.
 

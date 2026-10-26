@@ -48,6 +48,7 @@ window.createZinusyaKnowledge = env => {
   function labels() { for (const id of ids) if (w()[id]) el[id].textContent = w()[id]; el["moderator-version"].textContent = selectedModerator ? w().moderatorVersion + ": " + selectedModerator.version : w().newModerator; controls(); }
   function failure(error) {
     if (error.stale) return;
+    if (error.moduleDenied) { clear(); env.setBusy(false); return; }
     if (error.status === 401) { clear(); env.denied(); return; }
     if (error.local) status(error.local);
     else status(pending ? (error.status === 409 || error.status === 403 ? "conflict" : "unknown") : "unavailable");
@@ -57,7 +58,15 @@ window.createZinusyaKnowledge = env => {
     if (bytes(JSON.stringify(body)) > 1024 * 1024) throw { local: "invalid" };
     let result;
     try { result = await env.request("./knowledge/" + path, "POST", body); }
-    catch (error) { if (e !== epoch) throw { stale: true }; throw error; }
+    catch (error) {
+      if (e !== epoch) throw { stale: true };
+      if (error.status === 403) {
+        if (path === "capabilities" && !body.event_id) throw { moduleDenied: true };
+        try { await env.request("./knowledge/capabilities", "POST", {}); }
+        catch (access) { if (e !== epoch) throw { stale: true }; if (access.status === 403) throw { moduleDenied: true }; if (access.status === 401) throw access; }
+      }
+      throw error;
+    }
     if (e !== epoch) throw { stale: true }; return result;
   }
   async function run(action) {
@@ -305,12 +314,14 @@ window.createZinusyaKnowledge = env => {
   el.confirm.addEventListener("click", () => run(confirm)); el.recover.addEventListener("click", () => run(recover)); el.retry.addEventListener("click", () => run(prepare));
   return { clear, setBusy(value) { locked = value; controls(); }, setLanguage(value) { locale = /^(ru|be|uk)(-|$)/i.test(value) ? "ru" : "en"; consentOff(); labels(); },
     async start(id, language) {
-      clear(); if (!uuid(id)) return; owner = id; locale = /^(ru|be|uk)(-|$)/i.test(language) ? "ru" : "en"; labels(); section.hidden = false; const e = epoch;
+      clear(); if (!uuid(id)) return; owner = id; locale = /^(ru|be|uk)(-|$)/i.test(language) ? "ru" : "en"; labels(); const e = epoch;
+      try { await capabilitiesFor(e); if (!capabilities.can_edit) { clear(); return; } section.hidden = false; }
+      catch (error) { if (e === epoch) failure(error); return; }
       try {
         const raw = sessionStorage.getItem(key());
         if (raw) { if (bytes(raw) > 1024 * 1024) throw { local: "storage" }; pending = JSON.parse(raw); if (pending.owner !== owner || !["suggest", "edit", "review", "set_moderator"].includes(pending.kind) || !uuid(pending.operation_id) || !pending.arguments || !["preparing", "locating", "prepared", "confirming", "expired"].includes(pending.phase) || (!["preparing", "locating"].includes(pending.phase) && (!uuid(pending.proposal_id) || !Number.isFinite(Date.parse(pending.expires_at))))) throw { local: "storage" }; }
       } catch { blocked = true; status("storage"); }
-      try { await overview(e); await capabilitiesFor(e); await list(e); if (pending && !blocked) { await recover(e); if (pending && !terminalExpired && previewReady) status("restored"); } if (!pending && !blocked && uuid(env.suggestionID)) await readSuggestion(e, env.suggestionID); }
+      try { await overview(e); await list(e); if (pending && !blocked) { await recover(e); if (pending && !terminalExpired && previewReady) status("restored"); } if (!pending && !blocked && uuid(env.suggestionID)) await readSuggestion(e, env.suggestionID); }
       catch (error) { if (e === epoch) failure(error); } controls();
     }
   };

@@ -54,6 +54,7 @@ function browser(api,{storage=new Map(),failSet=false,app=false,launch=""}={}) {
  if(app) {
  context.window.createZinusyaPaymentReviews=options=>{controller=factory(options);return controller;};
  context.fetch=async(path,options)=>{
+    if (path === "./profile" && api.sessionExpired) return { ok: false, status: 401 };
   let result;const body=options.body?JSON.parse(options.body):undefined;
   try {
    if(path.startsWith("./payment-reviews/")){calls.push({path,method:options.method,body,authorization:options.headers.Authorization,credentials:options.credentials});if(path.endsWith("/content"))return {ok:true,blob:async()=>({type:"application/pdf"})};result=await api.request(path,options.method,body);}
@@ -61,7 +62,6 @@ function browser(api,{storage=new Map(),failSet=false,app=false,launch=""}={}) {
    else if(path==="./profile")result={version:0,full_name:"Owner",bot_language:"en"};
    else if(path==="./account")result={events:[],has_more:false,observed_at:"2026-10-16T14:00:00Z"};
    else if(path==="./registration-details")return {ok:false,status:404};
-   else if(path==="./session/logout")return {ok:true,status:204};
    else throw Error("Unexpected app request "+path);
    return {ok:true,status:200,json:async()=>result};
   } catch(error){return {ok:false,status:error.status||503};}
@@ -119,14 +119,14 @@ test("logout clears values and ignores a late detail response",async()=>{
 });
 
 
-test("real app wiring uses its session for review and proof; logout removes reviewer data",async()=>{
+test("real app wiring uses its session for review and proof; session invalidation removes reviewer data",async()=>{
  const api=backend(),b=browser(api,{app:true});
- for(let n=0;n<100&&(!b.controller||b.get("logout").disabled||b.get("status").textContent!=="Signed in");n++)await new Promise(r=>setTimeout(r,5));
- assert.ok(b.controller);assert.equal(b.get("status").textContent,"Signed in");assert.equal(b.get("payment-review").hidden,false);
+ for(let n=0;n<100&&(!b.controller||b.get("retry").disabled||b.get("status").textContent!=="Connected");n++)await new Promise(r=>setTimeout(r,5));
+ assert.ok(b.controller);assert.equal(b.get("status").textContent,"Connected");assert.equal(b.get("payment-review").hidden,false);
  await b.select();await b.edit("10.00");await b.click("form","submit");await b.click("proof");
  const calls=b.calls.filter(c=>c.path.startsWith("./payment-reviews/"));assert.ok(calls.length>3);
  for(const call of calls){assert.equal(call.authorization,"ZinusyaSession "+"a".repeat(43));assert.equal(call.credentials,"omit");}
- assert.equal(b.get("pr-download").hidden,false);await b.get("logout").listeners.click();
+ assert.equal(b.get("pr-download").hidden,false);api.sessionExpired = true; await b.get("profile-refresh").listeners.click();
  assert.equal(b.get("payment-review").hidden,true);assert.equal(b.text("detail"),"");assert.equal(b.get("pr-download").hidden,true);
 });
 

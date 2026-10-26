@@ -33,6 +33,8 @@ type intent struct {
 	User                 telegram.User        `json:"user"`
 	ChatID               int64                `json:"chat_id"`
 	Text                 string               `json:"text,omitempty"`
+	StartContinuation    string               `json:"start_continuation,omitempty"`
+	AfterStartOnboarding bool                 `json:"after_start_onboarding,omitempty"`
 	RawUpdate            json.RawMessage      `json:"raw_update"`
 	CallbackTaskID       uuid.UUID            `json:"callback_task_id,omitempty"`
 	PromptKey            string               `json:"prompt_key,omitempty"`
@@ -97,7 +99,9 @@ func messageIntent(i intent, m *telegram.Message) (intent, error) {
 	}
 	i.NativeAvatar = i.Kind == kindMessage && nativeAvatarImage(i.Attachments) &&
 		strings.TrimSpace(i.Text) == "" && i.ReplyToMessageID == 0
-	if i.Kind == kindMessage && len(i.Attachments) == 0 && len(i.Symbols) == 0 && structuredCommand(m.Text) {
+	isStartPayload := startPayload(m.Text) != "" && i.PartnerCode == nil
+	if i.Kind == kindMessage && len(i.Attachments) == 0 && len(i.Symbols) == 0 &&
+		(structuredCommand(m.Text) || isStartPayload) {
 		i.Kind = kindStructured
 		i.StructuredCommand = strings.Fields(strings.TrimSpace(m.Text))[0]
 	}

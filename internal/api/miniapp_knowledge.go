@@ -61,6 +61,13 @@ func (s *Server) miniAppKnowledgeSession(
 			err = db.ErrMiniAppDenied
 		}
 	}
+	if err == nil {
+		capabilities, e := s.store.KnowledgeCapabilities(ctx, scope, nil)
+		err = e
+		if err == nil && !capabilities.CanEdit {
+			err = db.ErrKnowledgeDenied
+		}
+	}
 	return scope, session, err
 }
 
@@ -95,6 +102,14 @@ func miniAppKnowledgeError(w http.ResponseWriter, err error) {
 	miniAppError(w, err)
 }
 
+func miniAppKnowledgeSessionError(w http.ResponseWriter, err error) {
+	if errors.Is(err, db.ErrKnowledgeDenied) {
+		miniAppKnowledgeError(w, err)
+		return
+	}
+	miniAppError(w, err)
+}
+
 func registerMiniAppKnowledgePost[T any](
 	s *Server,
 	path string,
@@ -108,7 +123,7 @@ func registerMiniAppKnowledgePost[T any](
 		defer cancel()
 		scope, session, err := s.miniAppKnowledgeSession(ctx, r)
 		if err != nil {
-			miniAppError(w, err)
+			miniAppKnowledgeSessionError(w, err)
 			return
 		}
 		args, err := decodeMiniAppKnowledge[T](w, r)
@@ -132,7 +147,7 @@ func registerMiniAppKnowledgePost[T any](
 			err = db.ErrMiniAppDenied
 		}
 		if err != nil {
-			miniAppError(w, err)
+			miniAppKnowledgeSessionError(w, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

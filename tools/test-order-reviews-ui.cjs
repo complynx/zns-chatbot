@@ -50,6 +50,7 @@ function browser(api,{storage=new Map(),failGet=false,failSet=false,hash="",app=
  const context={document:{getElementById:get,createElement:element,documentElement:{}},window:{location:{hash},Telegram:{WebApp:{initData:"non-authorizing-fixture",ready(){}}}},navigator:{language:"en"},crypto:webcrypto,TextEncoder,Uint8Array,btoa,Intl,URLSearchParams,URL:{createObjectURL:()=>"blob:proof",revokeObjectURL:v=>revoked.push(v)},sessionStorage:{getItem:k=>{if(failGet)throw Error("Storage unavailable");return storage.get(k)??null;},setItem:(k,v)=>{if(failSet)throw Error("Storage unavailable");storage.set(k,v);},removeItem:k=>storage.delete(k)}};
  let ui;
  context.fetch=async(path,options)=>{
+    if (path === "./profile" && api.sessionExpired) return { ok: false, status: 401 };
   const body=options.body?JSON.parse(options.body):undefined;calls.push({path,method:options.method,body,authorization:options.headers.Authorization,credentials:options.credentials,cache:options.cache,persisted:storage.get(key)});
   try {
    if(path.endsWith("/content"))return {ok:true,blob:async()=>({type:"application/pdf"})};
@@ -59,7 +60,6 @@ function browser(api,{storage=new Map(),failGet=false,failSet=false,hash="",app=
    else if(path==="./profile")result={version:0,full_name:"Owner",bot_language:"en"};
    else if(path==="./account")result={events:[],has_more:false,observed_at:"2026-10-17T00:00:00Z"};
    else if(path==="./registration-details")return {ok:false,status:404};
-   else if(path==="./session/logout")return {ok:true,status:204};
    else throw Error("Unexpected app path "+path);
    return {ok:true,status:200,json:async()=>clone(result)};
   }catch(error){return {ok:false,status:error.status||503};}
@@ -69,7 +69,7 @@ function browser(api,{storage=new Map(),failGet=false,failSet=false,hash="",app=
  else ui=context.window.createZinusyaOrderReviews({request:async(path,method,body)=>{calls.push({path,method,body:body?clone(body):undefined,persisted:storage.get(key)});return api.request(path,method,body?clone(body):body);},readProof:async path=>{calls.push({path,proof:true});if(api.proof)await api.proof();return {type:"application/pdf"};},setBusy:v=>ui.setBusy(v),denied:()=>ui.clear()});
  const text=e=>(e.textContent||"")+e.children.map(text).join(" ");
  const fire=async(id,event="click",force=false)=>{const el=get("or-"+id);if(!force)assert.equal(el.disabled,false,id+" disabled");await el.listeners[event]({preventDefault(){}});};
- return {ui,calls,storage,revoked,async settled(){for(let i=0;i<100;i++){if(!get("retry").disabled && get("or-event").children.length>1)return;await new Promise(r=>setTimeout(r,5));}assert.fail("App did not connect reviewer UI");},async logout(){await get("logout").listeners.click();},get:id=>get("or-"+id),text:id=>text(get("or-"+id)),fire,start:(language="en")=>ui.start(owner,language),async select(){get("or-event").value=eventID;await fire("event","change");get("or-evidence").value=evidenceID;await fire("evidence","change");},async save(reason="Checked <img>",decision="confirmed"){get("or-reason").value=reason;await fire("reason","input");get("or-decision").value=decision;await fire("decision","change");await fire("form","submit");}};
+ return {ui,calls,storage,revoked,async settled(){for(let i=0;i<100;i++){if(!get("retry").disabled && get("or-event").children.length>1)return;await new Promise(r=>setTimeout(r,5));}assert.fail("App did not connect reviewer UI");},async invalidateSession(){api.sessionExpired = true; await get("profile-refresh").listeners.click();},get:id=>get("or-"+id),text:id=>text(get("or-"+id)),fire,start:(language="en")=>ui.start(owner,language),async select(){get("or-event").value=eventID;await fire("event","change");get("or-evidence").value=evidenceID;await fire("evidence","change");},async save(reason="Checked <img>",decision="confirmed"){get("or-reason").value=reason;await fire("reason","input");get("or-decision").value=decision;await fire("decision","change");await fire("form","submit");}};
 }
 const writes=b=>b.calls.filter(c=>c.method==="POST");
 
@@ -122,10 +122,10 @@ test("event and evidence pagination use explicit cursors and empty pages keep wr
  const api=backend(),cursor=randomUUID();api.hook=(p,m,v,base)=>p==="./order-reviews/events"?{events:[api.event],next:cursor}:p==="./order-reviews/events?after="+cursor?{events:[]}:base(p,m,v);const b=browser(api);await b.start();assert.equal(b.get("event-next").hidden,false);await b.fire("event-next");assert.equal(b.get("event-first").hidden,false);assert.equal(b.get("save").disabled,true);await b.fire("event-first");await b.select();assert.equal(b.get("save").disabled,false);
 });
 
-test("real app wires reviewer API and file reads to current session and clears on logout",async()=>{
+test("real app wires reviewer API and file reads to current session and clears on session invalidation",async()=>{
  const api=backend(),b=browser(api,{app:true});await b.settled();await b.select();await b.save();await b.fire("proof");await b.fire("confirm");assert.equal(api.effects,1);
  for(const c of b.calls.filter(c=>c.path.startsWith("./order-reviews/"))){assert.equal(c.authorization,"ZinusyaSession "+"a".repeat(43));assert.equal(c.credentials,"omit");assert.equal(c.cache,"no-store");}
- await b.logout();assert.equal(b.text("detail"),"");assert.equal(b.text("preview"),"");assert.equal(b.get("download").hidden,true);assert.equal(b.get("reason").value,"");
+ await b.invalidateSession();assert.equal(b.text("detail"),"");assert.equal(b.text("preview"),"");assert.equal(b.get("download").hidden,true);assert.equal(b.get("reason").value,"");
 });
 
 test("switching away from a reviewed target clears its original receipt",async()=>{

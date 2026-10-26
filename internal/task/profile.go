@@ -200,7 +200,7 @@ func (s *Service) profilePrompt(ctx context.Context, t db.Task, i intent) (strin
 		return "", err
 	}
 	text.WriteString(files.Prompt(input, language, i.Attachments))
-	if err = appendProfileContext(&text, profile, i.User, language); err != nil {
+	if err = appendStartProfileContext(&text, profile, i, language); err != nil {
 		return "", err
 	}
 	if err = s.appendStructuredContext(ctx, &text, user, t.ID); err != nil {
