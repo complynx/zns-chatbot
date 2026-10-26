@@ -42,9 +42,9 @@ func TestStructuredPaymentsNeedNoLoomAndReplayAfterRestart(t *testing.T) {
 			require.Empty(t, p.inputs)
 			require.Zero(t, p.loomUnavailableCalls)
 			require.Len(t, p.sent, 2)
-			require.Contains(t, p.sent[0].Text, "/payments")
+			require.NotContains(t, p.sent[0].Text, "/payments")
 			menu := p.sent[0].ReplyMarkup.(*telegram.InlineKeyboardMarkup)
-			require.Equal(t, appTestOrigin+"/app/#meals", menu.InlineKeyboard[0][0].WebApp.URL)
+			require.Equal(t, appTestOrigin+"/app/", menu.InlineKeyboard[0][0].WebApp.URL)
 			form := p.sent[1].ReplyMarkup.(*telegram.InlineKeyboardMarkup)
 			require.Equal(t, appTestOrigin+"/app/#pass-payments", form.InlineKeyboard[0][0].WebApp.URL)
 			if language == "ru" {
@@ -52,7 +52,7 @@ func TestStructuredPaymentsNeedNoLoomAndReplayAfterRestart(t *testing.T) {
 				require.Equal(t, "Открыть оплату пасса", form.InlineKeyboard[0][0].Text)
 				require.Contains(t, p.sent[1].Text, "оплату подтверждает")
 			} else {
-				require.Contains(t, p.sent[0].Text, "Zinusya")
+				require.Contains(t, p.sent[0].Text, "ZiNuSya")
 				require.Equal(t, "Open pass payment", form.InlineKeyboard[0][0].Text)
 				require.Contains(t, p.sent[1].Text, "only an ambassador or event administrator can confirm payment")
 			}

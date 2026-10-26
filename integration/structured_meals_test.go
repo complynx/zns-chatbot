@@ -44,9 +44,10 @@ func TestStructuredMealsKeepsAgentQuestionAcrossOutageAndRestart(t *testing.T) {
 	require.Equal(t, active.QuestionID, still.QuestionID)
 	require.Equal(t, active.RunID, still.RunID)
 	p.mu.Lock()
-	require.Contains(t, p.sent[1].Text, "не оформляет заказ")
+	require.Contains(t, p.sent[1].Text, "выбери доступный сервис")
 	button := p.sent[1].ReplyMarkup.(*telegram.InlineKeyboardMarkup).InlineKeyboard[0][0]
-	require.Equal(t, "Открыть питание", button.Text)
+	require.Equal(t, "Открыть ЗиНуСю", button.Text)
+	require.Equal(t, appTestOrigin+"/app/", button.WebApp.URL)
 	p.mu.Unlock()
 	h.stop(t)
 	p.mu.Lock()

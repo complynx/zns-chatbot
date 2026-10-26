@@ -11,6 +11,13 @@ import (
 	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
+func assertNoStartWelcome(t *testing.T, text string) {
+	t.Helper()
+	require.NotContains(t, text, "Hi! I’m ZiNuSya")
+	require.NotContains(t, text, "your assistant for the Zouk Non Stop community and events")
+	require.NotContains(t, text, "помощница сообщества и мероприятий Zouk Non Stop")
+}
+
 func TestStartPayloadNamedUserUsesNormalRouting(t *testing.T) {
 	t.Parallel()
 	for _, payload := range []string{"/profile", "book a massage"} {
@@ -21,6 +28,7 @@ func TestStartPayloadNamedUserUsesNormalRouting(t *testing.T) {
 			seedNamedTelegramUser(t, h)
 			id := h.submitText(t, 98201, "/start "+payload)
 			h.await(t, id, "completed")
+			deliveredNamePrompt(t, h, id)
 			accepted, err := h.store.GetTask(t.Context(), id)
 			require.NoError(t, err)
 			rows, err := h.store.ListOutbox(t.Context(), id)
@@ -30,6 +38,9 @@ func TestStartPayloadNamedUserUsesNormalRouting(t *testing.T) {
 			}
 			p.mu.Lock()
 			defer p.mu.Unlock()
+			for _, sent := range p.sent {
+				assertNoStartWelcome(t, sent.Text)
+			}
 			if payload == "/profile" {
 				require.Equal(t, "structured", accepted.Route)
 				require.Empty(t, p.createdInputs)
@@ -105,7 +116,7 @@ func TestStartPayloadOnboardsThenDispatchesOnceAcrossRestart(t *testing.T) {
 				require.Contains(t, p.createdInputs[1], "in the same language as your response")
 			}
 			for _, sent := range p.sent {
-				require.NotContains(t, sent.Text, "Hi! I’m Zinusya")
+				assertNoStartWelcome(t, sent.Text)
 			}
 		})
 	}
@@ -176,7 +187,7 @@ func TestStartPayloadDuringActiveOnboardingContinuesAfterName(t *testing.T) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, sent := range p.sent {
-		require.NotContains(t, sent.Text, "Hi! I’m Zinusya")
+		assertNoStartWelcome(t, sent.Text)
 	}
 }
 

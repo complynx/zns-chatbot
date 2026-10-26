@@ -42,9 +42,9 @@ func TestStructuredStartAndPairsNeedNoLoomAndReplayAfterRestart(t *testing.T) {
 			require.Empty(t, p.inputs)
 			require.Zero(t, p.loomUnavailableCalls)
 			require.Len(t, p.sent, 2)
-			require.Contains(t, p.sent[0].Text, "/pairs")
+			require.NotContains(t, p.sent[0].Text, "/pairs")
 			menu := p.sent[0].ReplyMarkup.(*telegram.InlineKeyboardMarkup)
-			require.Equal(t, appTestOrigin+"/app/#meals", menu.InlineKeyboard[0][0].WebApp.URL)
+			require.Equal(t, appTestOrigin+"/app/", menu.InlineKeyboard[0][0].WebApp.URL)
 			form := p.sent[1].ReplyMarkup.(*telegram.InlineKeyboardMarkup)
 			require.Equal(t, appTestOrigin+"/app/#pairs", form.InlineKeyboard[0][0].WebApp.URL)
 			if language == "ru" {
@@ -52,7 +52,7 @@ func TestStructuredStartAndPairsNeedNoLoomAndReplayAfterRestart(t *testing.T) {
 				require.Equal(t, "Открыть приглашения в пару", form.InlineKeyboard[0][0].Text)
 				require.Contains(t, p.sent[1].Text, "не означает согласия")
 			} else {
-				require.Contains(t, p.sent[0].Text, "Zinusya")
+				require.Contains(t, p.sent[0].Text, "ZiNuSya")
 				require.Equal(t, "Open pair invitations", form.InlineKeyboard[0][0].Text)
 				require.Contains(t, p.sent[1].Text, "does not create a pair or give consent")
 			}

@@ -30,16 +30,15 @@ func TestStructuredNavigationNeedsNoLoomAndReplaysAcceptedUpdates(t *testing.T) 
 	require.Zero(t, p.loomUnavailableCalls)
 	require.Empty(t, p.runs)
 	require.Empty(t, p.inputs)
-	require.Contains(t, p.sent[0].Text, "Zinusya")
-	require.Contains(t, p.sent[0].Text, "/profile")
+	require.Contains(t, p.sent[0].Text, "ZiNuSya")
+	require.NotContains(t, p.sent[0].Text, "/profile", "unnamed owners receive no service commands")
 	require.Contains(t, p.sent[1].Text, "Name: Not set")
 	require.Contains(t, p.sent[2].Text, "No registrations")
 	require.Contains(t, p.sent[3].Text, "Open /registrations again")
 	for _, sent := range p.sent {
-		keyboard, ok := sent.ReplyMarkup.(*telegram.ReplyKeyboardMarkup)
+		keyboard, ok := sent.ReplyMarkup.(*telegram.ReplyKeyboardRemove)
 		require.True(t, ok)
-		require.True(t, keyboard.ResizeKeyboard)
-		require.Equal(t, "/profile", keyboard.Keyboard[0][1].Text)
+		require.True(t, keyboard.RemoveKeyboard)
 	}
 }
 
@@ -60,7 +59,6 @@ func TestNativeCommandsWithEmptyCatalogsKeepSendableKeyboards(t *testing.T) {
 		"/avatar",
 		"/pairs",
 		"/payments",
-		"/knowledge",
 	}
 	for n, command := range commands {
 		id := h.submitText(t, int64(92800+n), command)

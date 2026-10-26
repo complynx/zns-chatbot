@@ -47,9 +47,9 @@ func TestStructuredRegisterEmptyPagesDeliverWithoutInlineKeyboard(t *testing.T) 
 	defer p.mu.Unlock()
 	for _, message := range p.sent {
 		require.Contains(t, message.Text, "No open registrations")
-		keyboard, ok := message.ReplyMarkup.(*telegram.ReplyKeyboardMarkup)
+		keyboard, ok := message.ReplyMarkup.(*telegram.ReplyKeyboardRemove)
 		require.True(t, ok)
-		require.NotEmpty(t, keyboard.Keyboard)
+		require.True(t, keyboard.RemoveKeyboard)
 	}
 	require.Empty(t, p.runs)
 }

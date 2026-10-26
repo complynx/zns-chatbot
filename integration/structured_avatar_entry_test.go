@@ -44,7 +44,7 @@ func TestStructuredStartAndAvatarNeedNoLoomAndReplayAfterRestart(t *testing.T) {
 			require.Len(t, p.sent, 2)
 			require.Contains(t, p.sent[0].Text, "/avatar")
 			menu := p.sent[0].ReplyMarkup.(*telegram.InlineKeyboardMarkup)
-			require.Equal(t, appTestOrigin+"/app/#meals", menu.InlineKeyboard[0][0].WebApp.URL)
+			require.Equal(t, appTestOrigin+"/app/", menu.InlineKeyboard[0][0].WebApp.URL)
 			form := p.sent[1].ReplyMarkup.(*telegram.InlineKeyboardMarkup)
 			require.Equal(t, appTestOrigin+"/app/#avatars", form.InlineKeyboard[0][0].WebApp.URL)
 			if language == "ru" {
@@ -52,7 +52,7 @@ func TestStructuredStartAndAvatarNeedNoLoomAndReplayAfterRestart(t *testing.T) {
 				require.Equal(t, "Открыть аватарку", form.InlineKeyboard[0][0].Text)
 				require.Contains(t, p.sent[1].Text, "не меняет аватарку")
 			} else {
-				require.Contains(t, p.sent[0].Text, "Zinusya")
+				require.Contains(t, p.sent[0].Text, "ZiNuSya")
 				require.Equal(t, "Open avatar", form.InlineKeyboard[0][0].Text)
 				require.Contains(t, p.sent[1].Text, "does not change your avatar")
 			}
@@ -86,7 +86,7 @@ func TestStructuredAvatarUnavailablePreservesAgentQuestion(t *testing.T) {
 	require.Equal(t, before.QuestionID, active.QuestionID)
 	p.mu.Lock()
 	require.Contains(t, p.sent[2].Text, "currently unavailable")
-	require.IsType(t, &telegram.ReplyKeyboardMarkup{}, p.sent[2].ReplyMarkup)
+	require.IsType(t, &telegram.ReplyKeyboardRemove{}, p.sent[2].ReplyMarkup)
 	require.Len(t, p.runs, 1)
 	require.Empty(t, p.inputs)
 	p.mu.Unlock()
