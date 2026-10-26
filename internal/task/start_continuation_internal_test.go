@@ -22,7 +22,7 @@ func TestStartProfileContextPreservesDeferredLanguageEvidence(t *testing.T) {
 			t.Parallel()
 			i := intent{Text: startCommand, StartContinuation: pending, User: telegram.User{LanguageCode: "en"}}
 			var text strings.Builder
-			require.NoError(t, appendStartProfileContext(&text, db.UserProfile{}, i, "en"))
+			require.NoError(t, appendStartProfileContext(&text, db.UserProfile{}, i, "en", false))
 			before, after, found := strings.Cut(text.String(), deferredStartLanguageMarker)
 			require.True(t, found)
 			require.Contains(t, before, `"telegram_language_code":"en"`)
@@ -48,7 +48,7 @@ func TestStartProfileContextPreservesDeferredLanguageEvidence(t *testing.T) {
 		})
 	}
 	var bare strings.Builder
-	require.NoError(t, appendStartProfileContext(&bare, db.UserProfile{}, intent{}, "en"))
+	require.NoError(t, appendStartProfileContext(&bare, db.UserProfile{}, intent{}, "en", false))
 	require.NotContains(t, bare.String(), deferredStartLanguageMarker)
 }
 

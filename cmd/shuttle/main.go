@@ -149,6 +149,7 @@ func compose(
 		obs,
 		logger,
 		task.Options{
+			SkillsEnabled:              c.Loom.SkillsEnabled,
 			AvatarRenderer:             renderer,
 			BotID:                      c.Telegram.BotID,
 			MiniAppURL:                 miniAppURL,
@@ -168,15 +169,9 @@ func compose(
 		iam,
 		engine,
 		api.Options{
-			RegistrationDetails: details,
-			TelegramPrelink: api.TelegramPrelinkOptions{
-				Issuer:        c.TelegramPrelink.Issuer,
-				JWKSURL:       c.TelegramPrelink.JWKSURL,
-				Audience:      c.TelegramPrelink.Audience,
-				ProviderID:    c.TelegramPrelink.ProviderID,
-				ServiceBearer: c.TelegramPrelink.ServiceBearer,
-				HTTP:          h,
-			},
+			SkillsEnabled:         c.Loom.SkillsEnabled,
+			RegistrationDetails:   details,
+			TelegramPrelink:       telegramPrelinkOptions(c, h),
 			APIAudience:           c.Identity.APIAudience,
 			MiniAppOrigin:         c.MiniAppOrigin,
 			MiniAppAllowLocalHTTP: c.MiniAppAllowLocalHTTP,
@@ -196,6 +191,17 @@ func compose(
 		return nil, nil, nil, err
 	}
 	return engine, handlers, obs, nil
+}
+
+func telegramPrelinkOptions(c config.Config, client *http.Client) api.TelegramPrelinkOptions {
+	return api.TelegramPrelinkOptions{
+		Issuer:        c.TelegramPrelink.Issuer,
+		JWKSURL:       c.TelegramPrelink.JWKSURL,
+		Audience:      c.TelegramPrelink.Audience,
+		ProviderID:    c.TelegramPrelink.ProviderID,
+		ServiceBearer: c.TelegramPrelink.ServiceBearer,
+		HTTP:          client,
+	}
 }
 
 func telemetryOptions(c config.Config) observability.Options {

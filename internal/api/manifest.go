@@ -98,6 +98,9 @@ const agentContractRevision = "mvp-94"
 
 func (s *Server) manifest(w http.ResponseWriter, _ *http.Request) {
 	revision := agentContractRevision
+	if s.options.SkillsEnabled {
+		revision += "-skills-1"
+	}
 	w.Header().Set("Loom-Operation-Inspect-Path", operationInspectPath)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"protocol_version":  1,
@@ -120,7 +123,7 @@ func (s *Server) manifest(w http.ResponseWriter, _ *http.Request) {
 				"audience":   s.options.LoomAudience,
 			},
 		},
-		"modules": s.withRegistrationDetails([]any{
+		"modules": s.skillModules(s.withRegistrationDetails([]any{
 			knowledgeModule(),
 			profileModule(),
 			historyModule(),
@@ -189,6 +192,6 @@ func (s *Server) manifest(w http.ResponseWriter, _ *http.Request) {
 					},
 				},
 			},
-		}),
+		})),
 	})
 }

@@ -200,7 +200,7 @@ func (s *Service) profilePrompt(ctx context.Context, t db.Task, i intent) (strin
 		return "", err
 	}
 	text.WriteString(files.Prompt(input, language, i.Attachments))
-	if err = appendStartProfileContext(&text, profile, i, language); err != nil {
+	if err = appendStartProfileContext(&text, profile, i, language, s.options.SkillsEnabled); err != nil {
 		return "", err
 	}
 	if err = s.appendStructuredContext(ctx, &text, user, t.ID); err != nil {
@@ -216,22 +216,14 @@ func (s *Service) profilePrompt(ctx context.Context, t db.Task, i intent) (strin
 	}
 	text.WriteString(paymentExpectationContextMarker)
 	text.Write(paymentContext)
-	text.WriteString(promptText(
-		language,
-		paymentExpectationInstructionsEN,
-		paymentExpectationInstructionsRU,
-	))
+	text.WriteString(s.paymentPromptInstructions(language))
 	pairContext, err := s.pairExpectationPrompt(ctx, scope)
 	if err != nil {
 		return "", err
 	}
 	text.WriteString(pairExpectationContextMarker)
 	text.Write(pairContext)
-	text.WriteString(promptText(
-		language,
-		pairExpectationInstructionsEN,
-		pairExpectationInstructionsRU,
-	))
+	text.WriteString(s.pairPromptInstructions(language))
 	turns, err := s.store.RecentProfileConversation(ctx, scope, t.ID)
 	if err != nil {
 		return "", err

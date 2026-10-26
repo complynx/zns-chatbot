@@ -36,7 +36,8 @@ type Telegram struct {
 	WebhookSecret string `yaml:"webhook_secret"`
 }
 type Loom struct {
-	BaseURL string `yaml:"base_url"`
+	BaseURL       string `yaml:"base_url"`
+	SkillsEnabled bool   `yaml:"skills_enabled"`
 }
 type OTel struct {
 	Endpoint     string        `yaml:"endpoint"`
@@ -363,6 +364,13 @@ func (c Config) MiniAppURL() string {
 
 // applyTypedEnvironment preserves parsing order and keeps startup errors free of values.
 func applyTypedEnvironment(c *Config) error {
+	if value, ok := os.LookupEnv("SHUTTLE_LOOM_SKILLS_ENABLED"); ok {
+		parsed, parseErr := strconv.ParseBool(value)
+		if parseErr != nil {
+			return errors.New("invalid SHUTTLE_LOOM_SKILLS_ENABLED")
+		}
+		c.Loom.SkillsEnabled = parsed
+	}
 	for key, field := range map[string]*time.Duration{
 		"HTTP_TIMEOUT":     &c.HTTPTimeout,
 		"SHUTDOWN_TIMEOUT": &c.ShutdownTimeout,

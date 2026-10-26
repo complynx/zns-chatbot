@@ -156,7 +156,7 @@ func (s *Server) discoverPayments(ctx context.Context, in *AuthInput) (*agentDis
 	if err != nil {
 		return nil, paymentError(err)
 	}
-	return discoveryResult(paymentMethods(audit))
+	return s.skillDiscoveryResult("zinusya_payments", paymentMethods(audit))
 }
 
 func (s *Server) submitPayment(

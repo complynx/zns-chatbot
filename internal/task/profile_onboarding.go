@@ -76,7 +76,13 @@ func (s *Service) routeStart(ctx context.Context, request *intent) error {
 }
 
 // Telegram profile fields are suggestions only, never confirmation of a real name.
-func appendProfileContext(text *strings.Builder, profile db.UserProfile, user telegram.User, language string) error {
+func appendProfileContext(
+	text *strings.Builder,
+	profile db.UserProfile,
+	user telegram.User,
+	language string,
+	skillsEnabled bool,
+) error {
 	raw, err := json.Marshal(profile)
 	if err != nil {
 		return err
@@ -118,6 +124,10 @@ func appendProfileContext(text *strings.Builder, profile db.UserProfile, user te
 			"Shuttle отправит их после сохранения подтверждённого имени и завершения этого run.",
 	))
 	text.WriteString(personaPrompt(language))
+	if skillsEnabled {
+		text.WriteString(skillsInstructions)
+		return nil
+	}
 	text.WriteString(promptText(
 		language,
 		"\nProfile changes are durable actions, not JavaScript methods. "+

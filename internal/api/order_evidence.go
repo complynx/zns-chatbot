@@ -78,7 +78,7 @@ func (s *Server) discoverOrderEvidence(ctx context.Context, in *AuthInput) (*age
 	if err != nil {
 		return nil, orderEvidenceError(err)
 	}
-	return discoveryResult(orderEvidenceMethods(audit))
+	return s.skillDiscoveryResult("zinusya_order_payments", orderEvidenceMethods(audit))
 }
 
 func (s *Server) agentOwnOrderEvidence(

@@ -112,7 +112,7 @@ func (s *Server) discoverAdministration(ctx context.Context, in *AuthInput) (*ag
 	if _, ok := p.Roles["zinusya.admin"][s.options.OrganizationID]; ok {
 		methods = administrativeMethods()
 	}
-	return discoveryResult(methods)
+	return s.skillDiscoveryResult("zinusya_administration", methods)
 }
 
 func discoveryResult(methods []map[string]any) (*agentDiscoveryResponse, error) {

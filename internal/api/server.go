@@ -41,6 +41,7 @@ const (
 )
 
 type Options struct {
+	SkillsEnabled                                                             bool
 	MiniAppAllowLocalHTTP                                                     bool
 	RegistrationDetails                                                       *registrationdetails.Protector
 	TelegramPrelink                                                           TelegramPrelinkOptions

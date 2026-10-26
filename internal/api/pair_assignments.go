@@ -68,7 +68,7 @@ func (s *Server) discoverPairs(ctx context.Context, in *AuthInput) (*agentDiscov
 		methods = append(methods, pairAssignmentProposalMethods()...)
 		methods = append(methods, pairAssignmentMethod())
 	}
-	return discoveryResult(methods)
+	return s.skillDiscoveryResult("zinusya_pairs", methods)
 }
 
 func pairAssignmentError(err error) error {

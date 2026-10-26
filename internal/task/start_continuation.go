@@ -32,8 +32,14 @@ func applyStartPayload(i *intent, payload string) {
 	}
 }
 
-func appendStartProfileContext(text *strings.Builder, profile db.UserProfile, i intent, language string) error {
-	if err := appendProfileContext(text, profile, i.User, language); err != nil {
+func appendStartProfileContext(
+	text *strings.Builder,
+	profile db.UserProfile,
+	i intent,
+	language string,
+	skillsEnabled bool,
+) error {
+	if err := appendProfileContext(text, profile, i.User, language, skillsEnabled); err != nil {
 		return err
 	}
 	if i.StartContinuation != "" {

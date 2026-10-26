@@ -40,6 +40,7 @@ const (
 type Options struct {
 	AvatarRenderer                              avatar.Processor
 	RegistrationDetailsEnabled                  bool
+	SkillsEnabled                               bool
 	MiniAppURL                                  string
 	BotID                                       int64
 	PollInterval, AttemptTimeout, LeaseDuration time.Duration

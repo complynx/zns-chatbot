@@ -10,6 +10,11 @@ The source includes identity and profile entry, durable task routing and recover
 
 Controlled orchestration and actual-model, browser, Telegram and provider observations retain separate scopes. A successful local path does not itself authorize release or establish production readiness. Detailed run evidence and installation configuration are maintained outside tracked product documentation.
 
+[Agent skills](shuttle-agent-skills.md) defer domain procedures until needed while
+keeping identity, language, memory, consent and recovery in the core prompt.
+The integration is opt-in and requires Loom's skills protocol; legacy discovery
+and prompts remain available for compatibility.
+
 ## Remaining work
 
 1. Complete the human real-API walkthrough, including real Telegram audio and the relevant native/agent handoffs. Reuse established evidence where the behavior and source remain applicable; do not rerun the entire matrix merely because a dependency changed.
