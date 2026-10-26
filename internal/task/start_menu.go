@@ -77,7 +77,7 @@ func structuredMenuOutput(i intent, text string, ru bool, formURL string) []db.O
 	if formURL == "" {
 		return structuredOutput(i, text, nil, ru, "")
 	}
-	header := structuredText(ru, structuredWelcomeEN, structuredWelcomeRU)
+	header := structuredText(ru, structuredWelcomeLeadEN, structuredWelcomeLeadRU)
 	out := structuredOutput(i, strings.TrimSpace(header), nil, ru, "")
 	commands := strings.TrimSpace(strings.TrimPrefix(text, header))
 	entry := structuredOutput(i, commands, nil, ru, formURL)

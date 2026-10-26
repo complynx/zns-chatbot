@@ -2,6 +2,7 @@ package task
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +13,29 @@ import (
 	"github.com/complynx/zns-chatbot/internal/payments"
 	"github.com/complynx/zns-chatbot/internal/telegram"
 )
+
+func TestStructuredMenuWithoutAvailableCommandsKeepsInlineEntry(t *testing.T) {
+	t.Parallel()
+	for _, ru := range []bool{false, true} {
+		t.Run(structuredText(ru, "en", "ru"), func(t *testing.T) {
+			t.Parallel()
+			text := structuredText(ru, structuredWelcomeEN, structuredWelcomeRU)
+			out := structuredMenuOutput(intent{ChatID: 7, StructuredCommand: menuCommand}, text, ru,
+				"https://example.com/app/")
+			require.Len(t, out, 2)
+			var first, second telegram.SendMessageRequest
+			require.NoError(t, json.Unmarshal(out[0].Payload, &first))
+			require.NoError(t, json.Unmarshal(out[1].Payload, &second))
+			require.NotEmpty(t, strings.TrimSpace(first.Text))
+			require.NotEmpty(t, strings.TrimSpace(second.Text))
+			require.IsType(t, &telegram.ReplyKeyboardRemove{}, first.ReplyMarkup)
+			inline := second.ReplyMarkup.(*telegram.InlineKeyboardMarkup)
+			require.Equal(t, "https://example.com/app/", inline.InlineKeyboard[0][0].WebApp.URL)
+			require.Equal(t, strings.Fields(text), strings.Fields(first.Text+" "+second.Text))
+			require.NotEqual(t, out[0].DedupKey, out[1].DedupKey)
+		})
+	}
+}
 
 func TestStructuredPaymentShowsDepositAndFullDeadlines(t *testing.T) {
 	t.Parallel()

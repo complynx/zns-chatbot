@@ -33,10 +33,14 @@ const (
 	registrationCommandParts = 2
 )
 
-const structuredWelcomeEN = "Hi! I’m ZiNuSya, your assistant for the Zouk Non Stop community and events. " +
+const structuredWelcomeLeadEN = "Hi! I’m ZiNuSya, your assistant for the Zouk Non Stop community and events."
+
+const structuredWelcomeLeadRU = "Привет! Я ЗиНуСя, помощница сообщества и мероприятий Zouk Non Stop."
+
+const structuredWelcomeEN = structuredWelcomeLeadEN + " " +
 	"Write what you need, or choose an available service below.\n"
 
-const structuredWelcomeRU = "Привет! Я ЗиНуСя, помощница сообщества и мероприятий Zouk Non Stop. " +
+const structuredWelcomeRU = structuredWelcomeLeadRU + " " +
 	"Напиши, что тебе нужно, или выбери доступный сервис ниже.\n"
 
 func structuredCommand(text string) bool {
