@@ -108,6 +108,17 @@ func TestMenuAndStartRemoveHistoricalKeyboardAndKeepMiniAppEntry(t *testing.T) {
 // The peer receives a real send; only retained history is reconstructed for the legacy fixture.
 func seedLegacyCompletedKeyboard(t *testing.T, p *peers, h *harness, old uuid.UUID) {
 	t.Helper()
+	// HTTP acknowledgement precedes FinishDelivery. Wait for that exact original
+	// outbox suffix before reconstructing the previous version's retained history.
+	var last db.Delivery
+	require.Eventually(t, func() bool {
+		rows, err := h.store.ListOutbox(t.Context(), old)
+		if err != nil || len(rows) == 0 {
+			return false
+		}
+		last = rows[len(rows)-1]
+		return last.State == "delivered"
+	}, 5*time.Second, 10*time.Millisecond)
 	legacy := telegram.SendMessageRequest{
 		ChatID: 456,
 		Text:   "Previous version menu",
@@ -129,16 +140,11 @@ func seedLegacyCompletedKeyboard(t *testing.T, p *peers, h *harness, old uuid.UU
 		"reply_keyboard_hash": fmt.Sprintf("%x", sha256.Sum256(markup)), "reply_keyboard_sent_at": sentAt,
 	})
 	require.NoError(t, err)
-	rows, err := h.store.ListOutbox(t.Context(), old)
-	require.NoError(t, err)
-	require.NotEmpty(t, rows)
-	last := rows[len(rows)-1]
-	require.Equal(t, "delivered", last.State)
 	_, err = h.store.Pool().Exec(t.Context(),
 		"UPDATE shuttle_outbox SET payload=$1,receipt=$2 WHERE id=$3 AND state='delivered'",
 		payload, retainedReceipt, last.ID)
 	require.NoError(t, err)
-	rows, err = h.store.ListOutbox(t.Context(), old)
+	rows, err := h.store.ListOutbox(t.Context(), old)
 	require.NoError(t, err)
 	require.True(t, deliveredReplyKeyboard(rows[len(rows)-1]), "Latest legacy history has no later removal")
 }

@@ -36,7 +36,7 @@ func TestStructuredMealsKeepsAgentQuestionAcrossOutageAndRestart(t *testing.T) {
 	p.mu.Unlock()
 	entry := h.submitText(t, 96301, "/menu")
 	h.await(t, entry, "completed")
-	h.awaitReplies(t, 2)
+	h.awaitReplies(t, 3)
 	still, err := h.store.GetTask(t.Context(), original)
 	require.NoError(t, err)
 	// Polling may wait for Loom; the saved question and its run must survive.
@@ -44,8 +44,10 @@ func TestStructuredMealsKeepsAgentQuestionAcrossOutageAndRestart(t *testing.T) {
 	require.Equal(t, active.QuestionID, still.QuestionID)
 	require.Equal(t, active.RunID, still.RunID)
 	p.mu.Lock()
-	require.Contains(t, p.sent[1].Text, "выбери доступный сервис")
-	button := p.sent[1].ReplyMarkup.(*telegram.InlineKeyboardMarkup).InlineKeyboard[0][0]
+	require.Contains(t, p.sent[1].Text, "ЗиНуСя")
+	require.IsType(t, &telegram.ReplyKeyboardRemove{}, p.sent[1].ReplyMarkup)
+	require.Contains(t, p.sent[2].Text, "выбери доступный сервис")
+	button := p.sent[2].ReplyMarkup.(*telegram.InlineKeyboardMarkup).InlineKeyboard[0][0]
 	require.Equal(t, "Открыть ЗиНуСю", button.Text)
 	require.Equal(t, appTestOrigin+"/app/", button.WebApp.URL)
 	p.mu.Unlock()
@@ -57,7 +59,7 @@ func TestStructuredMealsKeepsAgentQuestionAcrossOutageAndRestart(t *testing.T) {
 	answer := h.submitText(t, 96302, "Продолжай с моим сохранённым выбором")
 	h.await(t, answer, "completed")
 	h.await(t, original, "completed")
-	h.awaitReplies(t, 3)
+	h.awaitReplies(t, 4)
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	require.Len(t, p.runs, 1)

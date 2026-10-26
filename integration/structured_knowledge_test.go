@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
 func TestStructuredKnowledgeUsesAgentAndReplaysWithoutAnotherRun(t *testing.T) {
@@ -15,14 +17,14 @@ func TestStructuredKnowledgeUsesAgentAndReplaysWithoutAnotherRun(t *testing.T) {
 	h := setup(t, p)
 	menu := h.submitText(t, 96600, "/menu")
 	h.await(t, menu, "completed")
-	h.awaitReplies(t, 1)
+	h.awaitReplies(t, 2)
 	p.mu.Lock()
 	p.loomDown = false
 	p.mu.Unlock()
 	id := h.submitText(t, 96601, "/knowledge")
 	require.Equal(t, id, h.submitText(t, 96601, "/knowledge"))
 	h.await(t, id, "completed")
-	h.awaitReplies(t, 2)
+	h.awaitReplies(t, 3)
 	h.stop(t)
 	h.start(t)
 	require.Equal(t, id, h.submitText(t, 96601, "/knowledge"))
@@ -33,9 +35,11 @@ func TestStructuredKnowledgeUsesAgentAndReplaysWithoutAnotherRun(t *testing.T) {
 	require.Len(t, p.createdInputs, 1)
 	require.Equal(t, "/knowledge", promptUserText(p.createdInputs[0]))
 	require.Contains(t, p.createdInputs[0], `"command":"/menu"`)
-	require.Len(t, p.sent, 2)
-	require.NotContains(t, p.sent[0].Text, "/knowledge")
-	require.Equal(t, "Hello, Daniel!", p.sent[1].Text)
+	require.Len(t, p.sent, 3)
+	require.IsType(t, &telegram.ReplyKeyboardRemove{}, p.sent[0].ReplyMarkup)
+	require.NotContains(t, p.sent[1].Text, "/knowledge")
+	require.IsType(t, &telegram.InlineKeyboardMarkup{}, p.sent[1].ReplyMarkup)
+	require.Equal(t, "Hello, Daniel!", p.sent[2].Text)
 }
 
 func TestStructuredKnowledgeKeepsAgentQuestionAcrossOutageAndRestart(t *testing.T) {
