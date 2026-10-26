@@ -109,7 +109,11 @@ func (s *Service) structured(ctx context.Context, t *db.Task, c checkpoint, i in
 		}
 	}
 	t.State = stateCompleted
-	if err = s.save(ctx, t, c, structuredOutput(i, text, next, ru, formURL)); err != nil {
+	out := structuredOutput(i, text, next, ru, formURL)
+	if i.StructuredCommand == menuCommand || i.StructuredCommand == startCommand {
+		out = structuredMenuOutput(i, text, ru, formURL)
+	}
+	if err = s.save(ctx, t, c, out); err != nil {
 		return s.wait()
 	}
 	return s.deliver(ctx, t, c)

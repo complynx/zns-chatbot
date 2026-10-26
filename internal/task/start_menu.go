@@ -2,12 +2,10 @@ package task
 
 import (
 	"context"
-	"encoding/json"
 	"strconv"
 	"strings"
 
 	"github.com/complynx/zns-chatbot/internal/db"
-	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
 // completedStartWelcome defers first-start guidance until the confirmed name is saved.
@@ -65,24 +63,26 @@ func (s *Service) startWelcomeOutput(ctx context.Context, i intent) ([]db.Outbou
 	text += structuredText(ru,
 		"\n\nWrite what you need, or choose a command from /menu.",
 		"\n\nНапиши, что тебе нужно, или выбери команду из /menu.")
-	out := structuredOutput(i, text, nil, ru, "")
+	i.StructuredCommand = startCommand
+	out := structuredMenuOutput(i, text, ru, s.options.MiniAppURL)
 	for n := range out {
 		out[n].DedupKey = "start:welcome:" + strconv.Itoa(n)
 	}
-	if s.options.MiniAppURL == "" {
-		return out, nil
+	return out, nil
+}
+
+// Telegram needs separate messages to remove a reply keyboard and show an inline entry.
+// Reuse the welcome and command text; the normal outbox preserves their delivery order.
+func structuredMenuOutput(i intent, text string, ru bool, formURL string) []db.Outbound {
+	if formURL == "" {
+		return structuredOutput(i, text, nil, ru, "")
 	}
-	last := &out[len(out)-1]
-	var payload telegram.SendMessageRequest
-	if err = json.Unmarshal(last.Payload, &payload); err != nil {
-		return nil, err
+	header := structuredText(ru, structuredWelcomeEN, structuredWelcomeRU)
+	out := structuredOutput(i, strings.TrimSpace(header), nil, ru, "")
+	commands := strings.TrimSpace(strings.TrimPrefix(text, header))
+	entry := structuredOutput(i, commands, nil, ru, formURL)
+	for n := range entry {
+		entry[n].DedupKey = "result:structured:" + strconv.Itoa(len(out)+n)
 	}
-	payload.ReplyMarkup = &telegram.InlineKeyboardMarkup{
-		InlineKeyboard: [][]telegram.InlineKeyboardButton{{{
-			Text:   structuredText(ru, "Open ZiNuSya", "Открыть ЗиНуСю"),
-			WebApp: &telegram.WebAppInfo{URL: s.options.MiniAppURL},
-		}}},
-	}
-	last.Payload, err = json.Marshal(payload)
-	return out, err
+	return append(out, entry...)
 }

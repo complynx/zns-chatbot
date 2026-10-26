@@ -37,7 +37,9 @@ func (s *Service) sendKeyboardText(ctx context.Context, row db.Delivery) (telegr
 	pending := liveKeyboardID(current)
 	switch payload.ReplyMarkup.(type) {
 	case *telegram.ReplyKeyboardRemove:
-		if state.KeyboardOwnerTaskID != uuid.Nil && state.KeyboardOwnerTaskID != row.TaskID || pending != "" {
+		otherActiveOwner := state.KeyboardOwnerTaskID != uuid.Nil && state.KeyboardOwnerTaskID != row.TaskID &&
+			state.KeyboardOwnerTaskID == state.ActiveTaskID
+		if otherActiveOwner || pending != "" {
 			payload.ReplyMarkup = nil
 		}
 	case *telegram.ReplyKeyboardMarkup:

@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -52,6 +53,126 @@ func deliveredReplyKeyboard(row db.Delivery) bool {
 	}
 	keyboard, ok := payload.ReplyMarkup.(*telegram.ReplyKeyboardMarkup)
 	return ok && len(keyboard.Keyboard) > 0
+}
+
+func TestMenuAndStartRemoveHistoricalKeyboardAndKeepMiniAppEntry(t *testing.T) {
+	t.Parallel()
+	for _, command := range []string{"/menu", "/start"} {
+		t.Run(command, func(t *testing.T) {
+			t.Parallel()
+			p := newPeers(t)
+			p.miniAppOrigin = appTestOrigin
+			p.question = true
+			p.questionChoices = []loom.Choice{{ID: "old", Label: "Old keyboard"}}
+			h := setup(t, p)
+			seedNamedTelegramUser(t, h)
+			old := h.submit(t, 93001)
+			h.await(t, old, "awaiting_user")
+			label := replyChoice(t, p, h, old)
+			answer := h.submitText(t, 93002, label)
+			h.await(t, answer, "completed")
+			h.await(t, old, "completed")
+			awaitReplyKeyboardRemoval(t, p)
+			seedLegacyCompletedKeyboard(t, p, h, old)
+			state, err := h.store.KeyboardState(t.Context(), old)
+			require.NoError(t, err)
+			require.Equal(t, old, state.KeyboardOwnerTaskID, "Retained owner is historical, not active")
+			require.Equal(t, uuid.Nil, state.ActiveTaskID)
+			p.mu.Lock()
+			require.IsType(t, &telegram.ReplyKeyboardMarkup{}, p.sent[len(p.sent)-1].ReplyMarkup)
+			before := len(p.sent)
+			p.mu.Unlock()
+			menu := h.submitText(t, 93003, command)
+			h.await(t, menu, "completed")
+			h.awaitReplies(t, before+2)
+			p.mu.Lock()
+			replies := append([]telegram.SendMessageRequest(nil), p.sent[before:]...)
+			p.mu.Unlock()
+			require.Len(t, replies, 2)
+			require.Contains(t, replies[0].Text, "ZiNuSya")
+			require.IsType(t, &telegram.ReplyKeyboardRemove{}, replies[0].ReplyMarkup)
+			require.Contains(t, replies[1].Text, "/menu")
+			require.NotContains(t, replies[1].Text, "/start")
+			require.NotContains(t, replies[1].Text, "/knowledge")
+			launch := replies[1].ReplyMarkup.(*telegram.InlineKeyboardMarkup)
+			require.Equal(t, appTestOrigin+"/app/", launch.InlineKeyboard[0][0].WebApp.URL)
+			rows, err := h.store.ListOutbox(t.Context(), menu)
+			require.NoError(t, err)
+			require.Len(t, rows, 2)
+			require.Less(t, rows[0].ChunkSeq, rows[1].ChunkSeq)
+		})
+	}
+}
+
+// Model an upgrade from a version that left its completed task's native keyboard visible.
+// The peer receives a real send; only retained history is reconstructed for the legacy fixture.
+func seedLegacyCompletedKeyboard(t *testing.T, p *peers, h *harness, old uuid.UUID) {
+	t.Helper()
+	legacy := telegram.SendMessageRequest{
+		ChatID: 456,
+		Text:   "Previous version menu",
+		ReplyMarkup: &telegram.ReplyKeyboardMarkup{
+			Keyboard: [][]telegram.KeyboardButton{{{Text: "/menu"}, {Text: "/knowledge"}}},
+		},
+	}
+	client, err := telegram.New(p.tg.URL, "123:test-token", p.tg.Client())
+	require.NoError(t, err)
+	sentAt := time.Now().UTC()
+	receipt, err := client.SendMessage(t.Context(), legacy)
+	require.NoError(t, err)
+	payload, err := json.Marshal(legacy)
+	require.NoError(t, err)
+	markup, err := json.Marshal(legacy.ReplyMarkup)
+	require.NoError(t, err)
+	retainedReceipt, err := json.Marshal(map[string]any{
+		"message_id": receipt.MessageID, "chat_id": receipt.ChatID,
+		"reply_keyboard_hash": fmt.Sprintf("%x", sha256.Sum256(markup)), "reply_keyboard_sent_at": sentAt,
+	})
+	require.NoError(t, err)
+	rows, err := h.store.ListOutbox(t.Context(), old)
+	require.NoError(t, err)
+	require.NotEmpty(t, rows)
+	last := rows[len(rows)-1]
+	require.Equal(t, "delivered", last.State)
+	_, err = h.store.Pool().Exec(t.Context(),
+		"UPDATE shuttle_outbox SET payload=$1,receipt=$2 WHERE id=$3 AND state='delivered'",
+		payload, retainedReceipt, last.ID)
+	require.NoError(t, err)
+	rows, err = h.store.ListOutbox(t.Context(), old)
+	require.NoError(t, err)
+	require.True(t, deliveredReplyKeyboard(rows[len(rows)-1]), "Latest legacy history has no later removal")
+}
+
+func TestMenuKeepsLiveQuestionKeyboardWithMiniAppEntry(t *testing.T) {
+	t.Parallel()
+	p := newPeers(t)
+	p.miniAppOrigin = appTestOrigin
+	p.question = true
+	p.questionChoices = []loom.Choice{{ID: "live", Label: "Current choice"}}
+	h := setup(t, p)
+	seedNamedTelegramUser(t, h)
+	id := h.submit(t, 93101)
+	h.await(t, id, "awaiting_user")
+	label := replyChoice(t, p, h, id)
+	p.mu.Lock()
+	before := len(p.sent)
+	p.mu.Unlock()
+	menu := h.submitText(t, 93102, "/menu")
+	h.await(t, menu, "completed")
+	h.awaitReplies(t, before+2)
+	p.mu.Lock()
+	replies := append([]telegram.SendMessageRequest(nil), p.sent[before:]...)
+	p.mu.Unlock()
+	require.Len(t, replies, 2)
+	require.Nil(t, replies[0].ReplyMarkup, "A live question suppresses the removal on the actual wire")
+	require.IsType(t, &telegram.InlineKeyboardMarkup{}, replies[1].ReplyMarkup)
+	answer := h.submitText(t, 93103, label)
+	h.await(t, answer, "completed")
+	h.await(t, id, "completed")
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	require.Len(t, p.inputs, 1)
+	require.Equal(t, label, promptUserText(p.inputs[0].Text))
 }
 
 func TestConversationKeyboardAndTypedTextHaveIdenticalSteeringSemantics(t *testing.T) {
@@ -195,6 +316,16 @@ func TestReplyKeyboardLostInputReceiptReconcilesCompletedTargetAfterRestart(t *t
 
 func TestReplyKeyboardCleanupStillRunsAfterNewPlainTaskStarts(t *testing.T) {
 	t.Parallel()
+	for _, live := range []bool{false, true} {
+		t.Run(fmt.Sprintf("live_choices_%t", live), func(t *testing.T) {
+			t.Parallel()
+			lateReplyKeyboardCleanup(t, live)
+		})
+	}
+}
+
+func lateReplyKeyboardCleanup(t *testing.T, live bool) {
+	t.Helper()
 	p := newPeers(t)
 	p.question = true
 	p.questionChoices = []loom.Choice{{ID: "one", Label: "First"}}
@@ -240,16 +371,35 @@ func TestReplyKeyboardCleanupStillRunsAfterNewPlainTaskStarts(t *testing.T) {
 	p.mu.Lock()
 	p.question = false
 	p.steering = true
+	if live {
+		p.question = true
+		p.steering = false
+		p.questionChoices = []loom.Choice{{ID: "new", Label: "New active choice"}}
+	}
 	p.mu.Unlock()
 	next := h.submitText(t, 92703, "Continue with an unrelated plain task")
-	h.await(t, next, "running")
+	if live {
+		h.await(t, next, "awaiting_user")
+		_ = replyChoice(t, p, h, next)
+	} else {
+		h.await(t, next, "running")
+	}
 	_, err = blocker.Exec(t.Context(), `SELECT pg_advisory_unlock_all()`)
 	require.NoError(t, err)
 	blocker.Release()
 	released = true
-	h.awaitReplies(t, 2)
+	if live {
+		h.awaitReplies(t, 3)
+	} else {
+		h.awaitReplies(t, 2)
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if live {
+		require.Nil(t, p.sent[len(p.sent)-1].ReplyMarkup,
+			"Late completion must not remove the newer live question keyboard")
+		return
+	}
 	require.IsType(
 		t,
 		&telegram.ReplyKeyboardRemove{},

@@ -87,7 +87,7 @@ func firstOnboardingBeforeWelcome(t *testing.T, initial string) {
 	deliveredNamePrompt(t, h, accepted.ID)
 	require.Eventually(
 		t,
-		func() bool { p.mu.Lock(); defer p.mu.Unlock(); return len(p.sent) == 3 },
+		func() bool { p.mu.Lock(); defer p.mu.Unlock(); return len(p.sent) == 4 },
 		5*time.Second,
 		10*time.Millisecond,
 	)
@@ -106,8 +106,9 @@ func firstOnboardingBeforeWelcome(t *testing.T, initial string) {
 		}
 	}
 	require.Contains(t, p.sent[2].Text, "ZiNuSya")
-	require.Contains(t, p.sent[2].Text, "/menu")
-	launch := p.sent[2].ReplyMarkup.(*telegram.InlineKeyboardMarkup)
+	require.IsType(t, &telegram.ReplyKeyboardRemove{}, p.sent[2].ReplyMarkup)
+	require.Contains(t, p.sent[3].Text, "/menu")
+	launch := p.sent[3].ReplyMarkup.(*telegram.InlineKeyboardMarkup)
 	require.Equal(t, appTestOrigin+"/app/", launch.InlineKeyboard[0][0].WebApp.URL)
 	p.mu.Unlock()
 	h.stop(t)
@@ -117,7 +118,7 @@ func firstOnboardingBeforeWelcome(t *testing.T, initial string) {
 	require.Equal(t, accepted.ID, replay.ID)
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	require.Len(t, p.sent, 3)
+	require.Len(t, p.sent, 4)
 	require.GreaterOrEqual(t, len(visibleMenuCalls(p.menuCalls)), 2)
 }
 
