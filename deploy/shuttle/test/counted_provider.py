@@ -1,4 +1,6 @@
-"""Owned QA Responses fixture. Counts are synthetic: four canonical JSON bytes/unit.
+"""Owned QA Responses fixture. Text counts use four canonical JSON bytes/unit.
+
+Image payloads are opaque and cost 1024 synthetic units each, independent of bytes.
 
 This is neither a real model nor its tokenizer. Never use for production, model
 quality, billing, real context-limit, vision, or native-compaction acceptance.
@@ -14,12 +16,32 @@ import time
 import uuid
 
 LIMIT = 2 * 1024 * 1024
+SYNTHETIC_IMAGE_TOKENS = 1024
 
 def encoded(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
 
 def synthetic_count(body):
-    return max(1, (len(encoded(body)) + 3) // 4)
+    if not isinstance(body.get("input"), list):
+        return max(1, (len(encoded(body)) + 3) // 4)
+    # Normalize only protocol image parts, never strings or tool arguments.
+    counted = dict(body)
+    images = 0
+    inputs = []
+    for item in body.get("input", []):
+        if isinstance(item, dict) and isinstance(item.get("content"), list):
+            item = dict(item)
+            content = []
+            for part in item["content"]:
+                if (isinstance(part, dict) and part.get("type") == "input_image"
+                        and isinstance(part.get("image_url"), str)):
+                    part = dict(part, image_url="<synthetic image payload>")
+                    images += 1
+                content.append(part)
+            item["content"] = content
+        inputs.append(item)
+    counted["input"] = inputs
+    return max(1, (len(encoded(counted)) + 3) // 4) + images * SYNTHETIC_IMAGE_TOKENS
 
 def wire_response(value, max_output_tokens):
     if not isinstance(value, dict) or not value.get("ID") or value.get("ErrorCode"):

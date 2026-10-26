@@ -1,5 +1,6 @@
 """Behavioral HTTP contract checks for the isolated synthetic counted provider."""
 from concurrent.futures import ThreadPoolExecutor
+import base64
 import http.client
 import json
 from pathlib import Path
@@ -11,7 +12,7 @@ import urllib.error
 import urllib.request
 import uuid
 
-from counted_provider import FixtureServer
+from counted_provider import FixtureServer, LIMIT, SYNTHETIC_IMAGE_TOKENS, encoded, synthetic_count
 
 class CountedProviderTests(unittest.TestCase):
     def setUp(self):
@@ -75,6 +76,64 @@ class CountedProviderTests(unittest.TestCase):
             self.post("/v1/responses", changed, client)
         self.assertEqual(error.exception.code, 409)
         self.assertEqual(request.read_bytes(), prior)
+
+    def test_image_payload_bytes_are_opaque_but_text_still_grows(self):
+        # The paused Q06 fixture attached this public PNG plus a 35937-byte mask.
+        picture = Path(__file__).resolve().parents[3] / "internal/avatar/frame/zns_frame.png"
+        original = "data:image/png;base64," + base64.b64encode(picture.read_bytes()).decode()
+        mask = "data:image/png;base64," + base64.b64encode(bytes(35937)).decode()
+        body = self.model_body()
+        body["input"] = [{"role": "user", "content": [
+            {"type": "input_text", "text": "Inspect this synthetic image and its alpha mask."},
+            {"type": "input_image", "image_url": original},
+            {"type": "input_text", "text": "Alpha mask for the preceding image."},
+            {"type": "input_image", "image_url": mask},
+        ]}]
+        before = encoded(body)
+        self.assertGreater(len(before), 2_000_000)
+        self.assertLessEqual(len(before), LIMIT)
+        previous_count = (len(before) + 3) // 4
+        self.assertGreater(previous_count, 272000)
+        result = self.post("/v1/responses/input_tokens", body)["input_tokens"]
+        self.assertGreaterEqual(result, 2 * SYNTHETIC_IMAGE_TOKENS)
+        self.assertLess(result, 272000)
+        self.assertEqual(synthetic_count(body), result)
+        self.assertEqual(encoded(body), before, "Counting must not rewrite the actual vision request")
+        body["input"][0]["content"][0]["text"] += "x" * 400
+        self.assertEqual(synthetic_count(body), result + 100)
+        body["input"][0]["content"][1]["image_url"] = "data:image/png;base64,AA=="
+        self.assertEqual(synthetic_count(body), result + 100)
+        self.assertEqual(list(self.mailbox.iterdir()), [])
+
+    def test_count_does_not_hide_image_shaped_text_or_tool_arguments(self):
+        body = {"model": "m", "input": [
+            {"type": "function_call", "arguments": {"type": "input_image", "image_url": "x" * 400}},
+            {"role": "user", "content": [{"type": "input_text", "text": "x" * 400}]},
+        ]}
+        self.assertEqual(synthetic_count(body), (len(encoded(body)) + 3) // 4)
+
+    def test_non_list_or_missing_input_keeps_original_count(self):
+        for body in ({"model": "m"}, {"model": "m", "input": "Plain string Ж😀"}):
+            with self.subTest(body=body):
+                before = encoded(body)
+                self.assertEqual(synthetic_count(body), max(1, (len(before) + 3) // 4))
+                self.assertEqual(encoded(body), before)
+
+    def test_request_body_limit_remains_bounded_for_both_endpoints(self):
+        for endpoint in ("/v1/responses", "/v1/responses/input_tokens"):
+            with self.subTest(endpoint=endpoint):
+                connection = http.client.HTTPConnection("127.0.0.1", self.server.server_port, timeout=2)
+                try:
+                    connection.putrequest("POST", endpoint)
+                    connection.putheader("Authorization", "Bearer fixture-only-key")
+                    connection.putheader("Content-Length", str(LIMIT + 1))
+                    connection.endheaders()
+                    response = connection.getresponse()
+                    self.assertEqual(response.status, 413)
+                    response.read()
+                finally:
+                    connection.close()
+        self.assertEqual(list(self.mailbox.iterdir()), [])
 
     def test_missing_authority_or_invalid_id_cannot_create_mailbox_request(self):
         for client, key, status in ((str(uuid.uuid4()), "wrong", 401), ("../outside", "fixture-only-key", 400)):
