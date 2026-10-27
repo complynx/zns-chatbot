@@ -1,0 +1,25 @@
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+entryPoints:
+  iam:
+    address: ":18443"
+    forwardedHeaders: {insecure: false}
+    transport:
+      lifeCycle: {graceTimeOut: 1s}
+  app:
+    address: ":18444"
+    forwardedHeaders: {insecure: false}
+    transport:
+      lifeCycle: {graceTimeOut: 1s}
+  identity:
+    address: ":19443"
+    forwardedHeaders: {insecure: false}
+    transport:
+      lifeCycle: {graceTimeOut: 1s}
+providers:
+  file:
+    filename: /etc/traefik/browser-routes.yaml
+    watch: false
+log:
+  level: INFO

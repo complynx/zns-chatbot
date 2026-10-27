@@ -1,0 +1,449 @@
+name: CI
+
+env:
+  # Database to connect to that can create other databases with `CREATE DATABASE`.
+  ADMIN_DATABASE_URL: postgres://postgres:postgres@localhost:5432
+
+  # A suitable URL for non-test database.
+  DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/river_dev?sslmode=disable
+
+  # Test database.
+  TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/river_test?pool_max_conns=15&sslmode=disable
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  benchmark:
+    env:
+      # The special value "local" tells Go to use the bundled Go version rather
+      # than trying to fetch one according to a `toolchain` value in `go.mod`.
+      # This ensures that we're really running the Go version in the CI matrix
+      # rather than one that the Go command has upgraded to automatically.
+      GOTOOLCHAIN: local
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version:
+          - "1.27"
+        postgres-version: [17]
+      fail-fast: false
+    timeout-minutes: 5
+
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres-version }}
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Display Go version
+        run: go version
+
+      - name: Set up database
+        run: psql -c "CREATE DATABASE river_test" $ADMIN_DATABASE_URL
+
+      - name: Benchmark
+        run: make bench ITERATIONS=1
+
+  build_and_test:
+    name: build_and_test (${{ matrix.go-version }}, ${{ matrix.postgres-version }}${{ matrix.primary && ', race' || '' }})
+    env:
+      # The special value "local" tells Go to use the bundled Go version rather
+      # than trying to fetch one according to a `toolchain` value in `go.mod`.
+      # This ensures that we're really running the Go version in the CI matrix
+      # rather than one that the Go command has upgraded to automatically.
+      GOTOOLCHAIN: local
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # Run the latest Go version against all supported Postgres versions.
+          # Only the newest Go/Postgres combination runs with the race detector.
+          - go-version: "1.27"
+            postgres-version: 18
+            primary: true
+          - go-version: "1.27"
+            postgres-version: 17
+          - go-version: "1.27"
+            postgres-version: 16
+          - go-version: "1.27"
+            postgres-version: 15
+          - go-version: "1.27"
+            postgres-version: 14
+
+          # Also run the previous Go version (the Go version previous to current
+          # is the only other officially supported Go version) against the
+          # latest Postgres version:
+          - go-version: "1.26"
+            postgres-version: 18
+      fail-fast: false
+    timeout-minutes: 5
+
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres-version }}
+        env:
+          # Left as a reminder that it might not be a bad idea to increase max
+          # connections and then increase the maximum allowed in the databaes
+          # pools for each package under tests. This config is only supported on
+          # Postgres 16+ though, and changing Postgres configuration on any
+          # version before that is absurdly difficult through Docker, so it
+          # might be worth just waiting until <16 have rolled off.
+          # POSTGRES_INITDB_ARGS: "-c max_connections=1500"
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Display Go version
+        run: go version
+
+      - name: Set up database
+        run: psql -c "CREATE DATABASE river_test" $ADMIN_DATABASE_URL
+
+      - name: Test with race detector
+        if: matrix.primary
+        run: make test/race TEST_DATABASE=postgres
+
+      - name: Test
+        if: ${{ !matrix.primary }}
+        run: make test TEST_DATABASE=postgres
+
+  build_and_test_sqlite:
+    name: build_and_test_sqlite (${{ matrix.go-version }}${{ matrix.primary && ', race' || '' }})
+    env:
+      GOTOOLCHAIN: local
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Keep both supported Go versions covered without repeating SQLite,
+        # libSQL, and Turso tests for every PostgreSQL version.
+        go-version: ["1.27", "1.26"]
+        include:
+          # Only the newest Go version runs with the race detector.
+          - go-version: "1.27"
+            primary: true
+      fail-fast: false
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Test with race detector
+        if: matrix.primary
+        run: make test/race TEST_DATABASE=sqlite
+
+      - name: Test
+        if: ${{ !matrix.primary }}
+        run: make test TEST_DATABASE=sqlite
+
+  cli:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+
+    steps:
+      # CLI tests use each runner's bundled PostgreSQL version; the database
+      # test matrix above covers supported PostgreSQL versions separately.
+      # GitHub's Linux image includes PostgreSQL with its service disabled.
+      - name: Set up PostgreSQL (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'postgres'"
+          sudo -u postgres createdb river_dev
+
+      # GitHub's Windows image exposes its PostgreSQL binaries via PGBIN.
+      - name: Set up PostgreSQL (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          PGPASSWORD: postgres
+        run: |
+          # GitHub sets ErrorActionPreference to Stop, but native executables
+          # also need this flag for a nonzero exit to stop the script immediately.
+          $PSNativeCommandUseErrorActionPreference = $true
+
+          # Create our own cluster instead of using the image's preconfigured
+          # service and data directory. RUNNER_TEMP is isolated to this job.
+          $pgData = Join-Path $env:RUNNER_TEMP 'postgres'
+          $pgLog = Join-Path $env:RUNNER_TEMP 'postgres.log'
+          $pgPasswordFile = Join-Path $env:RUNNER_TEMP 'postgres-password'
+
+          # initdb reads the initial password from a file; createdb uses
+          # PGPASSWORD. Both match the postgres credentials in DATABASE_URL.
+          $env:PGPASSWORD | Set-Content -Path $pgPasswordFile -Encoding utf8
+
+          # Require password authentication rather than initdb's default trust,
+          # and use a consistent encoding and locale across runner images.
+          & "$env:PGBIN\initdb.exe" --pgdata="$pgData" --username=postgres --pwfile="$pgPasswordFile" --auth=scram-sha-256 --encoding=UTF8 --locale=C
+
+          # Start a background server on loopback, redirect its output to a log,
+          # and wait for it to accept connections before creating river_dev.
+          & "$env:PGBIN\pg_ctl.exe" --pgdata="$pgData" --log="$pgLog" --options="-h 127.0.0.1 -p 5432" --wait start
+          & "$env:PGBIN\createdb.exe" --host=127.0.0.1 --port=5432 --username=postgres river_dev
+
+          # Later steps invoke psql directly, including from Bash. GITHUB_PATH
+          # adds the bundled client tools to PATH for all subsequent steps.
+          $env:PGBIN | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "stable"
+          check-latest: true
+
+      - name: Setup GOBIN (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          echo "GOBIN=$(go env GOPATH)/bin" >> $GITHUB_ENV
+          echo "PATH=$(go env GOPATH)/bin:$PATH" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Setup GOBIN (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $gobin = "$(go env GOPATH)\bin"
+          echo "GOBIN=$gobin" >> $env:GITHUB_ENV
+          echo $gobin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        shell: pwsh
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: export RIVER_CMD_DIR
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            echo "RIVER_CMD_DIR=./cmd/river" >> $GITHUB_ENV
+          elif [ "$RUNNER_OS" == "Windows" ]; then
+            echo "RIVER_CMD_DIR=.\cmd\river" >> $GITHUB_ENV
+          fi
+        shell: bash
+
+      - name: Build and install CLI
+        run: go install .
+        working-directory: ${{ env.RIVER_CMD_DIR }}
+
+      - run: river migrate-get --down --version 3
+
+      - run: river migrate-get --up --version 3
+
+      - run: river migrate-get --all --exclude-version 1 --down
+
+      - run: river migrate-get --all --exclude-version 1 --up
+
+      - run: river migrate-up --database-url $DATABASE_URL
+        shell: bash # needed for windows to interpret env var
+
+      - run: river migrate-list --database-url $DATABASE_URL
+        shell: bash
+
+      - run: river validate --database-url $DATABASE_URL
+        shell: bash
+
+      - run: river version
+
+      - name: river bench
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            ( sleep 10 && killall -SIGTERM river ) &
+            river bench --database-url $DATABASE_URL
+          elif [ "$RUNNER_OS" == "Windows" ]; then
+            (sleep 10 && taskkill //F //IM river.exe //T ) &
+            river bench --database-url $DATABASE_URL || exit 0
+          fi
+        shell: bash
+
+      # Bench again in fixed number of jobs mode.
+      - name: river bench
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            ( sleep 10 && killall -SIGTERM river ) &
+            river bench --database-url $DATABASE_URL --num-total-jobs 1_234
+          elif [ "$RUNNER_OS" == "Windows" ]; then
+            (sleep 10 && taskkill //F //IM river.exe //T ) &
+            river bench --database-url $DATABASE_URL --num-total-jobs 1_234 || exit 0
+          fi
+        shell: bash
+
+      - run: river migrate-down --database-url $DATABASE_URL --max-steps 100
+        shell: bash
+
+      - name: river validate (expect failure)
+        run: |
+          if river validate --database-url $DATABASE_URL; then
+            echo "expected non-zero exit code" && exit 1
+          fi
+        shell: bash
+
+      - name: river unknown command (expect failure)
+        run: |
+          if river not-a-command; then
+            echo "expected non-zero exit code" && exit 1
+          fi
+        shell: bash
+
+      #
+      # Run the whole migration loop again, this time with a custom schema.
+      #
+
+      - run: echo "CUSTOM_SCHEMA=custom_schema" >> $GITHUB_ENV
+        shell: bash
+
+      - run: psql -c "CREATE SCHEMA $CUSTOM_SCHEMA" $DATABASE_URL
+        shell: bash
+
+      - run: river migrate-up --database-url $DATABASE_URL --schema $CUSTOM_SCHEMA
+        shell: bash
+
+      - run: river validate --database-url $DATABASE_URL --schema $CUSTOM_SCHEMA
+        shell: bash
+
+      - run: river migrate-down --database-url $DATABASE_URL --max-steps 100 --schema $CUSTOM_SCHEMA
+        shell: bash
+
+      - name: river validate (expect failure)
+        run: |
+          if river validate --database-url $DATABASE_URL --schema $CUSTOM_SCHEMA; then
+            echo "expected non-zero exit code" && exit 1
+          fi
+        shell: bash
+
+      #
+      # Run the whole migration loop again, this time for SQLite.
+      #
+
+      - run: echo "SQLITE_DATABASE_URL=sqlite://river_dev.sqlite3" >> $GITHUB_ENV
+        shell: bash
+
+      - run: river migrate-up --database-url $SQLITE_DATABASE_URL
+        shell: bash
+
+      - run: river validate --database-url $SQLITE_DATABASE_URL
+        shell: bash
+
+      - run: river migrate-down --database-url $SQLITE_DATABASE_URL --max-steps 100
+        shell: bash
+
+      - name: river validate (expect failure)
+        run: |
+          if river validate --database-url $SQLITE_DATABASE_URL; then
+            echo "expected non-zero exit code" && exit 1
+          fi
+        shell: bash
+
+      - run: river migrate-get --down --version 3 --database-url $SQLITE_DATABASE_URL
+        shell: bash
+
+      - run: river migrate-get --up --version 3 --database-url $SQLITE_DATABASE_URL
+        shell: bash
+
+  golangci:
+    name: lint
+    runs-on: ubuntu-latest
+    env:
+      GOLANGCI_LINT_VERSION: v2.13.1
+    permissions:
+      contents: read
+      # allow read access to pull request. Use with `only-new-issues` option.
+      pull-requests: read
+
+    steps:
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "stable"
+          check-latest: true
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          # golangci-lint needs to be run separately for every Go module, and
+          # its GitHub Action doesn't provide any way to do that. Have it fetch
+          # the golangci-lint binary, trick it into not running by sending only
+          # `--help`, then run the full set of lints below. DO NOT run separate
+          # modules as separate golangci-lint-action steps. Its post run caching
+          # can be extremely slow, and that's amplified in a very painful way if
+          # it needs to be run multiple times.
+          args: --help
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+
+      - name: Run lint
+        run: make lint
+
+  migration_and_sqlc_verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup sqlc
+        uses: sqlc-dev/setup-sqlc@v5
+        with:
+          sqlc-version: "1.31.0"
+
+      - name: Verify migrations match
+        run: |
+          echo "Make sure migration directories are the same"
+          make verify/migrations
+
+      - name: Verify sqlc generated code
+        run: |
+          echo "Make sure that all sqlc changes are checked in"
+          make verify/sqlc
+
+  submodule_check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "stable"
+          check-latest: true
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Check all go/toolchain directives match
+        run: CHECK=true make update-mod-go

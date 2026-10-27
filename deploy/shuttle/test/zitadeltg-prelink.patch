@@ -1,0 +1,824 @@
+--- a/internal/app/config.go
++++ b/internal/app/config.go
+@@ -79,6 +79,7 @@
+ }
+ 
+ type BotConfig struct {
++	Prelink      PrelinkConfig
+ 	ID           string
+ 	Secret       string
+ 	Name         string
+@@ -157,13 +158,14 @@
+ }
+ 
+ type rawBotConfig struct {
+-	Token            string `yaml:"token"`
+-	Name             string `yaml:"name"`
+-	Lang             string `yaml:"lang"`
+-	RequestWrite     bool   `yaml:"write"`
+-	RequestPhone     bool   `yaml:"phone"`
+-	RequestWriteLong bool   `yaml:"request_write"`
+-	RequestPhoneLong bool   `yaml:"request_phone"`
++	Prelink          PrelinkConfig `yaml:"prelink"`
++	Token            string        `yaml:"token"`
++	Name             string        `yaml:"name"`
++	Lang             string        `yaml:"lang"`
++	RequestWrite     bool          `yaml:"write"`
++	RequestPhone     bool          `yaml:"phone"`
++	RequestWriteLong bool          `yaml:"request_write"`
++	RequestPhoneLong bool          `yaml:"request_phone"`
+ }
+ 
+ type rawConfigPresence struct {
+@@ -291,7 +293,9 @@
+ 		&raw.Aliases.TelegramClockSkew,
+ 	}
+ 	for i := range raw.Bots {
+-		fields = append(fields, &raw.Bots[i].Token, &raw.Bots[i].Name, &raw.Bots[i].Lang)
++		fields = append(fields, &raw.Bots[i].Token, &raw.Bots[i].Name, &raw.Bots[i].Lang,
++			&raw.Bots[i].Prelink.Endpoint, &raw.Bots[i].Prelink.Audience, &raw.Bots[i].Prelink.ServiceBearer,
++			&raw.Bots[i].Prelink.OrganizationID, &raw.Bots[i].Prelink.ProviderID)
+ 	}
+ 	for i := range raw.Proxy.TrustedCIDRs {
+ 		fields = append(fields, &raw.Proxy.TrustedCIDRs[i])
+@@ -589,7 +593,11 @@
+ 		if name == "" {
+ 			name = "bot-" + id
+ 		}
++		if err := validatePrelink(rawBot.Prelink, cfg, secret); err != nil {
++			return Config{}, fmt.Errorf("bots[%d].prelink: %w", i, err)
++		}
+ 		cfg.Bots = append(cfg.Bots, BotConfig{
++			Prelink:      rawBot.Prelink,
+ 			ID:           id,
+ 			Secret:       secret,
+ 			Name:         name,
+--- a/internal/app/server.go
++++ b/internal/app/server.go
+@@ -43,6 +43,7 @@
+ 	signer        *Signer
+ 	telegram      *TelegramValidator
+ 	proxyClient   *http.Client
++	prelinkClient *http.Client
+ 	loginPage     *template.Template
+ 	botsByID      map[string]BotConfig
+ 	loginLimits   *requestLimiter
+@@ -62,7 +63,18 @@
+ 	if cfg.JWT.Audience == "" {
+ 		return nil, errors.New("JWT audience is required")
+ 	}
++	for _, bot := range cfg.Bots {
++		if err := validatePrelink(bot.Prelink, cfg, bot.Secret); err != nil {
++			return nil, err
++		}
++	}
+ 	httpClient = withDefaultHTTPTimeout(httpClient)
++	prelinkClient := *httpClient
++	if prelinkClient.Timeout <= 0 || prelinkClient.Timeout > prelinkRequestTimeout {
++		prelinkClient.Timeout = prelinkRequestTimeout
++	}
++	prelinkClient.Jar = nil
++	prelinkClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+ 	logger := slog.Default()
+ 	if len(loggers) > 0 && loggers[0] != nil {
+ 		logger = loggers[0]
+@@ -91,6 +103,7 @@
+ 		signer:        signer,
+ 		telegram:      telegram,
+ 		proxyClient:   proxyClient,
++		prelinkClient: &prelinkClient,
+ 		loginPage:     loginPage,
+ 		botsByID:      bots,
+ 		loginLimits:   newRequestLimiter(cfg.RateLimit.Login),
+@@ -354,18 +367,28 @@
+ 		slog.Bool("username_present", user.PreferredUsername != ""),
+ 		slog.Bool("phone_present", user.PhoneNumber != ""),
+ 	)
++	if err := s.prelinkTelegram(r.Context(), bot, user); err != nil {
++		s.logger.Warn("Telegram prelink failed", requestAttrs(r, slog.String("bot_id", botID), slog.Any("error", err))...)
++		status := http.StatusServiceUnavailable
++		if errors.Is(err, errPrelinkDenied) {
++			status = http.StatusForbidden
++		}
++		s.error(w, status, "could not link Telegram account")
++		return
++	}
+ 	jwt, err := s.issueZitadelJWT(bot, user)
+ 	if err != nil {
+ 		s.logger.Error("issue zitadel jwt failed", requestAttrs(r, slog.String("bot_id", botID), slog.Any("error", err))...)
+ 		s.error(w, http.StatusInternalServerError, "could not issue JWT")
+ 		return
+ 	}
++	_, emailVerified := s.relayEmailPolicy(bot)
+ 	s.debugRequest(r, "zitadel relay jwt issued",
+ 		slog.String("bot_id", botID),
+ 		slog.String("issuer", s.cfg.Issuer),
+ 		slog.String("audience", s.cfg.JWT.Audience),
+ 		slog.String("key_id", s.cfg.JWT.KeyID),
+-		slog.Bool("email_verified", s.cfg.SyntheticEmailVerified),
++		slog.Bool("email_verified", emailVerified),
+ 	)
+ 	if err := s.proxyToZitadel(w, r, jwt, state.Query); err != nil {
+ 		s.logger.Error("zitadel relay failed", requestAttrs(r, slog.String("bot_id", botID), slog.Any("error", err))...)
+@@ -406,6 +429,7 @@
+ 	if authTime > now.Unix() {
+ 		authTime = now.Unix()
+ 	}
++	emailDomain, emailVerified := s.relayEmailPolicy(bot)
+ 	claims := map[string]any{
+ 		"iss":                             s.cfg.Issuer,
+ 		"sub":                             "telegram:" + bot.ID + ":" + userID,
+@@ -418,8 +442,8 @@
+ 		"given_name":                      givenName,
+ 		"family_name":                     familyName,
+ 		"preferred_username":              username,
+-		"email":                           telegramIdentityEmail(bot.ID, telegramID, s.cfg.EmailDomain),
+-		"email_verified":                  s.cfg.SyntheticEmailVerified,
++		"email":                           telegramIdentityEmail(bot.ID, telegramID, emailDomain),
++		"email_verified":                  emailVerified,
+ 		"urn:zitadeltg:telegram:bot_id":   bot.ID,
+ 		"urn:zitadeltg:telegram:bot_name": bot.Name,
+ 		"urn:zitadeltg:telegram:subject":  userID,
+@@ -1301,3 +1325,11 @@
+ 	w.WriteHeader(status)
+ 	s.writeBytes(w, []byte(message+"\n"), http.StatusText(status))
+ }
++
++// relayEmailPolicy keeps opt-in linking independent of other bots' email settings.
++func (s *Server) relayEmailPolicy(bot BotConfig) (string, bool) {
++	if bot.Prelink != (PrelinkConfig{}) {
++		return "telegram.invalid", true
++	}
++	return s.cfg.EmailDomain, s.cfg.SyntheticEmailVerified
++}
+--- /dev/null
++++ b/internal/app/prelink.go
+@@ -0,0 +1,269 @@
++package app
++
++import (
++	"bytes"
++	"context"
++	"crypto/sha256"
++	"encoding/base64"
++	"encoding/hex"
++	"encoding/json"
++	"errors"
++	"io"
++	"net/http"
++	"net/url"
++	"slices"
++	"strconv"
++	"strings"
++	"time"
++	"unicode"
++	"unicode/utf8"
++)
++
++const (
++	prelinkLifetime       = time.Minute
++	prelinkSkew           = 5 * time.Second
++	prelinkTimeout        = 8 * time.Second
++	prelinkRequestTimeout = 3 * time.Second
++	prelinkRetryDelay     = 150 * time.Millisecond
++	prelinkAttempts       = 3
++	prelinkResponseLimit  = 16 << 10
++	prelinkFieldLimit     = 200
++	prelinkPath           = "/internal/identity/telegram-prelink"
++)
++
++var (
++	errPrelinkDenied      = errors.New("Telegram account linking denied")
++	errPrelinkUnavailable = errors.New("Telegram account linking unavailable")
++	errPrelinkReceipt     = errors.New("Telegram account linking receipt mismatch")
++)
++
++// PrelinkConfig is per bot so other provider clients retain their existing flow.
++// Only a configured backend can acknowledge a completed identity link.
++type PrelinkConfig struct {
++	Endpoint       string `yaml:"endpoint"`
++	Audience       string `yaml:"audience"`
++	ServiceBearer  string `yaml:"service_bearer"`
++	OrganizationID string `yaml:"organization_id"`
++	ProviderID     string `yaml:"provider_id"`
++}
++
++func validatePrelink(p PrelinkConfig, cfg Config, botSecret string) error {
++	if p == (PrelinkConfig{}) {
++		return nil
++	}
++	endpoint, err := url.Parse(p.Endpoint)
++	if err != nil || len(p.Endpoint) > 2048 || endpoint.Scheme != "https" || endpoint.Hostname() == "" ||
++		endpoint.User != nil || endpoint.RawQuery != "" || endpoint.ForceQuery || endpoint.Fragment != "" ||
++		endpoint.Opaque != "" || endpoint.Path != prelinkPath || endpoint.RawPath != "" {
++		return errors.New("prelink requires the exact HTTPS backend endpoint")
++	}
++	for _, value := range []string{p.Audience, p.OrganizationID, p.ProviderID} {
++		if !prelinkText(value) {
++			return errors.New("prelink audience, organization and provider required")
++		}
++	}
++	key, err := base64.RawURLEncoding.Strict().DecodeString(p.ServiceBearer)
++	if err != nil || len(key) != 32 || base64.RawURLEncoding.EncodeToString(key) != p.ServiceBearer || p.ServiceBearer == botSecret ||
++		p.Audience == cfg.JWT.Audience {
++		return errors.New("prelink requires dedicated key and audience")
++	}
++	return nil
++}
++
++func prelinkText(value string) bool {
++	return value != "" && len(value) <= prelinkFieldLimit && utf8.ValidString(value) &&
++		!strings.ContainsFunc(value, func(r rune) bool { return unicode.IsControl(r) || unicode.IsSpace(r) })
++}
++
++type prelinkIntent struct {
++	Assertion, JTI, BotID, UserID, Opaque, Issuer, Digest string
++	ExpiresAt                                             time.Time
++}
++
++func (s *Server) prelinkIntent(bot BotConfig, user TelegramUser, now time.Time) (prelinkIntent, error) {
++	numeric, err := canonicalTelegramID(user.TelegramID)
++	if err != nil || !prelinkText(user.Subject) || len("telegram:"+bot.ID+":"+user.Subject) > prelinkFieldLimit {
++		return prelinkIntent{}, errPrelinkDenied
++	}
++	botID, err := canonicalTelegramID(bot.ID)
++	if err != nil || botID != bot.ID {
++		return prelinkIntent{}, errPrelinkDenied
++	}
++	issued := now.Unix()
++	expires := now.Add(prelinkLifetime).Unix()
++	if user.ExpiresAt <= 0 {
++		return prelinkIntent{}, errPrelinkDenied
++	}
++	expires = min(expires, user.ExpiresAt)
++	if expires <= issued {
++		return prelinkIntent{}, errPrelinkDenied
++	}
++	jti, err := randomID()
++	if err != nil {
++		return prelinkIntent{}, errPrelinkUnavailable
++	}
++	given, family := zitadelProfileNames(user)
++	claims := map[string]any{
++		"iss": s.cfg.Issuer, "aud": bot.Prelink.Audience, "sub": "telegram:" + bot.ID + ":" + user.Subject,
++		"jti": jti, "iat": issued, "nbf": now.Add(-prelinkSkew).Unix(), "exp": expires,
++		"urn:zinusya:purpose": "telegram-prelink", "urn:zitadeltg:telegram:bot_id": bot.ID,
++		"urn:zitadeltg:telegram:user_id": numeric, "urn:zitadeltg:telegram:subject": user.Subject,
++		"email": telegramIdentityEmail(bot.ID, numeric, "telegram.invalid"), "email_verified": true,
++		"given_name": given, "family_name": family, "preferred_username": user.PreferredUsername,
++	}
++	assertion, err := s.signer.Sign(claims)
++	if err != nil {
++		return prelinkIntent{}, errPrelinkUnavailable
++	}
++	digest := sha256.Sum256([]byte(assertion))
++	return prelinkIntent{Assertion: assertion, JTI: jti, BotID: bot.ID, UserID: numeric, Opaque: user.Subject,
++		Issuer: s.cfg.Issuer, Digest: hex.EncodeToString(digest[:]), ExpiresAt: time.Unix(expires, 0).UTC()}, nil
++}
++
++// prelinkTelegram runs only after Telegram signature/nonce verification. Retries
++// retain one compact assertion; a new browser login may reconcile with a new JTI.
++func (s *Server) prelinkTelegram(ctx context.Context, bot BotConfig, user TelegramUser) error {
++	if bot.Prelink == (PrelinkConfig{}) {
++		return nil
++	}
++	intent, err := s.prelinkIntent(bot, user, time.Now())
++	if err != nil {
++		return err
++	}
++	body, err := json.Marshal(map[string]string{"assertion": intent.Assertion})
++	if err != nil {
++		return errPrelinkUnavailable
++	}
++	ctx, cancel := context.WithTimeout(ctx, prelinkTimeout)
++	defer cancel()
++	ctx, expire := context.WithDeadline(ctx, intent.ExpiresAt)
++	defer expire()
++	for attempt := 0; attempt < prelinkAttempts; attempt++ {
++		retry, err := s.sendPrelink(ctx, bot.Prelink, intent, body)
++		if err == nil {
++			return nil
++		}
++		if !retry || attempt+1 == prelinkAttempts {
++			return err
++		}
++		timer := time.NewTimer(prelinkRetryDelay)
++		select {
++		case <-ctx.Done():
++			timer.Stop()
++			return errPrelinkUnavailable
++		case <-timer.C:
++		}
++	}
++	return errPrelinkUnavailable
++}
++
++func (s *Server) sendPrelink(ctx context.Context, cfg PrelinkConfig, intent prelinkIntent, body []byte) (bool, error) {
++	if !intent.ExpiresAt.After(time.Now()) {
++		return false, errPrelinkDenied
++	}
++	request, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.Endpoint, bytes.NewReader(body))
++	if err != nil {
++		return false, errPrelinkUnavailable
++	}
++	request.Header.Set("Authorization", "Bearer "+cfg.ServiceBearer)
++	request.Header.Set("Content-Type", "application/json")
++	response, err := s.prelinkClient.Do(request)
++	if err != nil {
++		return true, errPrelinkUnavailable
++	}
++	defer response.Body.Close()
++	raw, readErr := io.ReadAll(io.LimitReader(response.Body, prelinkResponseLimit+1))
++	if readErr != nil {
++		return true, errPrelinkUnavailable
++	}
++	if len(raw) > prelinkResponseLimit {
++		return false, errPrelinkReceipt
++	}
++	if response.StatusCode >= 500 {
++		return true, errPrelinkUnavailable
++	}
++	if response.StatusCode != http.StatusOK {
++		return false, errPrelinkDenied
++	}
++	receipt, err := decodePrelinkReceipt(raw)
++	if err != nil {
++		return false, errPrelinkReceipt
++	}
++	if !receipt.matches(cfg, intent, time.Now()) {
++		return false, errPrelinkReceipt
++	}
++	return false, nil
++}
++
++type prelinkReceipt struct {
++	OperationID     string    `json:"operation_id"`
++	AssertionSHA256 string    `json:"assertion_sha256"`
++	State           string    `json:"state"`
++	Issuer          string    `json:"issuer"`
++	AssertionJTI    string    `json:"assertion_jti"`
++	BotID           int64     `json:"bot_id"`
++	TelegramUserID  int64     `json:"telegram_user_id"`
++	ExternalSubject string    `json:"external_subject"`
++	UserID          string    `json:"user_id"`
++	Subject         string    `json:"subject"`
++	Organization    string    `json:"organization"`
++	ProviderID      string    `json:"provider_id"`
++	ExpiresAt       time.Time `json:"expires_at"`
++}
++
++func (r prelinkReceipt) matches(cfg PrelinkConfig, intent prelinkIntent, now time.Time) bool {
++	return r.State == "completed" && validPrelinkUUID(r.OperationID) && validPrelinkUUID(r.UserID) && prelinkText(r.Subject) &&
++		r.AssertionSHA256 == intent.Digest && r.Issuer == intent.Issuer && r.AssertionJTI == intent.JTI &&
++		strconv.FormatInt(r.BotID, 10) == intent.BotID && strconv.FormatInt(r.TelegramUserID, 10) == intent.UserID &&
++		r.ExternalSubject == intent.Opaque && r.Organization == cfg.OrganizationID && r.ProviderID == cfg.ProviderID &&
++		r.ExpiresAt.Equal(intent.ExpiresAt) && r.ExpiresAt.After(now)
++}
++
++func validPrelinkUUID(value string) bool {
++	if len(value) != 36 || value[8] != '-' || value[13] != '-' || value[18] != '-' || value[23] != '-' {
++		return false
++	}
++	raw, err := hex.DecodeString(strings.ReplaceAll(value, "-", ""))
++	return err == nil && len(raw) == 16 && !bytes.Equal(raw, make([]byte, 16))
++}
++
++// Decode exact receipt fields; duplicates and case aliases cannot select values.
++func decodePrelinkReceipt(raw []byte) (prelinkReceipt, error) {
++	var receipt prelinkReceipt
++	if !utf8.Valid(raw) {
++		return receipt, errPrelinkReceipt
++	}
++	decoder := json.NewDecoder(bytes.NewReader(raw))
++	token, err := decoder.Token()
++	if err != nil || token != json.Delim('{') {
++		return receipt, errPrelinkReceipt
++	}
++	allowed := []string{"operation_id", "assertion_sha256", "state", "issuer", "assertion_jti", "bot_id",
++		"telegram_user_id", "external_subject", "user_id", "subject", "organization", "provider_id", "expires_at"}
++	seen := make(map[string]bool)
++	for decoder.More() {
++		token, err = decoder.Token()
++		if err != nil {
++			return receipt, errPrelinkReceipt
++		}
++		name, ok := token.(string)
++		if !ok || seen[name] || !slices.Contains(allowed, name) {
++			return receipt, errPrelinkReceipt
++		}
++		seen[name] = true
++		var ignored json.RawMessage
++		if decoder.Decode(&ignored) != nil {
++			return receipt, errPrelinkReceipt
++		}
++	}
++	if _, err = decoder.Token(); err != nil {
++		return receipt, errPrelinkReceipt
++	}
++	if _, err = decoder.Token(); !errors.Is(err, io.EOF) {
++		return receipt, errPrelinkReceipt
++	}
++	if len(seen) != len(allowed) || json.Unmarshal(raw, &receipt) != nil {
++		return receipt, errPrelinkReceipt
++	}
++	return receipt, nil
++}
+--- /dev/null
++++ b/internal/app/prelink_test.go
+@@ -0,0 +1,332 @@
++package app
++
++import (
++	"bytes"
++	"context"
++	"crypto/sha256"
++	"encoding/base64"
++	"encoding/hex"
++	"encoding/json"
++	"errors"
++	"io"
++	"log/slog"
++	"net/http"
++	"net/http/cookiejar"
++	"net/http/httptest"
++	"net/url"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/golang-jwt/jwt/v5"
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++)
++
++type prelinkFlow struct {
++	server        *Server
++	telegram, idp *Signer
++	config        Config
++	backend       func(*http.Request, map[string]any, int) (*http.Response, error)
++	calls, relays int
++	bodies        []string
++	relayJWT      string
++	logs          bytes.Buffer
++}
++
++func newPrelinkFlow(t *testing.T) *prelinkFlow {
++	t.Helper()
++	f := &prelinkFlow{telegram: newTestSigner(t, "telegram-key"), idp: newTestSigner(t, "provider-key")}
++	f.config = testConfig("https://telegram.test/jwks", "https://zitadel.test/idps/jwt")
++	f.config.SyntheticEmailVerified = true
++	f.config.Zitadel.RedirectOrigins = []string{"https://zitadel.test"}
++	f.config.Bots[0].Prelink = PrelinkConfig{
++		Endpoint: "https://zinusya.test" + prelinkPath, Audience: "zinusya-prelink",
++		OrganizationID: "org", ProviderID: "fixture-idp",
++		ServiceBearer: base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)),
++	}
++	client := fakeHTTPClient(func(req *http.Request) (*http.Response, error) {
++		switch req.URL.Host {
++		case "telegram.test":
++			return jsonHTTPResponse(200, f.telegram.JWKS()), nil
++		case "zinusya.test":
++			f.calls++
++			assert.Equal(t, http.MethodPost, req.Method)
++			assert.Equal(t, prelinkPath, req.URL.Path)
++			assert.Equal(t, "Bearer "+f.config.Bots[0].Prelink.ServiceBearer, req.Header.Get("Authorization"))
++			assert.Empty(t, req.Header.Get("Cookie"))
++			assert.Empty(t, req.Header.Get(f.config.Zitadel.JWTHeader))
++			raw, err := io.ReadAll(req.Body)
++			if err != nil {
++				return nil, err
++			}
++			f.bodies = append(f.bodies, string(raw))
++			receipt, err := f.matchingReceipt(raw)
++			if err != nil {
++				return nil, err
++			}
++			if f.backend != nil {
++				return f.backend(req, receipt, f.calls)
++			}
++			return jsonHTTPResponse(200, receipt), nil
++		case "zitadel.test":
++			f.relays++
++			f.relayJWT = req.Header.Get(f.config.Zitadel.JWTHeader)
++			assert.Empty(t, req.Header.Get("Authorization"))
++			return &http.Response{StatusCode: 302, Header: http.Header{"Location": []string{"/done"}}, Body: io.NopCloser(strings.NewReader(""))}, nil
++		default:
++			return nil, errors.New("unexpected destination")
++		}
++	})
++	jar, err := cookiejar.New(nil)
++	require.NoError(t, err)
++	origin, err := url.Parse("https://zinusya.test")
++	require.NoError(t, err)
++	jar.SetCookies(origin, []*http.Cookie{{Name: "private_cookie", Value: "must-not-leak", Secure: true}})
++	client.Jar = jar
++	client.Timeout = time.Minute
++	f.server, err = NewServer(t.Context(), f.config, f.idp, client, slog.New(slog.NewTextHandler(&f.logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
++	require.NoError(t, err)
++	return f
++}
++
++func (f *prelinkFlow) matchingReceipt(raw []byte) (map[string]any, error) {
++	var request struct {
++		Assertion string `json:"assertion"`
++	}
++	if json.Unmarshal(raw, &request) != nil {
++		return nil, errors.New("fixture malformed request")
++	}
++	claims := jwt.MapClaims{}
++	parsed, err := jwt.ParseWithClaims(request.Assertion, claims, func(*jwt.Token) (any, error) { return &f.idp.private.PublicKey, nil },
++		jwt.WithValidMethods([]string{"RS256"}), jwt.WithIssuer(f.config.Issuer), jwt.WithAudience("zinusya-prelink"))
++	if err != nil || !parsed.Valid {
++		return nil, errors.New("fixture invalid provider proof")
++	}
++	if claims["urn:zinusya:purpose"] != "telegram-prelink" || claims["urn:zitadeltg:telegram:user_id"] != "777000" ||
++		claims["urn:zitadeltg:telegram:subject"] != "actual-opaque-not-777000" || claims["sub"] != "telegram:123456789:actual-opaque-not-777000" {
++		return nil, errors.New("fixture proof scope mismatch")
++	}
++	issued, expires := int64(claims["iat"].(float64)), int64(claims["exp"].(float64))
++	if expires-issued > 60 || expires <= issued {
++		return nil, errors.New("fixture invalid proof lifetime")
++	}
++	digest := sha256.Sum256([]byte(request.Assertion))
++	return map[string]any{
++		"operation_id": "11111111-1111-4111-8111-111111111111", "user_id": "22222222-2222-4222-8222-222222222222",
++		"subject": "fixture-iam-subject", "state": "completed", "issuer": f.config.Issuer,
++		"assertion_sha256": hex.EncodeToString(digest[:]), "assertion_jti": claims["jti"],
++		"bot_id": int64(123456789), "telegram_user_id": int64(777000), "external_subject": "actual-opaque-not-777000",
++		"organization": "org", "provider_id": "fixture-idp", "expires_at": time.Unix(expires, 0).UTC(),
++	}, nil
++}
++
++func (f *prelinkFlow) callback(t *testing.T, alter func(map[string]any), ctx context.Context) *httptest.ResponseRecorder {
++	t.Helper()
++	bot := f.config.Bots[0]
++	return f.callbackBot(t, bot, alter, ctx)
++}
++
++func (f *prelinkFlow) callbackBot(t *testing.T, bot BotConfig, alter func(map[string]any), ctx context.Context) *httptest.ResponseRecorder {
++	t.Helper()
++	login := httptest.NewRecorder()
++	f.server.ServeHTTP(login, httptest.NewRequest(http.MethodGet, "https://idp.example.test/login/"+bot.ID+"?requestID=fixture", nil))
++	require.Equal(t, 200, login.Code, login.Body.String())
++	cookies := login.Result().Cookies()
++	require.Len(t, cookies, 1)
++	state := loginStateFromHTML(t, login.Body.String())
++	verified, err := verifyState(bot, state, time.Now(), f.config.StateTTL)
++	require.NoError(t, err)
++	now := time.Now()
++	claims := map[string]any{"iss": defaultTelegramIssuer, "aud": bot.ID, "sub": "actual-opaque-not-777000", "id": 777000,
++		"iat": now.Unix(), "exp": now.Add(time.Hour).Unix(), "nonce": verified.Nonce, "given_name": "Alice", "family_name": "Fixture"}
++	if alter != nil {
++		alter(claims)
++	}
++	token, err := f.telegram.Sign(claims)
++	require.NoError(t, err)
++	body := url.Values{"id_token": []string{token}, "state": []string{state}}
++	request := httptest.NewRequest(http.MethodPost, "https://idp.example.test/auth/telegram/"+bot.ID, strings.NewReader(body.Encode())).WithContext(ctx)
++	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
++	request.AddCookie(cookies[0])
++	response := httptest.NewRecorder()
++	f.server.ServeHTTP(response, request)
++	return response
++}
++
++func TestPrelinkCompletesBeforeDistinctIAMRelay(t *testing.T) {
++	f := newPrelinkFlow(t)
++	response := f.callback(t, nil, t.Context())
++	require.Equal(t, 303, response.Code, response.Body.String())
++	require.Equal(t, 1, f.calls)
++	require.Equal(t, 1, f.relays)
++	claims := jwt.MapClaims{}
++	parsed, err := jwt.ParseWithClaims(f.relayJWT, claims, func(*jwt.Token) (any, error) { return &f.idp.private.PublicKey, nil }, jwt.WithAudience(f.config.JWT.Audience))
++	require.NoError(t, err)
++	require.True(t, parsed.Valid)
++	require.NotContains(t, claims, "urn:zinusya:purpose")
++	require.NotContains(t, f.logs.String(), f.config.Bots[0].Prelink.ServiceBearer)
++	require.NotContains(t, f.logs.String(), f.bodies[0])
++}
++
++func TestPrelinkLostCompletionReplyRetriesIdenticalProof(t *testing.T) {
++	f := newPrelinkFlow(t)
++	f.backend = func(_ *http.Request, receipt map[string]any, attempt int) (*http.Response, error) {
++		if attempt == 1 {
++			return nil, io.ErrUnexpectedEOF
++		}
++		return jsonHTTPResponse(200, receipt), nil
++	}
++	response := f.callback(t, nil, t.Context())
++	require.Equal(t, 303, response.Code, response.Body.String())
++	require.Equal(t, 2, f.calls)
++	require.Equal(t, f.bodies[0], f.bodies[1])
++	require.Equal(t, 1, f.relays)
++}
++
++func TestPrelinkFailureWithholdsIAMRelay(t *testing.T) {
++	for _, tc := range []struct {
++		name             string
++		status, attempts int
++	}{
++		{"invalid service key", 401, 1}, {"revoked", 403, 1}, {"conflicting binding", 409, 1},
++		{"redirect", 302, 1}, {"IAM outage", 503, 3},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			f := newPrelinkFlow(t)
++			f.backend = func(_ *http.Request, _ map[string]any, _ int) (*http.Response, error) {
++				response := jsonHTTPResponse(tc.status, map[string]string{"error": "not accepted"})
++				response.Header.Set("Location", "https://other.test/steal")
++				return response, nil
++			}
++			response := f.callback(t, nil, t.Context())
++			require.Contains(t, []int{403, 503}, response.Code, response.Body.String())
++			require.Equal(t, tc.attempts, f.calls)
++			require.Zero(t, f.relays)
++			require.Empty(t, f.relayJWT)
++			for _, body := range f.bodies {
++				require.Equal(t, f.bodies[0], body)
++			}
++		})
++	}
++}
++
++func TestPrelinkMismatchedReceiptNeverRelays(t *testing.T) {
++	cases := map[string]any{
++		"state": "pending", "issuer": "https://other.test", "assertion_jti": "other", "assertion_sha256": "bad-hash",
++		"bot_id": 123, "telegram_user_id": 456, "external_subject": "777000", "organization": "other", "provider_id": "other",
++		"expires_at": time.Now().Add(time.Hour), "operation_id": "not-a-uuid", "user_id": "00000000-0000-0000-0000-000000000000", "subject": "",
++	}
++	for field, value := range cases {
++		t.Run(field, func(t *testing.T) {
++			f := newPrelinkFlow(t)
++			f.backend = func(_ *http.Request, receipt map[string]any, _ int) (*http.Response, error) {
++				receipt[field] = value
++				return jsonHTTPResponse(200, receipt), nil
++			}
++			response := f.callback(t, nil, t.Context())
++			require.Equal(t, 503, response.Code, response.Body.String())
++			require.Equal(t, 1, f.calls)
++			require.Zero(t, f.relays)
++		})
++	}
++}
++
++func TestPrelinkMalformedReceiptNeverRelays(t *testing.T) {
++	for _, kind := range []string{"malformed", "duplicate", "case alias", "extra value", "oversized"} {
++		t.Run(kind, func(t *testing.T) {
++			f := newPrelinkFlow(t)
++			f.backend = func(_ *http.Request, receipt map[string]any, _ int) (*http.Response, error) {
++				raw, _ := json.Marshal(receipt)
++				switch kind {
++				case "malformed":
++					raw = []byte(`{`)
++				case "duplicate":
++					raw = []byte(strings.TrimSuffix(string(raw), "}") + `,"state":"completed"}`)
++				case "case alias":
++					raw = []byte(strings.Replace(string(raw), `"state":`, `"State":`, 1))
++				case "extra value":
++					raw = append(raw, []byte(` {}`)...)
++				case "oversized":
++					raw = bytes.Repeat([]byte{'x'}, prelinkResponseLimit+1)
++				}
++				return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(raw))}, nil
++			}
++			response := f.callback(t, nil, t.Context())
++			require.Equal(t, 503, response.Code, response.Body.String())
++			require.Zero(t, f.relays)
++		})
++	}
++}
++
++func TestPrelinkInvalidTelegramProofNeverCallsBackend(t *testing.T) {
++	for _, field := range []string{"aud", "iss", "nonce"} {
++		t.Run(field, func(t *testing.T) {
++			f := newPrelinkFlow(t)
++			response := f.callback(t, func(claims map[string]any) { claims[field] = "invalid" }, t.Context())
++			require.Equal(t, 401, response.Code, response.Body.String())
++			require.Zero(t, f.calls)
++			require.Zero(t, f.relays)
++		})
++	}
++}
++
++func TestPrelinkCancellationStopsRetriesAndRelay(t *testing.T) {
++	f := newPrelinkFlow(t)
++	ctx, cancel := context.WithCancel(t.Context())
++	defer cancel()
++	f.backend = func(_ *http.Request, _ map[string]any, _ int) (*http.Response, error) {
++		cancel()
++		return nil, io.ErrUnexpectedEOF
++	}
++	response := f.callback(t, nil, ctx)
++	require.Equal(t, 503, response.Code, response.Body.String())
++	require.Equal(t, 1, f.calls)
++	require.Zero(t, f.relays)
++}
++
++func TestPrelinkRejectsExpiredBackendResponse(t *testing.T) {
++	f := newPrelinkFlow(t)
++	f.backend = func(_ *http.Request, receipt map[string]any, _ int) (*http.Response, error) {
++		time.Sleep(1100 * time.Millisecond)
++		return jsonHTTPResponse(200, receipt), nil
++	}
++	// Invoke the post-Telegram boundary directly; the source proof expires in 1s.
++	err := f.server.prelinkTelegram(t.Context(), f.config.Bots[0], TelegramUser{
++		Subject: "actual-opaque-not-777000", TelegramID: "777000", GivenName: "Alice", ExpiresAt: time.Now().Add(time.Second).Unix(),
++	})
++	require.Error(t, err)
++}
++
++func TestPrelinkEmailPolicyDoesNotChangeOtherBots(t *testing.T) {
++	f := newPrelinkFlow(t)
++	cfg := f.config
++	cfg.EmailDomain = "example.com"
++	cfg.SyntheticEmailVerified = false
++	other := cfg.Bots[0]
++	other.ID = "987654321"
++	other.Prelink = PrelinkConfig{}
++	cfg.Bots = append(append([]BotConfig(nil), cfg.Bots...), other)
++	var err error
++	f.server, err = NewServer(t.Context(), cfg, f.idp, f.server.proxyClient, slog.New(slog.NewTextHandler(io.Discard, nil)))
++	require.NoError(t, err)
++	for _, tc := range []struct {
++		bot      BotConfig
++		domain   string
++		verified bool
++	}{
++		{cfg.Bots[0], "telegram.invalid", true},
++		{other, "example.com", false},
++	} {
++		response := f.callbackBot(t, tc.bot, nil, t.Context())
++		require.Equal(t, 303, response.Code, response.Body.String())
++		claims := jwt.MapClaims{}
++		parsed, err := jwt.ParseWithClaims(f.relayJWT, claims, func(*jwt.Token) (any, error) { return &f.idp.private.PublicKey, nil }, jwt.WithAudience(cfg.JWT.Audience))
++		require.NoError(t, err)
++		require.True(t, parsed.Valid)
++		require.Equal(t, telegramIdentityEmail(tc.bot.ID, "777000", tc.domain), claims["email"])
++		require.Equal(t, tc.verified, claims["email_verified"])
++	}
++	require.Equal(t, 1, f.calls)
++	require.Equal(t, 2, f.relays)
++}
+--- /dev/null
++++ b/internal/app/prelink_config_test.go
+@@ -0,0 +1,61 @@
++package app
++
++import (
++	"bytes"
++	"encoding/base64"
++	"strings"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func prelinkConfigYAML() string {
++	return `issuer: https://idp.test/tg
++email_domain: example.com
++synthetic_email_verified: false
++zitadel:
++  jwt_endpoint: https://zitadel.test/idps/jwt
++jwt:
++  audience: iam-relay
++bots:
++  - token: 123456789:telegram-secret
++    prelink:
++      endpoint: https://zinusya.test/internal/identity/telegram-prelink
++      audience: zinusya-prelink
++      organization_id: fixture-org
++      provider_id: fixture-idp
++      service_bearer: ${PRELINK_TEST_KEY}
++  - token: 987654321:other-secret
++`
++}
++
++func TestPrelinkConfigIsPerBotAndExpandsSecret(t *testing.T) {
++	key := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{3}, 32))
++	t.Setenv("PRELINK_TEST_KEY", key)
++	cfg, err := ParseConfig([]byte(prelinkConfigYAML()))
++	require.NoError(t, err)
++	require.Equal(t, key, cfg.Bots[0].Prelink.ServiceBearer)
++	require.Equal(t, "fixture-org", cfg.Bots[0].Prelink.OrganizationID)
++	require.Equal(t, PrelinkConfig{}, cfg.Bots[1].Prelink)
++}
++
++func TestPrelinkConfigRejectsIncompleteOrUnsafeTrust(t *testing.T) {
++	key := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{3}, 32))
++	t.Setenv("PRELINK_TEST_KEY", key)
++	for _, tc := range []struct{ name, old, new string }{
++		{"plaintext", "https://zinusya.test/internal/identity/telegram-prelink", "http://zinusya.test/internal/identity/telegram-prelink"},
++		{"wrong path", "/internal/identity/telegram-prelink", "/internal/admin/tools"},
++		{"userinfo", "https://zinusya.test", "https://secret-do-not-print@zinusya.test"},
++		{"query", "https://zinusya.test/internal/identity/telegram-prelink", "https://zinusya.test/internal/identity/telegram-prelink?secret-do-not-print"},
++		{"partial", "      organization_id: fixture-org\n", ""},
++		{"shared audience", "audience: zinusya-prelink", "audience: iam-relay"},
++		{"short key", "${PRELINK_TEST_KEY}", "secret-do-not-print"},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			_, err := ParseConfig([]byte(strings.Replace(prelinkConfigYAML(), tc.old, tc.new, 1)))
++			require.Error(t, err)
++			require.NotContains(t, err.Error(), key)
++			require.NotContains(t, err.Error(), "secret-do-not-print")
++		})
++	}
++}

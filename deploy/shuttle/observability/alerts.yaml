@@ -1,0 +1,105 @@
+# One expected deployment target. Change job/instance together with Alloy.
+groups:
+  - name: zinusya
+    interval: 30s
+    rules:
+      - alert: ZinusyaScrapeUnavailable
+        expr: |
+          (up{job="integrations/zinusya",instance="complynx.net"} == 0)
+          or absent(up{job="integrations/zinusya",instance="complynx.net"})
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: Zinusya metrics target is unavailable
+          description: Check the bot, Alloy target and private network. Missing telemetry does not prove that the bot stopped.
+
+      - alert: ZinusyaTasksSnapshotUnavailable
+        expr: |
+          (up{job="integrations/zinusya",instance="complynx.net"} == 1)
+          unless on(job, instance)
+          (
+            (zinusya_tasks_collection_success{job="integrations/zinusya",instance="complynx.net"} == 1)
+            and (zinusya_tasks_last_success_timestamp_seconds{job="integrations/zinusya",instance="complynx.net"} > 0)
+            and (zinusya_tasks_last_success_timestamp_seconds{job="integrations/zinusya",instance="complynx.net"} > time() - 120)
+            and (zinusya_tasks_snapshot_age_seconds{job="integrations/zinusya",instance="complynx.net"} <= 120)
+          )
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: Zinusya task snapshot is unavailable or stale
+          description: Check private metrics and PostgreSQL acquisition/query health. Missing task counts are not zero backlog.
+
+      - alert: ZinusyaOutboxSnapshotUnavailable
+        expr: |
+          (up{job="integrations/zinusya",instance="complynx.net"} == 1)
+          unless on(job, instance)
+          (
+            (zinusya_outbox_collection_success{job="integrations/zinusya",instance="complynx.net"} == 1)
+            and (zinusya_outbox_last_success_timestamp_seconds{job="integrations/zinusya",instance="complynx.net"} > 0)
+            and (zinusya_outbox_last_success_timestamp_seconds{job="integrations/zinusya",instance="complynx.net"} > time() - 120)
+            and (zinusya_outbox_snapshot_age_seconds{job="integrations/zinusya",instance="complynx.net"} <= 120)
+          )
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: Zinusya outbox snapshot is unavailable or stale
+          description: Check private metrics and PostgreSQL acquisition/query health. Missing delivery counts are not zero backlog.
+
+      - alert: ZinusyaQueueSnapshotUnavailable
+        expr: |
+          (up{job="integrations/zinusya",instance="complynx.net"} == 1)
+          unless on(job, instance)
+          (
+            (zinusya_queue_collection_success{job="integrations/zinusya",instance="complynx.net"} == 1)
+            and (zinusya_queue_last_success_timestamp_seconds{job="integrations/zinusya",instance="complynx.net"} > 0)
+            and (zinusya_queue_last_success_timestamp_seconds{job="integrations/zinusya",instance="complynx.net"} > time() - 120)
+            and (zinusya_queue_snapshot_age_seconds{job="integrations/zinusya",instance="complynx.net"} <= 120)
+          )
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: Zinusya queue snapshot is unavailable or stale
+          description: Check private metrics and PostgreSQL acquisition/query health. Missing queue counts are not an empty queue.
+
+      - alert: ZinusyaTaskUncertain
+        expr: |
+          (zinusya_tasks_unresolved{job="integrations/zinusya",instance="complynx.net",state=~"auth_unknown|delivery_unknown"} > 0)
+          and on(job, instance) (up{job="integrations/zinusya",instance="complynx.net"} == 1)
+          and on(job, instance) (zinusya_tasks_collection_success{job="integrations/zinusya",instance="complynx.net"} == 1)
+          and on(job, instance) (zinusya_tasks_last_success_timestamp_seconds{job="integrations/zinusya",instance="complynx.net"} > time() - 120)
+          and on(job, instance) (zinusya_tasks_last_success_timestamp_seconds{job="integrations/zinusya",instance="complynx.net"} > 0)
+          and on(job, instance) (zinusya_tasks_snapshot_age_seconds{job="integrations/zinusya",instance="complynx.net"} <= 120)
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: Zinusya has an uncertain task receipt
+          description: Inspect the saved task and original auth/delivery receipt. Do not replay uncertain actions or create a replacement run.
+
+      - alert: ZinusyaDeliveryUncertain
+        expr: |
+          (zinusya_outbox_unresolved{job="integrations/zinusya",instance="complynx.net",state="delivery_unknown"} > 0)
+          and on(job, instance) (up{job="integrations/zinusya",instance="complynx.net"} == 1)
+          and on(job, instance) (zinusya_outbox_collection_success{job="integrations/zinusya",instance="complynx.net"} == 1)
+          and on(job, instance) (zinusya_outbox_last_success_timestamp_seconds{job="integrations/zinusya",instance="complynx.net"} > time() - 120)
+          and on(job, instance) (zinusya_outbox_last_success_timestamp_seconds{job="integrations/zinusya",instance="complynx.net"} > 0)
+          and on(job, instance) (zinusya_outbox_snapshot_age_seconds{job="integrations/zinusya",instance="complynx.net"} <= 120)
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: Zinusya has an uncertain Telegram delivery
+          description: Check the original outbox receipt and actual chat before any resend. Task and outbox alerts may describe the same incident.
+
+      - alert: ZinusyaQueueOverdue
+        expr: |
+          (zinusya_queue_oldest_scheduled_age_seconds{job="integrations/zinusya",instance="complynx.net"} > 300)
+          and (zinusya_queue_due{job="integrations/zinusya",instance="complynx.net"} > 0)
+          and on(job, instance) (up{job="integrations/zinusya",instance="complynx.net"} == 1)
+          and on(job, instance) (zinusya_queue_collection_success{job="integrations/zinusya",instance="complynx.net"} == 1)
+          and on(job, instance) (zinusya_queue_last_success_timestamp_seconds{job="integrations/zinusya",instance="complynx.net"} > time() - 120)
+          and on(job, instance) (zinusya_queue_last_success_timestamp_seconds{job="integrations/zinusya",instance="complynx.net"} > 0)
+          and on(job, instance) (zinusya_queue_snapshot_age_seconds{job="integrations/zinusya",instance="complynx.net"} <= 120)
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: Zinusya has overdue queue work
+          description: Inspect scheduling, River promotion, worker capacity and dependencies. This measures scheduling lateness, not global progress or user-wait duration.

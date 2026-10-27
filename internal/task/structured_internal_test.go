@@ -1,0 +1,135 @@
+package task
+
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
+	"github.com/complynx/zns-chatbot/internal/db"
+	"github.com/complynx/zns-chatbot/internal/payments"
+	"github.com/complynx/zns-chatbot/internal/telegram"
+)
+
+func TestStructuredMenuWithoutAvailableCommandsKeepsInlineEntry(t *testing.T) {
+	t.Parallel()
+	for _, ru := range []bool{false, true} {
+		t.Run(structuredText(ru, "en", "ru"), func(t *testing.T) {
+			t.Parallel()
+			text := structuredText(ru, structuredWelcomeEN, structuredWelcomeRU)
+			out := structuredMenuOutput(intent{ChatID: 7, StructuredCommand: menuCommand}, text, ru,
+				"https://example.com/app/")
+			require.Len(t, out, 2)
+			var first, second telegram.SendMessageRequest
+			require.NoError(t, json.Unmarshal(out[0].Payload, &first))
+			require.NoError(t, json.Unmarshal(out[1].Payload, &second))
+			require.NotEmpty(t, strings.TrimSpace(first.Text))
+			require.NotEmpty(t, strings.TrimSpace(second.Text))
+			require.IsType(t, &telegram.ReplyKeyboardRemove{}, first.ReplyMarkup)
+			inline := second.ReplyMarkup.(*telegram.InlineKeyboardMarkup)
+			require.Equal(t, "https://example.com/app/", inline.InlineKeyboard[0][0].WebApp.URL)
+			require.Equal(t, strings.Fields(text), strings.Fields(first.Text+" "+second.Text))
+			require.NotEqual(t, out[0].DedupKey, out[1].DedupKey)
+		})
+	}
+}
+
+func TestStructuredPaymentShowsDepositAndFullDeadlines(t *testing.T) {
+	t.Parallel()
+	initial := time.Date(2030, time.May, 1, 18, 0, 0, 0, time.FixedZone("EEST", 3*60*60))
+	final := initial.AddDate(0, 0, 10)
+	pass := db.AccountPass{
+		InitialDueAt: initial,
+		FinalDueAt:   final,
+		DueAt:        initial,
+		Balance: payments.Balance{
+			PriceMinor:           10000,
+			RemainingMinor:       10000,
+			DepositRequiredMinor: 2000,
+			Currency:             "EUR",
+			CurrencyScale:        2,
+		},
+	}
+	text := structuredPaymentDeadlines(pass, "Europe/Helsinki", false)
+	require.Contains(t, text, "Remaining to secure deposit: 20.00 EUR")
+	require.Contains(t, text, "Deposit due: 2030-05-01 18:00 (Europe/Helsinki)")
+	require.Contains(t, text, "Full payment due: 2030-05-11 18:00 (Europe/Helsinki)")
+	pass.Balance.ConfirmedMinor = 500
+	require.Contains(t, structuredPaymentDeadlines(pass, "Europe/Helsinki", false), "15.00 EUR")
+	pass.Balance.DepositSatisfied = true
+	text = structuredPaymentDeadlines(pass, "Europe/Helsinki", false)
+	require.Contains(t, text, "Deposit confirmed.")
+	require.NotContains(t, text, "Deposit due:")
+	pass.Balance.ConfirmedMinor = pass.Balance.PriceMinor
+	pass.Balance.RemainingMinor = 0
+	pass.Balance.FullyPaid = true
+	require.Equal(t, "\nПолностью оплачен.", structuredPaymentDeadlines(pass, "Europe/Helsinki", true))
+}
+
+func TestStructuredPaginationCallbackIsOwnerBoundAndNeverAnApproval(t *testing.T) {
+	t.Parallel()
+	after := uuid.New()
+	out := structuredOutput(intent{ChatID: 7}, "Page", &after, true, "")
+	var payload telegram.SendMessageRequest
+	require.NoError(t, json.Unmarshal(out[0].Payload, &payload))
+	markup, ok := payload.ReplyMarkup.(*telegram.InlineKeyboardMarkup)
+	require.True(t, ok)
+	button := markup.InlineKeyboard[0][0]
+	require.Equal(t, "Следующая страница", button.Text)
+	update := telegram.Update{ID: 1, CallbackQuery: &telegram.CallbackQuery{From: telegram.User{ID: 7},
+		Message: &telegram.Message{Chat: telegram.Chat{ID: 7, Type: "private"}}, Data: button.CallbackData}}
+	raw, err := json.Marshal(update)
+	require.NoError(t, err)
+	request, err := normalize(update, raw)
+	require.NoError(t, err)
+	require.Equal(t, kindStructured, request.Kind)
+	require.Equal(t, "/registrations "+after.String(), request.Text)
+	require.Equal(t, uuid.Nil, request.CallbackTaskID)
+	update.CallbackQuery.Message.Chat.ID = 8
+	_, err = normalize(update, raw)
+	require.ErrorIs(t, err, ErrUnsupportedUpdate)
+	update.CallbackQuery.Message.Chat.ID = 7
+	update.CallbackQuery.Data = "r:not-a-cursor"
+	_, err = normalize(update, raw)
+	require.ErrorIs(t, err, ErrUnsupportedUpdate)
+}
+
+func TestMenuCommandsFollowAvailability(t *testing.T) {
+	t.Parallel()
+	for _, ru := range []bool{false, true} {
+		base := startCommands(ru, db.TelegramMenuAvailability{}, false)
+		require.Equal(t, []string{"menu", "profile", "name"}, commandNames(base))
+		all := startCommands(
+			ru,
+			db.TelegramMenuAvailability{
+				Registrations: true,
+				Register:      true,
+				Orders:        true,
+				Massage:       true,
+				Pairs:         true,
+				Payments:      true,
+			},
+			true,
+		)
+		require.Equal(
+			t,
+			[]string{"menu", "profile", "name", "registrations", "register", "orders", "massage", "avatar", "pairs", "payments"},
+			commandNames(all),
+		)
+		for _, c := range all {
+			require.NotEmpty(t, c.Description)
+		}
+	}
+	require.False(t, structuredCommand("/knowledge"))
+}
+
+func commandNames(commands []telegram.BotCommand) []string {
+	names := make([]string, 0, len(commands))
+	for _, c := range commands {
+		names = append(names, c.Command)
+	}
+	return names
+}

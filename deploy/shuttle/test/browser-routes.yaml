@@ -1,0 +1,91 @@
+tls:
+  certificates:
+    - certFile: /tls/tls.crt
+      keyFile: /tls/tls.key
+  options:
+    default:
+      minVersion: VersionTLS12
+      sniStrict: true
+http:
+  routers:
+    telegram-login:
+      entryPoints: [iam]
+      rule: "Host(`host.docker.internal`) && (Path(`/tg`) || PathPrefix(`/tg/`))"
+      priority: 100
+      middlewares: [iam-origin]
+      service: telegram-login
+      tls: {}
+    iam:
+      entryPoints: [iam]
+      rule: "Host(`host.docker.internal`)"
+      priority: 1
+      middlewares: [iam-origin]
+      service: iam
+      tls: {}
+    miniapp:
+      entryPoints: [app]
+      rule: "Host(`app.zinusya.localhost`) && (Path(`/app`) || PathPrefix(`/app/`))"
+      middlewares: [app-origin]
+      service: miniapp
+      tls: {}
+    telegram-prelink:
+      entryPoints: [identity]
+      rule: "Host(`identity.zinusya.localhost`) && Method(`POST`) && Path(`/internal/identity/telegram-prelink`)"
+      middlewares: [identity-origin]
+      service: telegram-prelink
+      tls: {}
+  middlewares:
+    iam-origin:
+      headers:
+        customRequestHeaders:
+          Host: host.docker.internal:18443
+          Forwarded: ""
+          X-Forwarded-Host: host.docker.internal:18443
+          X-Forwarded-Port: "18443"
+          X-Forwarded-Proto: https
+    app-origin:
+      headers:
+        customRequestHeaders:
+          Host: app.zinusya.localhost:18444
+          Forwarded: ""
+          X-Forwarded-Host: app.zinusya.localhost:18444
+          X-Forwarded-Port: "18444"
+          X-Forwarded-Proto: https
+    identity-origin:
+      headers:
+        customRequestHeaders:
+          Host: identity.zinusya.localhost:19443
+          Forwarded: ""
+          X-Forwarded-Host: identity.zinusya.localhost:19443
+          X-Forwarded-Port: "19443"
+          X-Forwarded-Proto: https
+  services:
+    iam:
+      loadBalancer:
+        passHostHeader: true
+        serversTransport: iam-tls
+        servers: [{url: "https://zitadel:8080"}]
+    telegram-login:
+      loadBalancer:
+        passHostHeader: true
+        servers: [{url: "http://zitadeltg:8080"}]
+    miniapp:
+      loadBalancer:
+        passHostHeader: true
+        servers: [{url: "http://shuttle:8080"}]
+    telegram-prelink:
+      loadBalancer:
+        passHostHeader: true
+        serversTransport: identity-timeouts
+        servers: [{url: "http://shuttle:9090"}]
+  serversTransports:
+    identity-timeouts:
+      forwardingTimeouts:
+        dialTimeout: 3s
+        responseHeaderTimeout: 8s
+    iam-tls:
+      serverName: host.docker.internal
+      rootCAs: [/tls/ca-bundle.pem]
+      forwardingTimeouts:
+        dialTimeout: 5s
+        responseHeaderTimeout: 30s

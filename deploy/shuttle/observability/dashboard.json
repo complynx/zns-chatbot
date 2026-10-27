@@ -1,0 +1,945 @@
+{
+  "id": null,
+  "uid": "zinusya-operations",
+  "title": "Zinusya operations",
+  "description": "Private operational telemetry. Select one datasource and deployment. No overall health, delivery, payment or business-latency guarantee. Snapshot panels require fresh successful samples; missing data is Unknown.",
+  "tags": [
+    "zinusya",
+    "operations"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "editable": true,
+  "graphTooltip": 1,
+  "links": [],
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "refresh": 1,
+        "current": {},
+        "options": []
+      },
+      {
+        "name": "instance",
+        "label": "Deployment instance",
+        "type": "custom",
+        "query": "complynx.net",
+        "current": {
+          "text": "complynx.net",
+          "value": "complynx.net",
+          "selected": true
+        },
+        "options": [
+          {
+            "text": "complynx.net",
+            "value": "complynx.net",
+            "selected": true
+          }
+        ],
+        "multi": false,
+        "includeAll": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Metrics scrape",
+      "description": "Monitoring availability only. No data means Unknown, not application health.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unknown",
+          "min": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Unavailable",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "Scrape up",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"integrations/zinusya\",instance=${instance:doublequote}}",
+          "legendFormat": "scrape",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "range": false,
+          "instant": true,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Current snapshot freshness",
+      "description": "Fresh requires successful collection, a nonzero last-success timestamp newer than 120s, age <=120s and up=1. Zero means unavailable/stale; no data means Unknown. Each family is independent.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 18,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unknown",
+          "min": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Unavailable",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "Fresh",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "((up{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1) and on(job, instance) (zinusya_tasks_collection_success{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1) and on(job, instance) (zinusya_tasks_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} > 0) and on(job, instance) (zinusya_tasks_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} > time() - 120) and on(job, instance) (zinusya_tasks_snapshot_age_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} <= 120)) or on(job, instance) (0 * up{job=\"integrations/zinusya\",instance=${instance:doublequote}})",
+          "legendFormat": "tasks",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "range": false,
+          "instant": true,
+          "editorMode": "code"
+        },
+        {
+          "refId": "B",
+          "expr": "((up{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1) and on(job, instance) (zinusya_outbox_collection_success{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1) and on(job, instance) (zinusya_outbox_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} > 0) and on(job, instance) (zinusya_outbox_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} > time() - 120) and on(job, instance) (zinusya_outbox_snapshot_age_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} <= 120)) or on(job, instance) (0 * up{job=\"integrations/zinusya\",instance=${instance:doublequote}})",
+          "legendFormat": "outbox",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "range": false,
+          "instant": true,
+          "editorMode": "code"
+        },
+        {
+          "refId": "C",
+          "expr": "((up{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1) and on(job, instance) (zinusya_queue_collection_success{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1) and on(job, instance) (zinusya_queue_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} > 0) and on(job, instance) (zinusya_queue_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} > time() - 120) and on(job, instance) (zinusya_queue_snapshot_age_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} <= 120)) or on(job, instance) (0 * up{job=\"integrations/zinusya\",instance=${instance:doublequote}})",
+          "legendFormat": "queue",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "range": false,
+          "instant": true,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Unresolved tasks",
+      "description": "Includes intentional user waits and uncertainty. Not runnable jobs or affected users. Values are hidden when the corresponding snapshot is unavailable or stale; gaps are not zeros.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unknown",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "spanNulls": false,
+            "showPoints": "never",
+            "fillOpacity": 5,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "zinusya_tasks_unresolved{job=\"integrations/zinusya\",instance=${instance:doublequote}} and on(job, instance) ((up{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1) and on(job, instance) (zinusya_tasks_collection_success{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1) and on(job, instance) (zinusya_tasks_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} > 0) and on(job, instance) (zinusya_tasks_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} > time() - 120) and on(job, instance) (zinusya_tasks_snapshot_age_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} <= 120))",
+          "legendFormat": "{{state}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Oldest task acceptance age",
+      "description": "Time since acceptance, including intentional waits. Not time in state or end-to-end latency. Values are hidden when the corresponding snapshot is unavailable or stale; gaps are not zeros.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Unknown",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "spanNulls": false,
+            "showPoints": "never",
+            "fillOpacity": 5,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "zinusya_tasks_oldest_accepted_age_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} and on(job, instance) ((up{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1) and on(job, instance) (zinusya_tasks_collection_success{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1) and on(job, instance) (zinusya_tasks_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} > 0) and on(job, instance) (zinusya_tasks_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} > time() - 120) and on(job, instance) (zinusya_tasks_snapshot_age_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} <= 120))",
+          "legendFormat": "{{state}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Unfinished outbox chunks",
+      "description": "Chunks, not messages or users. Task/outbox uncertainty may describe the same incident; do not sum them. Values are hidden when the corresponding snapshot is unavailable or stale; gaps are not zeros.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unknown",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "spanNulls": false,
+            "showPoints": "never",
+            "fillOpacity": 5,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "zinusya_outbox_unresolved{job=\"integrations/zinusya\",instance=${instance:doublequote}} and on(job, instance) ((up{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1) and on(job, instance) (zinusya_outbox_collection_success{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1) and on(job, instance) (zinusya_outbox_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} > 0) and on(job, instance) (zinusya_outbox_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} > time() - 120) and on(job, instance) (zinusya_outbox_snapshot_age_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} <= 120))",
+          "legendFormat": "{{state}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Oldest outbox creation age",
+      "description": "Time since creation of the oldest unfinished chunk. Not Telegram delivery latency. Values are hidden when the corresponding snapshot is unavailable or stale; gaps are not zeros.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Unknown",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "spanNulls": false,
+            "showPoints": "never",
+            "fillOpacity": 5,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "zinusya_outbox_oldest_created_age_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} and on(job, instance) ((up{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1) and on(job, instance) (zinusya_outbox_collection_success{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1) and on(job, instance) (zinusya_outbox_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} > 0) and on(job, instance) (zinusya_outbox_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} > time() - 120) and on(job, instance) (zinusya_outbox_snapshot_age_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} <= 120))",
+          "legendFormat": "{{state}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Due River jobs",
+      "description": "Only fixed due kind/state pairs. Excludes running and future-scheduled work. Not worker utilization. Values are hidden when the corresponding snapshot is unavailable or stale; gaps are not zeros.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unknown",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "spanNulls": false,
+            "showPoints": "never",
+            "fillOpacity": 5,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "zinusya_queue_due{job=\"integrations/zinusya\",instance=${instance:doublequote}} and on(job, instance) ((up{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1) and on(job, instance) (zinusya_queue_collection_success{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1) and on(job, instance) (zinusya_queue_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} > 0) and on(job, instance) (zinusya_queue_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} > time() - 120) and on(job, instance) (zinusya_queue_snapshot_age_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} <= 120))",
+          "legendFormat": "{{kind}} / {{state}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Oldest scheduling lateness",
+      "description": "Time past scheduled_at for due jobs, including overdue polls. Not global progress or business latency. Values are hidden when the corresponding snapshot is unavailable or stale; gaps are not zeros.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Unknown",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "spanNulls": false,
+            "showPoints": "never",
+            "fillOpacity": 5,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "zinusya_queue_oldest_scheduled_age_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} and on(job, instance) ((up{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1) and on(job, instance) (zinusya_queue_collection_success{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1) and on(job, instance) (zinusya_queue_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} > 0) and on(job, instance) (zinusya_queue_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} > time() - 120) and on(job, instance) (zinusya_queue_snapshot_age_seconds{job=\"integrations/zinusya\",instance=${instance:doublequote}} <= 120))",
+          "legendFormat": "{{kind}} / {{state}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "PostgreSQL pool connections",
+      "description": "Local pgx statistics, including the instance-lock connection. Pool counts do not prove database readiness or worker utilization.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unknown",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "spanNulls": false,
+            "showPoints": "never",
+            "fillOpacity": 5,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "zinusya_db_pool_acquired{job=\"integrations/zinusya\",instance=${instance:doublequote}} and on(job, instance) (up{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1)",
+          "legendFormat": "acquired",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        },
+        {
+          "refId": "B",
+          "expr": "zinusya_db_pool_idle{job=\"integrations/zinusya\",instance=${instance:doublequote}} and on(job, instance) (up{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1)",
+          "legendFormat": "idle",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        },
+        {
+          "refId": "C",
+          "expr": "zinusya_db_pool_total{job=\"integrations/zinusya\",instance=${instance:doublequote}} and on(job, instance) (up{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1)",
+          "legendFormat": "total",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        },
+        {
+          "refId": "D",
+          "expr": "zinusya_db_pool_max{job=\"integrations/zinusya\",instance=${instance:doublequote}} and on(job, instance) (up{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1)",
+          "legendFormat": "max",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Returned worker callbacks / second",
+      "description": "Normally returned Work callbacks, including callback-owned cleanup. Outcomes are callback classifications, not later River disposition or business completion.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 29,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "Unknown",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "spanNulls": false,
+            "showPoints": "never",
+            "fillOpacity": 5,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (kind, outcome) (rate(zinusya_worker_attempt_duration_seconds_count{job=\"integrations/zinusya\",instance=${instance:doublequote}}[$__rate_interval])) and on() (up{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1)",
+          "legendFormat": "{{kind}} / {{outcome}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Returned callback p95",
+      "description": "Histogram estimate for normally returned callbacks, aggregated by kind across outcomes. Not user response or task completion latency. No observations means undefined, never zero.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Unknown",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "spanNulls": false,
+            "showPoints": "never",
+            "fillOpacity": 5,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, kind) (rate(zinusya_worker_attempt_duration_seconds_bucket{job=\"integrations/zinusya\",instance=${instance:doublequote}}[$__rate_interval]))) and on() (up{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1)",
+          "legendFormat": "{{kind}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Positive introspection cache hit ratio",
+      "description": "Trusted JWTs only. Zero lookups gives an undefined ratio, not a zero hit rate. Cache disabled can legitimately produce misses. Not IAM availability.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "Unknown",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "spanNulls": false,
+            "showPoints": "never",
+            "fillOpacity": 5,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(sum(rate(zinusya_identity_positive_cache_lookups_total{job=\"integrations/zinusya\",instance=${instance:doublequote},outcome=\"hit\"}[$__rate_interval])) / sum(rate(zinusya_identity_positive_cache_lookups_total{job=\"integrations/zinusya\",instance=${instance:doublequote}}[$__rate_interval]))) and on() (up{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1)",
+          "legendFormat": "positive cache hits",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Unexpired credential fallback decisions / second",
+      "description": "Successful singleflight renewal decisions using an unexpired credential after a transient failure. Not caller count or all IAM failures.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 45,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "Unknown",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "spanNulls": false,
+            "showPoints": "never",
+            "fillOpacity": 5,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (kind) (rate(zinusya_identity_token_fallbacks_total{job=\"integrations/zinusya\",instance=${instance:doublequote}}[$__rate_interval])) and on() (up{job=\"integrations/zinusya\",instance=${instance:doublequote}} == 1)",
+          "legendFormat": "{{kind}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ]
+    }
+  ]
+}

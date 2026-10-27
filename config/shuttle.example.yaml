@@ -1,0 +1,54 @@
+# Supply credentials using SHUTTLE_DATABASE_URL, SHUTTLE_TELEGRAM_TOKEN,
+# SHUTTLE_TELEGRAM_WEBHOOK_SECRET and SHUTTLE_IDENTITY_* environment variables.
+# Env overrides YAML; runtime events, deadlines and business rules belong in DB.
+database_url: postgres://shuttle:example@localhost:5432/shuttle
+http_address: 127.0.0.1:8080
+internal_address: 127.0.0.1:9090
+http_timeout: 10s
+shutdown_timeout: 1s
+# Empty disables Mini App login. Set one exact HTTPS origin, with no trailing slash.
+mini_app_origin: ""
+# The launch link defaults to mini_app_origin + /app/. Production needs one URL.
+# Local real-Telegram redirect overrides belong only in test configuration;
+# see docs/shuttle-miniapp.md.
+# Empty fields disable the private provider prelink endpoint. Set all together.
+# Use SHUTTLE_TELEGRAM_PRELINK_* env variables for these startup values.
+# Audience must differ from IAM API/Loom audiences. The provider must use the same
+# dedicated 32-byte random base64url service key; never reuse another credential.
+# Enable only behind reviewed private TLS routing; browser ingress must not expose it.
+telegram_prelink:
+  issuer: ""
+  jwks_url: ""
+  audience: ""
+  provider_id: ""
+  service_bearer: ""
+avatar_executable: /usr/local/bin/zinusya-avatar
+telegram:
+  token: "123456:fake-placeholder"
+  base_url: https://api.telegram.org
+  webhook_secret: replace_with_random_secret
+loom:
+  base_url: https://loom.example.invalid
+identity:
+  issuer: https://accounts.example.invalid
+  organization_id: example-org
+  audience: example-loom-project
+  api_audience: example-zinusya-project
+  actor_id: example-service-user
+  actor_client_id: example-actor-client
+  actor_client_secret: replace-via-env
+  client_id: example-exchange-client
+  client_secret: replace-via-env
+  introspection_client_id: example-api-client
+  introspection_client_secret: replace-via-env
+otel:
+  # Empty disables export. An origin uses /v1/traces; an explicit path is preserved.
+  endpoint: ""
+  service_name: zinusya
+  sample_ratio: 0.1
+  max_queue_size: 256
+  timeout: 250ms
+
+# Optional persistent base64url (no padding)32-byte registration-details key.
+# Prefer SHUTTLE_REGISTRATION_DETAILS_KEY. Back up with PostgreSQL; no default.
+# registration_details_key: ""
