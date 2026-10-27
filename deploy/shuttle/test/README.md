@@ -195,6 +195,27 @@ allows at most five seconds before killing its processes. No reset/down-with-
 volumes command is supplied. Restart individual owned services with the same
 Compose file to test outages; do not stop shared production services.
 
+## Descriptor machine-token helper
+
+`descriptor_token.py` rotates credentials for a local descriptor. It makes only
+client-credentials and capability requests; it never starts a model run.
+Mount its script read-only, `/secrets/machine.json` read-only, a verified CA at
+`/tls/ca-bundle.pem`, and a private writable `/state` directory. Configuration
+fields are `token_url`, `client_id`, `client_secret`, `scope` and `subject`.
+Use the same dedicated principal as the descriptor; this helper grants no rights.
+
+Transient network failures and HTTP408/429/500/502/503/504 retry with bounded
+1–30 second backoff. Capability401 gets a short same-token propagation grace.
+Persistent authentication, TLS and contract failures stop the process. Retain a
+container restart policy for process crashes. Tokens publish only after verified
+`native_files` capability; failures preserve existing files and their expiry.
+Health must check both expiry and refresh age, not only file existence. Redirects
+and environment proxies are disabled. Logs contain no request or exception body.
+
+```powershell
+python -m unittest discover -s deploy/shuttle/test -p test_descriptor_token.py -v
+```
+
 Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot developer
 on behalf of Daniel Drizhuk
 
