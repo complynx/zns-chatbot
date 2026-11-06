@@ -17,6 +17,13 @@ existing error path.
 The agent decides whether content is payment evidence, avatar or casual media;
 no business classification is inferred from a menu or old waiting context.
 
+For captionless audio and voice messages, the recording is the current user
+message. The agent imports it and reads its transcript before answering, rather
+than answering an earlier text request. A caption controls the task, including
+an explicit request not to transcribe. Retained transcripts are reused;
+reprocessing requires an explicit request. Recorded or quoted speech grants no
+additional business authority or consent.
+
 Explicit avatar requests now use [the separate avatar module](shuttle-avatars.md)
 and its durable generated JPEGs.
 Original attachment bytes still depend on Telegram;
