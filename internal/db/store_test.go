@@ -20,12 +20,12 @@ import (
 
 func testStore(t *testing.T) *db.Store {
 	t.Helper()
-	dsn := os.Getenv("SHUTTLE_TEST_DATABASE_URL")
+	dsn := os.Getenv("ZNS_CHATBOT_TEST_DATABASE_URL")
 	if dsn == "" {
-		dsn = os.Getenv("SHUTTLE_TEST_DATABASE_DSN")
+		dsn = os.Getenv("ZNS_CHATBOT_TEST_DATABASE_DSN")
 	}
 	if dsn == "" {
-		t.Skip("SHUTTLE_TEST_DATABASE_URL is required for real PostgreSQL tests")
+		t.Skip("ZNS_CHATBOT_TEST_DATABASE_URL is required for real PostgreSQL tests")
 	}
 	ctx := context.Background()
 	p, e := pgxpool.New(ctx, dsn)

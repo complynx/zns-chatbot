@@ -644,12 +644,12 @@ type harness struct {
 
 func prepareHarness(t *testing.T, p *peers) *harness {
 	t.Helper()
-	dsn := os.Getenv("SHUTTLE_TEST_DATABASE_URL")
+	dsn := os.Getenv("ZNS_CHATBOT_TEST_DATABASE_URL")
 	if dsn == "" {
-		dsn = os.Getenv("SHUTTLE_TEST_DATABASE_DSN")
+		dsn = os.Getenv("ZNS_CHATBOT_TEST_DATABASE_DSN")
 	}
 	if dsn == "" {
-		t.Skip("SHUTTLE_TEST_DATABASE_URL required for PostgreSQL integration tests")
+		t.Skip("ZNS_CHATBOT_TEST_DATABASE_URL required for PostgreSQL integration tests")
 	}
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dsn)

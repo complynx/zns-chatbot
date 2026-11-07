@@ -1,5 +1,6 @@
-# Supply credentials using SHUTTLE_DATABASE_URL, SHUTTLE_TELEGRAM_TOKEN,
-# SHUTTLE_TELEGRAM_WEBHOOK_SECRET and SHUTTLE_IDENTITY_* environment variables.
+log_level: info # debug, info, warn or error; ZNS_CHATBOT_LOG_LEVEL overrides this.
+# Supply credentials using ZNS_CHATBOT_DATABASE_URL, ZNS_CHATBOT_TELEGRAM_TOKEN,
+# ZNS_CHATBOT_TELEGRAM_WEBHOOK_SECRET and ZNS_CHATBOT_IDENTITY_* environment variables.
 # Env overrides YAML; runtime events, deadlines and business rules belong in DB.
 # Validate locally with: shuttle -config config/shuttle.yaml -check-config
 # This does not connect to dependencies or validate their credentials.
@@ -14,7 +15,7 @@ mini_app_origin: ""
 # Local real-Telegram redirect overrides belong only in test configuration;
 # see docs/shuttle-miniapp.md.
 # Empty fields disable the private provider prelink endpoint. Set all together.
-# Use SHUTTLE_TELEGRAM_PRELINK_* env variables for these startup values.
+# Use ZNS_CHATBOT_TELEGRAM_PRELINK_* env variables for these startup values.
 # Audience must differ from IAM API/Loom audiences. The provider must use the same
 # dedicated 32-byte random base64url service key; never reuse another credential.
 # Enable only behind reviewed private TLS routing; browser ingress must not expose it.
@@ -33,7 +34,7 @@ loom:
   base_url: https://loom.example.invalid
 # Optional background descriptor in the main process, with its own machine identity.
 # The machine must issue JWT access tokens lasting at least six minutes.
-# Supply its secret only through SHUTTLE_DESCRIPTOR_CLIENT_SECRET.
+# Supply its secret only through ZNS_CHATBOT_DESCRIPTOR_CLIENT_SECRET.
 # descriptor:
 #   enabled: true
 #   journal: /data/descriptor-journal
@@ -61,5 +62,5 @@ otel:
   timeout: 250ms
 
 # Optional persistent base64url (no padding)32-byte registration-details key.
-# Prefer SHUTTLE_REGISTRATION_DETAILS_KEY. Back up with PostgreSQL; no default.
+# Prefer ZNS_CHATBOT_REGISTRATION_DETAILS_KEY. Back up with PostgreSQL; no default.
 # registration_details_key: ""

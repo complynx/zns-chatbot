@@ -93,7 +93,7 @@ services:
     image: shuttle-test-bot:local
     command: [-config, /etc/shuttle/config.yaml]
     env_file: [../../../config/shuttle.test.env]
-    environment: {SHUTTLE_TELEGRAM_WEBHOOK_SECRET: "${TEST_WEBHOOK_SECRET}", SHUTTLE_TELEGRAM_BASE_URL: "https://telegram.zinusya.localhost:8080", SSL_CERT_FILE: /tls/ca-bundle.pem}
+    environment: {ZNS_CHATBOT_TELEGRAM_WEBHOOK_SECRET: "${TEST_WEBHOOK_SECRET}", ZNS_CHATBOT_TELEGRAM_BASE_URL: "https://telegram.zinusya.localhost:8080", SSL_CERT_FILE: /tls/ca-bundle.pem}
     ports: ["127.0.0.1:18382:8080", "127.0.0.1:19382:9090"]
     labels: {clx.harness.service: "http://shuttle:9090/internal/agent/manifest"}
     volumes: ["../../../.cache/shuttle-live-test/shuttle.yaml:/etc/shuttle/config.yaml:ro", "../../../.cache/shuttle-live-test/ca-bundle.pem:/tls/ca-bundle.pem:ro"]

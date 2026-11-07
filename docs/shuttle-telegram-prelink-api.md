@@ -23,7 +23,7 @@ real Telegram or final IAM login-session acceptance.
 `telegram_prelink` in config.yaml has five fields: `issuer`, `jwks_url`,
 `audience`, `provider_id`, `service_bearer`. All empty disables the endpoint;
 partial configuration fails startup. Env overrides use
-`SHUTTLE_TELEGRAM_PRELINK_ISSUER`, `_JWKS_URL`, `_AUDIENCE`, `_PROVIDER_ID`,
+`ZNS_CHATBOT_TELEGRAM_PRELINK_ISSUER`, `_JWKS_URL`, `_AUDIENCE`, `_PROVIDER_ID`,
 `_SERVICE_BEARER`. Events and business settings still belong in DB.
 
 Issuer/JWKS must use HTTPS without credentials, query or fragment. Audience must

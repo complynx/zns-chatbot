@@ -80,6 +80,7 @@ type TelegramPrelink struct {
 }
 
 type Config struct {
+	LogLevel               string          `yaml:"log_level"`
 	Descriptor             Descriptor      `yaml:"descriptor"`
 	MiniAppLaunchURL       string          `yaml:"mini_app_launch_url"`
 	MiniAppAllowLocalHTTP  bool            `yaml:"mini_app_allow_local_http"`
@@ -100,6 +101,7 @@ type Config struct {
 
 func Load(path string) (Config, error) {
 	c := Config{
+		LogLevel:         "info",
 		AvatarExecutable: "/usr/local/bin/zinusya-avatar",
 		HTTPAddress:      "127.0.0.1:8080",
 		InternalAddress:  "127.0.0.1:9090",
@@ -128,6 +130,7 @@ func Load(path string) (Config, error) {
 		return Config{}, errors.New("startup configuration must contain one YAML document")
 	}
 	fields := map[string]*string{
+		"LOG_LEVEL":                            &c.LogLevel,
 		"DESCRIPTOR_CLIENT_SECRET":             &c.Descriptor.ClientSecret,
 		"TELEGRAM_PRELINK_ISSUER":              &c.TelegramPrelink.Issuer,
 		"TELEGRAM_PRELINK_JWKS_URL":            &c.TelegramPrelink.JWKSURL,
@@ -160,7 +163,7 @@ func Load(path string) (Config, error) {
 		"OTEL_SERVICE_NAME":                    &c.OTel.ServiceName,
 	}
 	for key, field := range fields {
-		if value, ok := os.LookupEnv("SHUTTLE_" + key); ok {
+		if value, ok := os.LookupEnv("ZNS_CHATBOT_" + key); ok {
 			*field = value
 		}
 	}
@@ -178,6 +181,9 @@ func Load(path string) (Config, error) {
 }
 
 func (c Config) Validate() error {
+	if !slices.Contains([]string{"debug", "info", "warn", "error"}, c.LogLevel) {
+		return errors.New("log_level must be debug, info, warn or error")
+	}
 	for _, check := range []func() error{
 		c.validateTimeouts,
 		c.validateListeners,
@@ -390,10 +396,10 @@ func (c Config) MiniAppURL() string {
 
 // applyTypedEnvironment preserves parsing order and keeps startup errors free of values.
 func applyTypedEnvironment(c *Config) error {
-	if value, ok := os.LookupEnv("SHUTTLE_LOOM_SKILLS_ENABLED"); ok {
+	if value, ok := os.LookupEnv("ZNS_CHATBOT_LOOM_SKILLS_ENABLED"); ok {
 		parsed, parseErr := strconv.ParseBool(value)
 		if parseErr != nil {
-			return errors.New("invalid SHUTTLE_LOOM_SKILLS_ENABLED")
+			return errors.New("invalid ZNS_CHATBOT_LOOM_SKILLS_ENABLED")
 		}
 		c.Loom.SkillsEnabled = parsed
 	}
@@ -402,32 +408,32 @@ func applyTypedEnvironment(c *Config) error {
 		"SHUTDOWN_TIMEOUT": &c.ShutdownTimeout,
 		"OTEL_TIMEOUT":     &c.OTel.Timeout,
 	} {
-		if value, ok := os.LookupEnv("SHUTTLE_" + key); ok {
+		if value, ok := os.LookupEnv("ZNS_CHATBOT_" + key); ok {
 			parsed, parseErr := time.ParseDuration(value)
 			if parseErr != nil {
-				return errors.New("invalid SHUTTLE_" + key)
+				return errors.New("invalid ZNS_CHATBOT_" + key)
 			}
 			*field = parsed
 		}
 	}
-	if value, ok := os.LookupEnv("SHUTTLE_MINI_APP_ALLOW_LOCAL_HTTP"); ok {
+	if value, ok := os.LookupEnv("ZNS_CHATBOT_MINI_APP_ALLOW_LOCAL_HTTP"); ok {
 		parsed, parseErr := strconv.ParseBool(value)
 		if parseErr != nil {
-			return errors.New("invalid SHUTTLE_MINI_APP_ALLOW_LOCAL_HTTP")
+			return errors.New("invalid ZNS_CHATBOT_MINI_APP_ALLOW_LOCAL_HTTP")
 		}
 		c.MiniAppAllowLocalHTTP = parsed
 	}
-	if value, ok := os.LookupEnv("SHUTTLE_OTEL_SAMPLE_RATIO"); ok {
+	if value, ok := os.LookupEnv("ZNS_CHATBOT_OTEL_SAMPLE_RATIO"); ok {
 		parsed, parseErr := strconv.ParseFloat(value, 64)
 		if parseErr != nil {
-			return errors.New("invalid SHUTTLE_OTEL_SAMPLE_RATIO")
+			return errors.New("invalid ZNS_CHATBOT_OTEL_SAMPLE_RATIO")
 		}
 		c.OTel.SampleRatio = parsed
 	}
-	if value, ok := os.LookupEnv("SHUTTLE_OTEL_MAX_QUEUE_SIZE"); ok {
+	if value, ok := os.LookupEnv("ZNS_CHATBOT_OTEL_MAX_QUEUE_SIZE"); ok {
 		parsed, parseErr := strconv.Atoi(value)
 		if parseErr != nil {
-			return errors.New("invalid SHUTTLE_OTEL_MAX_QUEUE_SIZE")
+			return errors.New("invalid ZNS_CHATBOT_OTEL_MAX_QUEUE_SIZE")
 		}
 		c.OTel.MaxQueueSize = parsed
 	}

@@ -16,7 +16,7 @@ unchanged. This describes the assistant without replacing Loom's system prompt.
 
 Telemetry defaults use zinusya, with zinusya.operations and zinusya.http metrics.
 Update dashboard selectors at rollout. Configured service_name still overrides
-the default. Existing SHUTTLE_* startup variables, cmd/shuttle, deploy/shuttle,
+the default. Existing ZNS_CHATBOT_* startup variables, cmd/shuttle, deploy/shuttle,
 config/shuttle.* and document names remain rewrite artifacts and compatibility
 paths. Historical QA reports retain their recorded identities and build hashes.
 

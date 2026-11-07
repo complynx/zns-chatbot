@@ -317,7 +317,7 @@ class GuardHandler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     try:
-        token = os.environ["SHUTTLE_TELEGRAM_TOKEN"].strip()
+        token = os.environ["ZNS_CHATBOT_TELEGRAM_TOKEN"].strip()
         if token.split(":", 1)[0] != os.environ.get("TEST_TELEGRAM_BOT_ID", "6087685431"):
             raise ValueError()
         recipient = int(os.environ["TEST_TELEGRAM_USER_ID"])

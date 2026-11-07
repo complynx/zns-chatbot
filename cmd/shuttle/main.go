@@ -38,31 +38,29 @@ const (
 )
 
 func main() {
-	logger := newLogger(os.Stdout)
-	slog.SetDefault(logger)
-	if err := run(logger); err != nil {
+	logger := newLogger(os.Stdout, "info")
+	if err := run(os.Stdout); err != nil {
 		logger.Error("application stopped", "error", err.Error())
 		os.Exit(1)
 	}
 }
 
-func newLogger(output io.Writer) *slog.Logger {
-	options := &slog.HandlerOptions{}
-	if os.Getenv("SHUTTLE_LOG_LEVEL") == "debug" {
-		options.Level = slog.LevelDebug
-	}
+func newLogger(output io.Writer, level string) *slog.Logger {
+	var threshold slog.Level
+	_ = threshold.UnmarshalText([]byte(level))
+	options := &slog.HandlerOptions{Level: threshold}
 	return slog.New(observability.WithTraceContext(slog.NewJSONHandler(output, options)))
 }
 
-func run(logger *slog.Logger) error {
-	err := runArgs(logger, os.Args[1:])
+func run(output io.Writer) error {
+	err := runArgs(output, os.Args[1:])
 	if errors.Is(err, flag.ErrHelp) {
 		return nil
 	}
 	return err
 }
 
-func runArgs(logger *slog.Logger, args []string) error {
+func runArgs(output io.Writer, args []string) error {
 	flags := flag.NewFlagSet("shuttle", flag.ContinueOnError)
 	path := flags.String("config", "config/shuttle.yaml", "Startup YAML path")
 	migrate := flags.Bool("migrate", false, "Apply database migrations and exit")
@@ -77,6 +75,8 @@ func runArgs(logger *slog.Logger, args []string) error {
 	if err != nil {
 		return err
 	}
+	logger := newLogger(output, c.LogLevel)
+	slog.SetDefault(logger)
 	if *check {
 		logger.Info("startup configuration valid; dependencies and database not checked")
 		return nil

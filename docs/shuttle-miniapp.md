@@ -15,7 +15,7 @@ may offer a retry without implying that the user must sign in again.
 ## Enablement
 
 The origin contract is configured through `mini_app_origin` in the
-startup YAML, or `SHUTTLE_MINI_APP_ORIGIN`, to one exact HTTPS origin such as
+startup YAML, or `ZNS_CHATBOT_MINI_APP_ORIGIN`, to one exact HTTPS origin such as
 `https://app.example.invalid`. An empty value disables all `/app/` routes.
 Use lowercase hostnames, omit the default HTTPS port, and include no trailing
 slash, path, query or credentials. Noncanonical hostname case and explicit `:443`
@@ -29,8 +29,8 @@ the routes does not configure BotFather or prove a Telegram WebView launch.
 
 ## Local Telegram launch redirect
 
-Environment overrides are `SHUTTLE_MINI_APP_ORIGIN`,
-`SHUTTLE_MINI_APP_LAUNCH_URL` and `SHUTTLE_MINI_APP_ALLOW_LOCAL_HTTP`.
+Environment overrides are `ZNS_CHATBOT_MINI_APP_ORIGIN`,
+`ZNS_CHATBOT_MINI_APP_LAUNCH_URL` and `ZNS_CHATBOT_MINI_APP_ALLOW_LOCAL_HTTP`.
 An explicit false environment value overrides a true YAML flag. These are startup
 parameters; changing them requires an application restart.
 

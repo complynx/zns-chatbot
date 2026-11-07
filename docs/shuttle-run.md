@@ -1,11 +1,11 @@
 # Developer workflow
 
-Use the Go toolchain pinned by go.mod. The application keeps typed startup configuration and secrets separate from durable business settings. Copy the example for a private developer configuration and supply the required SHUTTLE_* secret environment variables. Do not commit the populated configuration.
+Use the Go toolchain pinned by go.mod. The application keeps typed startup configuration and secrets separate from durable business settings. Copy the example for a private developer configuration and supply the required ZNS_CHATBOT_* secret environment variables. Do not commit the populated configuration.
 
 ```sh
 cp config/shuttle.example.yaml config/shuttle.yaml
 go build -o /tmp/zinusya-avatar ./cmd/zinusya-avatar
-SHUTTLE_AVATAR_EXECUTABLE=/tmp/zinusya-avatar go run ./cmd/shuttle -config config/shuttle.yaml -migrate
+ZNS_CHATBOT_AVATAR_EXECUTABLE=/tmp/zinusya-avatar go run ./cmd/shuttle -config config/shuttle.yaml -migrate
 ```
 
 Apply migrations explicitly before ordinary startup. After the schema is ready, run the same application command without -migrate. The avatar renderer is a separate trusted executable; its absolute path must be available before processing. Startup validates bot/IAM identity and the database binding. One application instance owns its task schema; the instance lease requires at least two task-pool connections.
@@ -14,7 +14,7 @@ Webhook registration is an operator action, never an automatic startup mutation.
 
 ## Tests and builds
 
-Set SHUTTLE_TEST_DATABASE_URL to a disposable PostgreSQL database owned by the runner. Tests create isolated schemas. Use a focused test selection while changing a contract; required CI checks cover the complete supported packages. Race checks need CGO and a C compiler; the release binary uses CGO disabled.
+Set ZNS_CHATBOT_TEST_DATABASE_URL to a disposable PostgreSQL database owned by the runner. Tests create isolated schemas. Use a focused test selection while changing a contract; required CI checks cover the complete supported packages. Race checks need CGO and a C compiler; the release binary uses CGO disabled.
 
 ```sh
 go test -parallel 4 ./cmd/... ./internal/... ./migrations/... ./integration/...

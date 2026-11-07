@@ -74,7 +74,7 @@ The standalone CLI remains available for operator recovery and explicit runs.
 Do not run it against a journal already owned by the embedded worker.
 
 The Go worker can obtain and renew its own machine token. Configure `descriptor`
-with `subject` and `client_id`, supply `SHUTTLE_DESCRIPTOR_CLIENT_SECRET`, and omit
+with `subject` and `client_id`, supply `ZNS_CHATBOT_DESCRIPTOR_CLIENT_SECRET`, and omit
 token-file flags. Configure that machine to issue JWT access tokens lasting at
 least six minutes. The worker verifies issuer, organization, audience and exact
 subject, caches the token in memory across slots and renews it before the next
@@ -118,7 +118,7 @@ applies only to reads; exhausted transient reads return to the worker's durable
 backoff. Acknowledged uploads remain journaled, and unknown Loom
 chat/upload outcomes still require reconciliation.
 
-For technical diagnostics, set `SHUTTLE_LOG_LEVEL=debug` on Shuttle or the
+For technical diagnostics, set `log_level: debug` in the startup YAML for Shuttle or the
 descriptor (`-debug` also enables descriptor diagnostics). Logs include task or
 procedure correlation, catalog counts, wait deadlines, preview positions,
 hashed file keys, attempts, durations and safe transport outcomes. They exclude

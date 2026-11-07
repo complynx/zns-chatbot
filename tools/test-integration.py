@@ -126,8 +126,8 @@ def main():
         partition([], args.shard_index, args.shard_count)
     except ValueError as error:
         parser.error(str(error))
-    if not (os.environ.get("SHUTTLE_TEST_DATABASE_URL") or os.environ.get("SHUTTLE_TEST_DATABASE_DSN")):
-        parser.error("SHUTTLE_TEST_DATABASE_URL is required; skips are not acceptance")
+    if not (os.environ.get("ZNS_CHATBOT_TEST_DATABASE_URL") or os.environ.get("ZNS_CHATBOT_TEST_DATABASE_DSN")):
+        parser.error("ZNS_CHATBOT_TEST_DATABASE_URL is required; skips are not acceptance")
     args.output.mkdir(parents=True, exist_ok=False)
     listing_code, listing_timeout = run_logged(
         ["go", "test", "-race", "-mod=readonly", "-list", "^Test", "./integration"],

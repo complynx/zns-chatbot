@@ -9,7 +9,7 @@ import (
 )
 
 func TestDescriptorSecretComesFromItsOwnEnvironment(t *testing.T) {
-	t.Setenv("SHUTTLE_DESCRIPTOR_CLIENT_SECRET", "synthetic-descriptor-secret")
+	t.Setenv("ZNS_CHATBOT_DESCRIPTOR_CLIENT_SECRET", "synthetic-descriptor-secret")
 	c, err := config.Load(configFile(t, "\ndescriptor:\n  subject: descriptor\n  client_id: descriptor-client\n"))
 	require.NoError(t, err)
 	require.Equal(t, "descriptor", c.Descriptor.Subject)

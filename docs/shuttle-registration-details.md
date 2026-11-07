@@ -59,7 +59,7 @@ The optional zinusya_registration_details module exposes get, set_legal_name, se
 
 Configure a persistent, randomly generated32-byte secret as unpadded canonical
 base64url in `registration_details_key`, preferably through the secret environment
-variable `SHUTTLE_REGISTRATION_DETAILS_KEY`. Environment overrides YAML. The key
+variable `ZNS_CHATBOT_REGISTRATION_DETAILS_KEY`. Environment overrides YAML. The key
 has no generated default. Invalid encodings/lengths fail startup without echoing
 the secret. Keep it with backups; removal disables the API, while changing the key
 without a data migration breaks decryption and exact write replay.

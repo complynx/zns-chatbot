@@ -14,15 +14,15 @@ import (
 func TestLoomSkillsEnvironmentOverride(t *testing.T) {
 	for _, enabled := range []string{"true", "false"} {
 		t.Run(enabled, func(t *testing.T) {
-			t.Setenv("SHUTTLE_LOOM_SKILLS_ENABLED", enabled)
+			t.Setenv("ZNS_CHATBOT_LOOM_SKILLS_ENABLED", enabled)
 			loaded, err := config.Load(configFile(t, ""))
 			require.NoError(t, err)
 			require.Equal(t, enabled == "true", loaded.Loom.SkillsEnabled)
 		})
 	}
-	t.Setenv("SHUTTLE_LOOM_SKILLS_ENABLED", "private-invalid-value")
+	t.Setenv("ZNS_CHATBOT_LOOM_SKILLS_ENABLED", "private-invalid-value")
 	_, err := config.Load(configFile(t, ""))
-	require.EqualError(t, err, "invalid SHUTTLE_LOOM_SKILLS_ENABLED")
+	require.EqualError(t, err, "invalid ZNS_CHATBOT_LOOM_SKILLS_ENABLED")
 }
 
 func TestLoomSkillsYAMLIsOptionalAndTyped(t *testing.T) {

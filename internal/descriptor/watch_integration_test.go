@@ -86,9 +86,9 @@ func (p *descriptorPeers) serve(w http.ResponseWriter, r *http.Request) {
 
 func descriptorStore(t *testing.T) *db.Store {
 	t.Helper()
-	dsn := os.Getenv("SHUTTLE_TEST_DATABASE_URL")
+	dsn := os.Getenv("ZNS_CHATBOT_TEST_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("SHUTTLE_TEST_DATABASE_URL required for isolated PostgreSQL")
+		t.Skip("ZNS_CHATBOT_TEST_DATABASE_URL required for isolated PostgreSQL")
 	}
 	admin, err := db.Open(t.Context(), dsn)
 	require.NoError(t, err)

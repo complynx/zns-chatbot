@@ -31,7 +31,7 @@ class IngressTests(unittest.TestCase):
                 if body['offset'] == 2:
                     raise SystemExit(0)
                 return {'result': [update]}
-            with patch.dict(os.environ, {'TEST_TELEGRAM_USER_ID': '10', 'SHUTTLE_TELEGRAM_TOKEN': '999:fake'}), \
+            with patch.dict(os.environ, {'TEST_TELEGRAM_USER_ID': '10', 'ZNS_CHATBOT_TELEGRAM_TOKEN': '999:fake'}), \
                     patch.object(poller, 'check_bot', return_value={'id': 999}), \
                     patch.object(poller, 'post', side_effect=post), \
                     patch.object(poller, 'save_offset', side_effect=save), \
@@ -119,7 +119,7 @@ class IngressTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as temporary:
                 cursor = Path(temporary) / 'offset'
                 base = 'http://127.0.0.1:' + str(server.server_port)
-                with patch.dict('os.environ', {'SHUTTLE_TELEGRAM_TOKEN': '999:fake', 'TEST_TELEGRAM_BOT_ID': '999', 'TEST_TELEGRAM_USER_ID': '10',
+                with patch.dict('os.environ', {'ZNS_CHATBOT_TELEGRAM_TOKEN': '999:fake', 'TEST_TELEGRAM_BOT_ID': '999', 'TEST_TELEGRAM_USER_ID': '10',
                       'TEST_WEBHOOK_URL': base + '/ingress', 'TEST_WEBHOOK_SECRET': 'fixture-secret'}), \
                      patch.object(poller.signal, 'signal', side_effect=lambda _, callback: callbacks.append(callback)), \
                      patch.object(poller, 'post', side_effect=post), \
@@ -191,7 +191,7 @@ class IngressTests(unittest.TestCase):
                 base = 'http://127.0.0.1:' + str(server.server_port) + '/'
                 cursor = Path(temporary) / 'offset'
                 cursor.write_text('50')
-                environment = {**os.environ, 'SHUTTLE_TELEGRAM_TOKEN': '999:fake', 'TEST_TELEGRAM_BOT_ID': '999',
+                environment = {**os.environ, 'ZNS_CHATBOT_TELEGRAM_TOKEN': '999:fake', 'TEST_TELEGRAM_BOT_ID': '999',
                     'TEST_TELEGRAM_USER_ID': '10', 'TEST_WEBHOOK_URL': base + 'ingress', 'TEST_WEBHOOK_SECRET': 'fixture-secret'}
                 command = [sys.executable, '-u', '-c',
                     'import sys; from pathlib import Path; import poller; poller.main(base=sys.argv[1], cursor=Path(sys.argv[2]))', base, str(cursor)]
