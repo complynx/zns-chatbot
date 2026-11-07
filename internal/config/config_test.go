@@ -20,6 +20,32 @@ func configFile(t *testing.T, suffix string) string {
 	require.NoError(t, os.WriteFile(path, append(data, []byte(suffix)...), 0600))
 	return path
 }
+
+func TestEmbeddedDescriptorStartupConfiguration(t *testing.T) {
+	for _, tc := range []struct {
+		name, fields string
+		valid        bool
+	}{
+		{name: "disabled without credentials", fields: "enabled: false", valid: true},
+		{name: "enabled without journal", fields: "enabled: true"},
+		{name: "default concurrency", fields: "enabled: true\n  journal: ./private-journal", valid: true},
+		{name: "bounded concurrency", fields: "enabled: true\n  journal: ./private-journal\n  concurrency: 4", valid: true},
+		{name: "excess concurrency", fields: "enabled: true\n  journal: ./private-journal\n  concurrency: 5"},
+		{name: "negative concurrency", fields: "enabled: true\n  journal: ./private-journal\n  concurrency: -1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("SHUTTLE_DESCRIPTOR_CLIENT_SECRET", "synthetic-secret")
+			suffix := "\ndescriptor:\n  " + tc.fields + "\n  subject: descriptor-subject\n  client_id: descriptor-client\n"
+			_, err := config.Load(configFile(t, suffix))
+			if tc.valid {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				require.NotContains(t, err.Error(), "synthetic-secret")
+			}
+		})
+	}
+}
 func TestStartupConfigOverridesAndBotNamespace(t *testing.T) {
 	t.Setenv("SHUTTLE_TELEGRAM_TOKEN", "789:another_fake_token")
 	t.Setenv("SHUTTLE_HTTP_TIMEOUT", "2s")

@@ -1,4 +1,5 @@
-package main
+//nolint:testpackage // Tests verify private IAM retry and journal state transitions.
+package descriptor
 
 import (
 	"context"

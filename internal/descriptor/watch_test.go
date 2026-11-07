@@ -1,4 +1,5 @@
-package main
+//nolint:testpackage // Durable queue internals and uncertain-effect markers are the test subject.
+package descriptor
 
 import (
 	"context"

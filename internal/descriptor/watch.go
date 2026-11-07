@@ -1,10 +1,11 @@
-package main
+package descriptor
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -29,17 +30,11 @@ const descriptorPoll = 2 * time.Second
 // watch reuses each one-entry procedure and its exact journal. Bounded slots
 // overlap independent entries; safe read retries retain the original generation.
 func watch(a arguments) error {
-	if a.journal == "" || a.kind != "" || a.id != "" {
-		return errors.New("watch requires a private journal root and no kind/id")
-	}
-	if err := os.MkdirAll(a.journal, 0700); err != nil {
+	lock, err := lockWorker(a)
+	if err != nil {
 		return err
 	}
-	lock, err := os.OpenFile(filepath.Join(a.journal, "worker.lock"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-	if err != nil {
-		return errors.New("descriptor worker owned or stale lock requires reconciliation")
-	}
-	defer func() { _ = lock.Close(); _ = os.Remove(lock.Name()) }()
+	defer releaseWorker(lock)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	d, err := connect(ctx, a)
@@ -254,7 +249,8 @@ func advanceEntry(ctx context.Context, a arguments, entry db.SymbolRecord,
 		if err = markBlocked(next.journal, stepErr); err != nil {
 			return false, err
 		}
-		fmt.Fprintln(os.Stderr, "descriptor entry requires reconciliation; original journal retained")
+		logger := slog.Default().With("component", "descriptor")
+		logger.WarnContext(ctx, "descriptor entry requires reconciliation; original journal retained")
 		return true, nil
 	}
 	if err = os.Remove(filepath.Join(next.journal, "retry.json")); err != nil && !errors.Is(err, os.ErrNotExist) {
