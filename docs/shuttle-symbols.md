@@ -63,6 +63,15 @@ do not grant it business authority. Run creation uses the configured account's
 model preferences. Normal intake records an unknown catalog entry; a separate
 explicitly enabled worker owns paid description work.
 
+The Go worker can obtain and renew its own machine token. Configure `descriptor`
+with `subject` and `client_id`, supply `SHUTTLE_DESCRIPTOR_CLIENT_SECRET`, and omit
+token-file flags. Configure that machine to issue JWT access tokens lasting at
+least six minutes. The worker verifies issuer, organization, audience and exact
+subject, caches the token in memory across slots and renews it before the next
+bounded five-minute procedure can outlive it. IAM outages use the existing retry
+path without replacing the original procedure. No token-helper process is needed.
+Explicit token-file flags retain the existing operator-managed/delegated mode.
+
 Before preparing a new agent request or control input, Shuttle waits for missing
 catalog descriptions for up to six minutes from the original durable intake time.
 The task snoozes without starting a model request; other conversations can proceed.

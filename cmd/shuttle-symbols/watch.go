@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/complynx/zns-chatbot/internal/db"
+	"github.com/complynx/zns-chatbot/internal/identity"
 	"github.com/complynx/zns-chatbot/internal/loom"
 	"github.com/complynx/zns-chatbot/internal/symboldescribe"
 	"github.com/complynx/zns-chatbot/internal/telegram"
@@ -323,7 +324,8 @@ func transientDescriptorRead(cause error) bool {
 	if readErr, ok := errors.AsType[*descriptorCatalogReadError](cause); ok {
 		return transientCatalogRead(readErr.error)
 	}
-	if errors.Is(cause, context.DeadlineExceeded) || errors.Is(cause, telegram.ErrFileUnavailable) {
+	if errors.Is(cause, context.DeadlineExceeded) || errors.Is(cause, telegram.ErrFileUnavailable) ||
+		errors.Is(cause, identity.ErrUnavailable) {
 		return true
 	}
 	if tg, ok := errors.AsType[*telegram.Error](cause); ok {

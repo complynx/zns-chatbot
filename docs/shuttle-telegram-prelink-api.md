@@ -40,15 +40,13 @@ keys or accessing DB. It rejects browser Origin/Fetch-Site requests, emits no CO
 permission and uses `Cache-Control: no-store`. No service secret or raw assertion
 is returned or logged by the handler.
 
-The provider caller must use server-authenticated TLS and refuse redirects.
-The internal handler permits TLS termination at a reviewed private gateway; it
-does not infer TLS trust from forwarded headers.
-Configuring HTTPS proof/JWKS URLs
-does not secure the caller-to-bot connection.
-Do not enable this endpoint through
-the public IAM/app entrypoints or a public plain-HTTP port.
-The reviewed gateway
-now has a separate unpublished identity listener.
+The provider caller refuses redirects. Its default transport is server-authenticated
+TLS. A compatible provider can explicitly opt into HTTP on a trusted private
+container network; this is an installation choice, not an automatic downgrade.
+The dedicated bearer, signed proof, exact endpoint and matching receipt remain
+required. Proof issuer/JWKS endpoints still require HTTPS. Do not publish this
+handler through public IAM/app entrypoints or a host port. The handler does not
+infer transport trust from forwarded headers.
 
 ## Request and response
 

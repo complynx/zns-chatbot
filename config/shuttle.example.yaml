@@ -31,6 +31,12 @@ telegram:
   webhook_secret: replace_with_random_secret
 loom:
   base_url: https://loom.example.invalid
+# Optional own-subject machine for shuttle-symbols without token-file flags.
+# The machine must issue JWT access tokens lasting at least six minutes.
+# Supply its secret only through SHUTTLE_DESCRIPTOR_CLIENT_SECRET.
+# descriptor:
+#   subject: example-descriptor-subject
+#   client_id: example-descriptor-client
 identity:
   issuer: https://accounts.example.invalid
   organization_id: example-org

@@ -40,6 +40,7 @@ type iamFixture struct {
 	forms                           []map[string][]string
 	userTokenExpiry                 time.Time
 	introRoleClaims                 map[string]any
+	machineScopeOnly                bool
 }
 
 func fixture(t *testing.T) (*iamFixture, *Client) {
@@ -143,7 +144,8 @@ func (f *iamFixture) handle(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if !strings.Contains(r.Form.Get("scope"), "project:id:loom:aud") ||
-				!strings.Contains(r.Form.Get("scope"), "project:id:api:aud") {
+				!f.machineScopeOnly && !strings.Contains(r.Form.Get("scope"), "project:id:api:aud") ||
+				f.machineScopeOnly && strings.Contains(r.Form.Get("scope"), "project:id:api:aud") {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
