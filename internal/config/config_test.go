@@ -21,6 +21,31 @@ func configFile(t *testing.T, suffix string) string {
 	return path
 }
 
+func TestLogLevelConfiguration(t *testing.T) {
+	for _, level := range []string{"debug", "info", "warn", "error", "invalid"} {
+		t.Run(level, func(t *testing.T) {
+			t.Setenv("SHUTTLE_LOG_LEVEL", "")
+			require.NoError(t, os.Unsetenv("SHUTTLE_LOG_LEVEL"))
+			path := configFile(t, "")
+			data, err := os.ReadFile(path)
+			require.NoError(t, err)
+			data = []byte(strings.Replace(string(data), "log_level: info", "log_level: "+level, 1))
+			require.NoError(t, os.WriteFile(path, data, 0600))
+			c, err := config.Load(path)
+			if level == "invalid" {
+				require.ErrorContains(t, err, "log_level")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, level, c.LogLevel)
+			t.Setenv("SHUTTLE_LOG_LEVEL", "error")
+			c, err = config.Load(path)
+			require.NoError(t, err)
+			require.Equal(t, "error", c.LogLevel)
+		})
+	}
+}
+
 func TestEmbeddedDescriptorStartupConfiguration(t *testing.T) {
 	for _, tc := range []struct {
 		name, fields string

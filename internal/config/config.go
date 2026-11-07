@@ -80,6 +80,7 @@ type TelegramPrelink struct {
 }
 
 type Config struct {
+	LogLevel               string          `yaml:"log_level"`
 	Descriptor             Descriptor      `yaml:"descriptor"`
 	MiniAppLaunchURL       string          `yaml:"mini_app_launch_url"`
 	MiniAppAllowLocalHTTP  bool            `yaml:"mini_app_allow_local_http"`
@@ -100,6 +101,7 @@ type Config struct {
 
 func Load(path string) (Config, error) {
 	c := Config{
+		LogLevel:         "info",
 		AvatarExecutable: "/usr/local/bin/zinusya-avatar",
 		HTTPAddress:      "127.0.0.1:8080",
 		InternalAddress:  "127.0.0.1:9090",
@@ -128,6 +130,7 @@ func Load(path string) (Config, error) {
 		return Config{}, errors.New("startup configuration must contain one YAML document")
 	}
 	fields := map[string]*string{
+		"LOG_LEVEL":                            &c.LogLevel,
 		"DESCRIPTOR_CLIENT_SECRET":             &c.Descriptor.ClientSecret,
 		"TELEGRAM_PRELINK_ISSUER":              &c.TelegramPrelink.Issuer,
 		"TELEGRAM_PRELINK_JWKS_URL":            &c.TelegramPrelink.JWKSURL,
@@ -178,6 +181,9 @@ func Load(path string) (Config, error) {
 }
 
 func (c Config) Validate() error {
+	if !slices.Contains([]string{"debug", "info", "warn", "error"}, c.LogLevel) {
+		return errors.New("log_level must be debug, info, warn or error")
+	}
 	for _, check := range []func() error{
 		c.validateTimeouts,
 		c.validateListeners,

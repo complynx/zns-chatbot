@@ -13,7 +13,7 @@ import (
 func TestApplicationLoggerCorrelatesContextWithoutChangingPlainLogs(t *testing.T) {
 	t.Parallel()
 	var output bytes.Buffer
-	logger := newLogger(&output)
+	logger := newLogger(&output, "info")
 	span := trace.NewSpanContext(trace.SpanContextConfig{TraceID: trace.TraceID{1}, SpanID: trace.SpanID{2}})
 	logger.WarnContext(trace.ContextWithSpanContext(context.Background(), span), "diagnostic", "class", "timeout")
 	logger.Info("ready")
@@ -31,11 +31,12 @@ func TestApplicationLoggerCorrelatesContextWithoutChangingPlainLogs(t *testing.T
 }
 
 func TestApplicationDebugLoggingIsOptIn(t *testing.T) {
+	t.Parallel()
 	for _, level := range []string{"", "debug"} {
 		t.Run(level, func(t *testing.T) {
-			t.Setenv("SHUTTLE_LOG_LEVEL", level)
+			t.Parallel()
 			var output bytes.Buffer
-			newLogger(&output).Debug("technical stage", "attempt", 1)
+			newLogger(&output, level).Debug("technical stage", "attempt", 1)
 			require.Equal(t, level == "debug", output.Len() > 0)
 		})
 	}

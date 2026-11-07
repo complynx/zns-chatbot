@@ -1,3 +1,4 @@
+log_level: info # debug, info, warn or error; SHUTTLE_LOG_LEVEL overrides this.
 # Supply credentials using SHUTTLE_DATABASE_URL, SHUTTLE_TELEGRAM_TOKEN,
 # SHUTTLE_TELEGRAM_WEBHOOK_SECRET and SHUTTLE_IDENTITY_* environment variables.
 # Env overrides YAML; runtime events, deadlines and business rules belong in DB.

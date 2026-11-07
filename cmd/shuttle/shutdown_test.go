@@ -140,7 +140,7 @@ func TestDrainFailureIsClassifiedWithoutLoggingPrivateErrors(t *testing.T) {
 	require.Equal(t, "error", report.Outcome)
 	require.Equal(t, "error", report.Workers)
 	var output bytes.Buffer
-	logDrain(context.Background(), newLogger(&output), report, time.Second)
+	logDrain(context.Background(), newLogger(&output, "info"), report, time.Second)
 	var record map[string]any
 	require.NoError(t, json.Unmarshal(output.Bytes(), &record))
 	require.Equal(t, "application drain finished", record["msg"])

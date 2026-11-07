@@ -118,7 +118,7 @@ applies only to reads; exhausted transient reads return to the worker's durable
 backoff. Acknowledged uploads remain journaled, and unknown Loom
 chat/upload outcomes still require reconciliation.
 
-For technical diagnostics, set `SHUTTLE_LOG_LEVEL=debug` on Shuttle or the
+For technical diagnostics, set `log_level: debug` in the startup YAML for Shuttle or the
 descriptor (`-debug` also enables descriptor diagnostics). Logs include task or
 procedure correlation, catalog counts, wait deadlines, preview positions,
 hashed file keys, attempts, durations and safe transport outcomes. They exclude

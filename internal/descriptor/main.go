@@ -103,14 +103,17 @@ func connect(ctx context.Context, a arguments) (dependencies, error) {
 // Command runs the standalone operator CLI.
 func Command() error {
 	a := parse()
-	if a.debug || os.Getenv("SHUTTLE_LOG_LEVEL") == "debug" {
-		slog.SetDefault(slog.New(observability.WithTraceContext(
-			slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))))
-	}
 	c, err := config.Load(a.config)
 	if err != nil {
 		return err
 	}
+	var level slog.Level
+	_ = level.UnmarshalText([]byte(c.LogLevel))
+	if a.debug {
+		level = slog.LevelDebug
+	}
+	slog.SetDefault(slog.New(observability.WithTraceContext(
+		slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level}))))
 	if a.actorToken == "" {
 		if a.subjectToken != "" {
 			return errors.New("delegated subject token requires an actor token file")
