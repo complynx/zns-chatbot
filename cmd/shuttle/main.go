@@ -53,12 +53,31 @@ func newLogger(output io.Writer) *slog.Logger {
 }
 
 func run(logger *slog.Logger) error {
-	path := flag.String("config", "config/shuttle.yaml", "Startup YAML path")
-	migrate := flag.Bool("migrate", false, "Apply database migrations and exit")
-	flag.Parse()
+	err := runArgs(logger, os.Args[1:])
+	if errors.Is(err, flag.ErrHelp) {
+		return nil
+	}
+	return err
+}
+
+func runArgs(logger *slog.Logger, args []string) error {
+	flags := flag.NewFlagSet("shuttle", flag.ContinueOnError)
+	path := flags.String("config", "config/shuttle.yaml", "Startup YAML path")
+	migrate := flags.Bool("migrate", false, "Apply database migrations and exit")
+	check := flags.Bool("check-config", false, "Validate startup configuration without network or database access")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if flags.NArg() != 0 || (*check && *migrate) {
+		return errors.New("unexpected arguments or conflicting startup modes")
+	}
 	c, err := config.Load(*path)
 	if err != nil {
 		return err
+	}
+	if *check {
+		logger.Info("startup configuration valid; dependencies and database not checked")
+		return nil
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()

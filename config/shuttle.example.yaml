@@ -1,6 +1,8 @@
 # Supply credentials using SHUTTLE_DATABASE_URL, SHUTTLE_TELEGRAM_TOKEN,
 # SHUTTLE_TELEGRAM_WEBHOOK_SECRET and SHUTTLE_IDENTITY_* environment variables.
 # Env overrides YAML; runtime events, deadlines and business rules belong in DB.
+# Validate locally with: shuttle -config config/shuttle.yaml -check-config
+# This does not connect to dependencies or validate their credentials.
 database_url: postgres://shuttle:example@localhost:5432/shuttle
 http_address: 127.0.0.1:8080
 internal_address: 127.0.0.1:9090

@@ -2,6 +2,13 @@
 
 The application baseline is version 76 in [00076_schema.sql](../migrations/00076_schema.sql), the single tracked SQL migration. A fresh empty application schema receives the preserved version-73 DDL and the version-74/75/76 extensions. Completed versions 73, 74 and 75 receive only their missing extensions. Existing history, objects and accepted data remain in place.
 
+Before connecting, run `shuttle -config config/shuttle.yaml -check-config` to validate
+startup YAML and environment overrides. This mode makes no network or database
+calls and starts no workers. It does not verify remote credentials or schema state.
+Apply application and River migrations separately with `-migrate`, using the schema
+owner credential; start the application with its runtime credential afterward.
+The two modes cannot be combined.
+
 Version 74 adds `first_name_latin` and `last_name_latin` as non-null text with empty defaults. Profile operations validate and save the Latin pair. A trigger clears both values when either original name component changes, including updates by an older application. The current writer saves the original components first and the Latin pair second in the same transaction; a Latin-only update does not clear the pair.
 
 A partially migrated legacy database must finish the original chain through version 73 using the preceding release. Admission uses the latest effective applied history and rejects versions 1–72 before schema changes. Do not remove migration history or the deployment identity binding to bypass this guard.
