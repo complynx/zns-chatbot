@@ -86,10 +86,7 @@ func (c *Client) DeploymentScope() (int64, string, string) {
 }
 
 func New(o Options, h *http.Client) (*Client, error) {
-	u, err := url.Parse(o.Issuer)
-	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" ||
-		(u.Scheme != "https" && (u.Scheme != "http" ||
-			u.Hostname() != "localhost" && u.Hostname() != "127.0.0.1" && u.Hostname() != "::1")) {
+	if !validIdentityIssuer(o.Issuer) {
 		return nil, errors.New("valid identity issuer required")
 	}
 	if o.OrganizationID == "" || o.LoomAudience == "" || o.APIAudience == "" || o.ActorID == "" || o.BotID <= 0 ||
@@ -513,7 +510,7 @@ func (c *Client) issue(ctx context.Context, subject string, service bool) (Crede
 	if err != nil {
 		return Credential{}, err
 	}
-	form := url.Values{"grant_type": {"client_credentials"}, "scope": {c.scopes(true)}}
+	form := url.Values{grantTypeKey: {"client_credentials"}, scopeKey: {c.scopes(true)}}
 	creds := c.options.ActorClientCredentials
 	if !service {
 		actor, actorErr := c.ServiceToken(ctx)
@@ -522,14 +519,14 @@ func (c *Client) issue(ctx context.Context, subject string, service bool) (Crede
 		}
 		creds = c.options.ExchangeClientCredentials
 		form = url.Values{
-			"grant_type":           {"urn:ietf:params:oauth:grant-type:token-exchange"},
+			grantTypeKey:           {"urn:ietf:params:oauth:grant-type:token-exchange"},
 			"subject_token":        {subject},
 			"subject_token_type":   {"urn:zitadel:params:oauth:token-type:user_id"},
 			"actor_token":          {actor.Token},
 			"actor_token_type":     {"urn:ietf:params:oauth:token-type:access_token"},
 			"requested_token_type": {"urn:ietf:params:oauth:token-type:jwt"},
 			"audience":             {c.options.LoomAudience, c.options.APIAudience},
-			"scope":                {c.scopes(false)},
+			scopeKey:               {c.scopes(false)},
 		}
 	}
 	var response struct {

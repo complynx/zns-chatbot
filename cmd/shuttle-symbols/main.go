@@ -19,6 +19,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/internal/config"
 	"github.com/complynx/zns-chatbot/internal/db"
+	"github.com/complynx/zns-chatbot/internal/identity"
 	"github.com/complynx/zns-chatbot/internal/loom"
 	"github.com/complynx/zns-chatbot/internal/observability"
 	"github.com/complynx/zns-chatbot/internal/symboldescribe"
@@ -35,6 +36,7 @@ type arguments struct {
 	concurrency                                         int
 	generation                                          uuid.UUID
 	tracer                                              trace.Tracer
+	machine                                             *identity.MachineTokenSource
 }
 type dependencies struct {
 	store *db.Store
@@ -74,9 +76,12 @@ func connect(ctx context.Context, a arguments) (dependencies, error) {
 	if err != nil {
 		return d, err
 	}
-	actor, err := token(a.actorToken)
-	if err != nil {
-		return d, err
+	var actor string
+	if a.machine == nil {
+		actor, err = token(a.actorToken)
+		if err != nil {
+			return d, err
+		}
 	}
 	var subject string
 	if a.subjectToken != "" {
@@ -110,6 +115,19 @@ func run() error {
 	c, err := config.Load(a.config)
 	if err != nil {
 		return err
+	}
+	if a.actorToken == "" {
+		if a.subjectToken != "" {
+			return errors.New("delegated subject token requires an actor token file")
+		}
+		a.machine, err = identity.NewMachineTokenSource(identity.MachineOptions{
+			Issuer: c.Identity.Issuer, OrganizationID: c.Identity.OrganizationID,
+			Audience: c.Identity.Audience, Subject: c.Descriptor.Subject,
+			Credentials: identity.ClientCredentials{ID: c.Descriptor.ClientID, Secret: c.Descriptor.ClientSecret},
+		}, nil)
+		if err != nil {
+			return err
+		}
 	}
 	telemetry, err := observability.New(context.Background(), observability.Options{
 		OTLPEndpoint: c.OTel.Endpoint, ServiceName: c.OTel.ServiceName + "-symbols",
@@ -162,6 +180,12 @@ func runEntry(ctx context.Context, a arguments, d dependencies) error {
 	s, err = readJournal(a, statePath, entry, lookupErr)
 	if err != nil {
 		return err
+	}
+	if a.machine != nil {
+		d.auth.ServiceToken, err = descriptorActor(ctx, a)
+		if err != nil {
+			return err
+		}
 	}
 	if err = claim(ctx, d, &s, &entry, lookupErr); err != nil {
 		return err

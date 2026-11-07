@@ -39,6 +39,13 @@ type Loom struct {
 	BaseURL       string `yaml:"base_url"`
 	SkillsEnabled bool   `yaml:"skills_enabled"`
 }
+
+// Descriptor selects its dedicated machine. Only the descriptor consumes its secret.
+type Descriptor struct {
+	Subject      string `yaml:"subject"`
+	ClientID     string `yaml:"client_id"`
+	ClientSecret string `yaml:"client_secret"`
+}
 type OTel struct {
 	Endpoint     string        `yaml:"endpoint"`
 	ServiceName  string        `yaml:"service_name"`
@@ -70,6 +77,7 @@ type TelegramPrelink struct {
 }
 
 type Config struct {
+	Descriptor             Descriptor      `yaml:"descriptor"`
 	MiniAppLaunchURL       string          `yaml:"mini_app_launch_url"`
 	MiniAppAllowLocalHTTP  bool            `yaml:"mini_app_allow_local_http"`
 	RegistrationDetailsKey string          `yaml:"registration_details_key"`
@@ -117,6 +125,7 @@ func Load(path string) (Config, error) {
 		return Config{}, errors.New("startup configuration must contain one YAML document")
 	}
 	fields := map[string]*string{
+		"DESCRIPTOR_CLIENT_SECRET":             &c.Descriptor.ClientSecret,
 		"TELEGRAM_PRELINK_ISSUER":              &c.TelegramPrelink.Issuer,
 		"TELEGRAM_PRELINK_JWKS_URL":            &c.TelegramPrelink.JWKSURL,
 		"TELEGRAM_PRELINK_AUDIENCE":            &c.TelegramPrelink.Audience,
