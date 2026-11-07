@@ -101,20 +101,33 @@ func TestStructuredPaymentReviewEntryPreservesAgentQuestionAcrossRestart(t *test
 	original := paymentReviewMessage(t, f.H, 97600, 11003, "Ask a question")
 	f.H.await(t, original, "awaiting_user")
 	f.H.awaitReplies(t, 1)
+	question, err := f.H.store.GetTask(t.Context(), original)
+	require.NoError(t, err)
+	require.NotEmpty(t, question.RunID)
+	require.NotEmpty(t, question.QuestionID)
 	p.mu.Lock()
 	p.loomDown = true
 	p.mu.Unlock()
+	// Background monitoring observes the outage even though the structured entry needs no Loom call.
+	f.H.await(t, original, "awaiting_service")
 	entry := paymentReviewMessage(t, f.H, 97601, 11003, "/payment_reviews")
 	f.H.await(t, entry, "completed")
 	f.H.awaitReplies(t, 2)
 	waiting, err := f.H.store.GetTask(t.Context(), original)
 	require.NoError(t, err)
-	require.Equal(t, "awaiting_user", waiting.State)
+	require.Equal(t, "awaiting_service", waiting.State)
+	require.Equal(t, question.RunID, waiting.RunID)
+	require.Equal(t, question.QuestionID, waiting.QuestionID)
 	f.H.stop(t)
 	p.mu.Lock()
 	p.loomDown = false
 	p.mu.Unlock()
 	f.H.start(t)
+	f.H.await(t, original, "awaiting_user")
+	recovered, err := f.H.store.GetTask(t.Context(), original)
+	require.NoError(t, err)
+	require.Equal(t, question.RunID, recovered.RunID)
+	require.Equal(t, question.QuestionID, recovered.QuestionID)
 	answer := paymentReviewMessage(t, f.H, 97602, 11003, "Continue the earlier question")
 	f.H.await(t, answer, "completed")
 	f.H.await(t, original, "completed")
@@ -132,7 +145,7 @@ func TestStructuredPaymentReviewEntryPreservesAgentQuestionAcrossRestart(t *test
 	require.Len(t, inputs, 1)
 	require.Equal(t, 1, count)
 	require.Contains(t, text, `"command":"/payment_reviews"`)
-	require.Zero(t, unavailable)
+	require.Positive(t, unavailable)
 }
 
 func paymentReviewHistoryTask(t *testing.T, f paymentFixture, update int64) db.Task {
