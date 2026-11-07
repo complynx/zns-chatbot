@@ -1,36 +1,79 @@
-name: Build and then dispatch event
+name: Publish Shuttle
 
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows: [Shuttle CI]
+    types: [completed]
+
+permissions:
+  contents: read
+
+# Serialize rolling-tag writers; late CI completions must still pass the main-SHA guards.
+concurrency:
+  group: publish-shuttle-main
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   build_and_push:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI_SHA: ${{ github.event.workflow_run.head_sha }}
+      IMAGE: complynx/zns-chatbot:shuttle-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Check CI revision is still main
+        id: main
+        shell: bash
+        run: |
+          set -euo pipefail
+          main_sha=$(git ls-remote --exit-code origin refs/heads/main | cut -f1)
+          echo "current=$([[ "$main_sha" == "$CI_SHA" ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - name: Set up Docker Buildx
+        if: steps.main.outputs.current == 'true'
         uses: docker/setup-buildx-action@v3
+      - name: Build Docker image
+        if: steps.main.outputs.current == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: deploy/shuttle/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: complynx/zns-chatbot:shuttle-latest
+          labels: org.opencontainers.image.revision=${{ github.event.workflow_run.head_sha }}
+      - name: Recheck main before publication
+        if: steps.main.outputs.current == 'true'
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          main_sha=$(git ls-remote --exit-code origin refs/heads/main | cut -f1)
+          echo "current=$([[ "$main_sha" == "$CI_SHA" ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - name: Log in to Docker Hub
+        if: steps.publish.outputs.current == 'true'
         uses: docker/login-action@v3
         with:
           username: complynx
           password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: complynx/${{ github.event.repository.name }}:latest
-          # cache-from: type=registry,ref=complynx/${{ github.event.repository.name }}:buildcache
-          # cache-to: type=registry,ref=complynx/${{ github.event.repository.name }}:buildcache,mode=max
+      - name: Push rolling Shuttle image
+        if: steps.publish.outputs.current == 'true'
+        run: docker push "$IMAGE"
 
       - name: Dispatch event to server
+        if: steps.publish.outputs.current == 'true'
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.SERVER_REPO_TOKEN }}
           repository: complynx/server_configs
-          event-type: updated-${{ github.event.repository.name }}
+          event-type: updated-shuttle

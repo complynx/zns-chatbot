@@ -46,3 +46,9 @@ docker-compose*
 *.log
 /logs
 /tmp
+
+# Local private exports and operator scratch are never build inputs.
+/.cache
+/docs.local
+/.codex
+/.agents
