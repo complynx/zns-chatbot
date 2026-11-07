@@ -42,6 +42,9 @@ type Loom struct {
 
 // Descriptor selects its dedicated machine. Only the descriptor consumes its secret.
 type Descriptor struct {
+	Enabled      bool   `yaml:"enabled"`
+	Journal      string `yaml:"journal"`
+	Concurrency  int    `yaml:"concurrency"`
 	Subject      string `yaml:"subject"`
 	ClientID     string `yaml:"client_id"`
 	ClientSecret string `yaml:"client_secret"`
@@ -183,11 +186,25 @@ func (c Config) Validate() error {
 		c.validateIdentity,
 		c.validateTelegramPrelink,
 		c.validateRegistrationDetails,
+		c.validateDescriptor,
 		c.OTel.validate,
 	} {
 		if err := check(); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (c Config) validateDescriptor() error {
+	if !c.Descriptor.Enabled {
+		return nil
+	}
+	d := c.Descriptor
+	if strings.TrimSpace(d.Journal) == "" || d.Concurrency < 0 || d.Concurrency > 4 ||
+		strings.TrimSpace(d.Subject) == "" || strings.TrimSpace(d.ClientID) == "" ||
+		strings.TrimSpace(d.ClientSecret) == "" {
+		return errors.New("enabled descriptor requires journal, machine credentials and concurrency within 1-4")
 	}
 	return nil
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/complynx/zns-chatbot/internal/avatar"
 	"github.com/complynx/zns-chatbot/internal/config"
 	"github.com/complynx/zns-chatbot/internal/db"
+	"github.com/complynx/zns-chatbot/internal/descriptor"
 	"github.com/complynx/zns-chatbot/internal/identity"
 	"github.com/complynx/zns-chatbot/internal/loom"
 	"github.com/complynx/zns-chatbot/internal/observability"
@@ -38,6 +39,7 @@ const (
 
 func main() {
 	logger := newLogger(os.Stdout)
+	slog.SetDefault(logger)
 	if err := run(logger); err != nil {
 		logger.Error("application stopped", "error", err.Error())
 		os.Exit(1)
@@ -105,7 +107,11 @@ func runArgs(logger *slog.Logger, args []string) error {
 		defer stop()
 		_ = obs.Shutdown(cleanup)
 	}()
-	return serve(ctx, cancel, c, engine, handlers, obs, logger)
+	worker, err := embeddedDescriptor(c, store, obs)
+	if err != nil {
+		return err
+	}
+	return serve(ctx, cancel, c, engine, handlers, obs, worker, logger)
 }
 
 func migrateDatabase(ctx context.Context, store *db.Store) error {
@@ -264,6 +270,7 @@ func serve(
 	engine *task.Service,
 	handlers *api.Server,
 	obs *observability.Telemetry,
+	worker *descriptor.Worker,
 	logger *slog.Logger,
 ) error {
 	listenConfig := net.ListenConfig{}
@@ -285,25 +292,35 @@ func serve(
 	if err = engine.Start(ctx); err != nil {
 		return err
 	}
+	var descriptorFailures <-chan error
+	if worker != nil {
+		if err = worker.Start(ctx); err != nil {
+			logger.ErrorContext(ctx, "descriptor worker unavailable", "error", err)
+			worker = nil
+		} else {
+			descriptorFailures = worker.Failures()
+			defer func() {
+				stop, stopCancel := context.WithTimeout(context.WithoutCancel(ctx), c.ShutdownTimeout)
+				defer stopCancel()
+				_ = worker.Stop(stop)
+			}()
+		}
+	}
 	failures := make(chan error, serverCount)
 	go func() { failures <- public.Serve(publicListener) }()
 	go func() { failures <- private.Serve(privateListener) }()
 	logger.InfoContext(ctx, "application ready")
-	select {
-	case <-ctx.Done():
-	case err = <-engine.Failures():
-		err = fmt.Errorf("task worker stopped: %w", err)
-		cancel()
-	case err = <-failures:
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			err = errors.New("HTTP server stopped unexpectedly")
-		}
-		cancel()
-	}
+	err = waitApplication(ctx, cancel, engine.Failures(), descriptorFailures, failures, logger)
 	handlers.SetAccepting(false)
 	shutdown, stop := context.WithTimeout(context.WithoutCancel(ctx), c.ShutdownTimeout)
 	defer stop()
-	summary := drain(shutdown, engine.Stop, public, private)
+	stopWorkers := func(stop context.Context) error {
+		if worker == nil {
+			return engine.Stop(stop)
+		}
+		return errors.Join(engine.Stop(stop), worker.Stop(stop))
+	}
+	summary := drain(shutdown, stopWorkers, public, private)
 	logDrain(shutdown, logger, summary, c.ShutdownTimeout)
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err

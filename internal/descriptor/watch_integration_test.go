@@ -1,4 +1,5 @@
-package main
+//nolint:testpackage // Integration fixtures exercise private journal and queue recovery.
+package descriptor
 
 import (
 	"bytes"

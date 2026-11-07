@@ -54,14 +54,24 @@ frequently reused newcomer can enter a full catalog instead of repeatedly
 losing its count on eviction. History deletion limits what can be reconstructed.
 Ranking uses logarithms to avoid underflow when comparing old entries.
 
-## Separate visual-description procedure
+## Visual-description worker
 
 `cmd/shuttle-symbols` explicitly processes one retained unknown symbol. It uses a
 dedicated Loom account and a separate chat, without a user's conversation or
 memory. The account needs image/file inspection and its own model/billing policy;
 do not grant it business authority. Run creation uses the configured account's
-model preferences. Normal intake records an unknown catalog entry; a separate
-explicitly enabled worker owns paid description work.
+model preferences. Normal intake records an unknown catalog entry. Set
+`descriptor.enabled: true`, a persistent `descriptor.journal` directory and
+`descriptor.concurrency` (1–4, default 4) to run description work in the main
+process. The worker shares its database pool and uses bounded goroutines; no
+separate runtime service is required. It starts after deployment-binding checks
+and cancels active steps during application shutdown without closing the pool.
+Worker startup or fatal runtime errors are logged without stopping the core bot;
+fix the journal/dependency error and restart to resume. A stale lock still needs
+operator reconciliation. No schema change is needed.
+
+The standalone CLI remains available for operator recovery and explicit runs.
+Do not run it against a journal already owned by the embedded worker.
 
 The Go worker can obtain and renew its own machine token. Configure `descriptor`
 with `subject` and `client_id`, supply `SHUTTLE_DESCRIPTOR_CLIENT_SECRET`, and omit
