@@ -1,0 +1,150 @@
+name: shuttle-live-test
+services:
+  postgres:
+    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    environment: {POSTGRES_PASSWORD: "${TEST_DB_PASSWORD:?Run prepare.py}"}
+    ports: ["127.0.0.1:55476:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data", "./init.sql:/docker-entrypoint-initdb.d/10-test.sql:ro"]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  zitadel:
+    image: ghcr.io/zitadel/zitadel@sha256:f3738fd984131d3f02e386d37fa480d1a30e42b7d4202e2b322f12f7cf556b64
+    command: [start-from-init, --masterkey, "${TEST_MASTERKEY:?Run prepare.py}", --tlsMode, enabled]
+    ports: ["127.0.0.1:18443:8080"]
+    environment:
+      ZITADEL_TLS_CERTPATH: /tls/tls.crt
+      ZITADEL_TLS_KEYPATH: /tls/tls.key
+      ZITADEL_EXTERNALDOMAIN: host.docker.internal
+      ZITADEL_EXTERNALPORT: 18443
+      ZITADEL_EXTERNALSECURE: "true"
+      ZITADEL_DATABASE_POSTGRES_HOST: postgres
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: "${TEST_DB_PASSWORD}"
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: postgres
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: "${TEST_DB_PASSWORD}"
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: test-admin
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: Shuttle Test Admin
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2027-01-01T00:00:00Z"
+      ZITADEL_FIRSTINSTANCE_PATPATH: /data/admin.pat
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: "${TEST_HUMAN_PASSWORD}"
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "false"
+    volumes: ["../../../.cache/shuttle-live-test/data:/data", "../../../.cache/shuttle-live-test/tls.crt:/tls/tls.crt:ro", "../../../.cache/shuttle-live-test/tls.key:/tls/tls.key:ro"]
+    depends_on: {postgres: {condition: service_healthy}}
+  loom-migrate:
+    profiles: [app]
+    image: shuttle-test-loom:local
+    command: [migrate]
+    environment: {CLX_DATABASE_DSN: "postgres://postgres:${TEST_DB_PASSWORD}@postgres:5432/loom?sslmode=disable"}
+    depends_on: {postgres: {condition: service_healthy}}
+  docker-api-proxy:
+    profiles: [app]
+    image: shuttle-test-loom:local
+    user: "0:0"
+    command: [docker-proxy, --listen, ":2375", --socket, /var/run/docker.sock]
+    volumes: ["/var/run/docker.sock:/var/run/docker.sock:ro"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+  sandbox:
+    profiles: [app]
+    image: shuttle-test-loom:local
+    command: [sandbox-supervisor, --socket, /run/clx-sandbox/sandbox.sock, --max-workers, "2", --worker-executable, /usr/local/bin/loom, --cleanup-timeout, 100ms]
+    network_mode: none
+    volumes: ["sandbox:/run/clx-sandbox"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    mem_limit: 128m
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
+    stop_grace_period: 5s
+  loom:
+    profiles: [app]
+    image: shuttle-test-loom:local
+    command: [serve]
+    environment: {CLX_CONFIG: /etc/loom/config.yaml, SSL_CERT_FILE: /tls/ca-bundle.pem}
+    ports: ["127.0.0.1:18381:8080", "127.0.0.1:19381:9090"]
+    volumes:
+      - ../../../.cache/shuttle-live-test/loom.yaml:/etc/loom/config.yaml:ro
+      - ../../../.cache/shuttle-live-test/ca-bundle.pem:/tls/ca-bundle.pem:ro
+      - ../../../.cache/shuttle-live-test/auth.key:/run/secrets/auth.key:ro
+      - ../../../.cache/shuttle-live-test/mailbox:/mailbox
+      - sandbox:/run/clx-sandbox:ro
+      - artifacts:/data/artifacts
+    depends_on:
+      loom-migrate: {condition: service_completed_successfully}
+      sandbox: {condition: service_started}
+      docker-api-proxy: {condition: service_started}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    mem_limit: 512m
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=32m"]
+    stop_grace_period: 5s
+  shuttle:
+    profiles: [app]
+    image: shuttle-test-bot:local
+    command: [-config, /etc/shuttle/config.yaml]
+    env_file: [../../../config/shuttle.test.env]
+    environment: {SHUTTLE_TELEGRAM_WEBHOOK_SECRET: "${TEST_WEBHOOK_SECRET}", SHUTTLE_TELEGRAM_BASE_URL: "https://telegram.zinusya.localhost:8080", SSL_CERT_FILE: /tls/ca-bundle.pem}
+    ports: ["127.0.0.1:18382:8080", "127.0.0.1:19382:9090"]
+    labels: {clx.harness.service: "http://shuttle:9090/internal/agent/manifest"}
+    volumes: ["../../../.cache/shuttle-live-test/shuttle.yaml:/etc/shuttle/config.yaml:ro", "../../../.cache/shuttle-live-test/ca-bundle.pem:/tls/ca-bundle.pem:ro"]
+    depends_on: {postgres: {condition: service_healthy}, telegram-guard: {condition: service_healthy}}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    stop_grace_period: 5s
+  telegram-guard:
+    profiles: [app]
+    image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+    user: "1000:1000"
+    command: [python, -u, /test/telegram_guard.py]
+    env_file: [../../../config/shuttle.test.env]
+    environment: {TEST_TELEGRAM_BOT_ID: "${TEST_TELEGRAM_BOT_ID:-6087685431}", TEST_TLS_CERT: /tls/tls.crt, TEST_TLS_KEY: /tls/tls.key}
+    volumes:
+      - ./telegram_guard.py:/test/telegram_guard.py:ro
+      - ../../../.cache/shuttle-live-test/tls.crt:/tls/tls.crt:ro
+      - ../../../.cache/shuttle-live-test/tls.key:/tls/tls.key:ro
+      - ../../../.cache/shuttle-live-test/ca-bundle.pem:/tls/ca-bundle.pem:ro
+    networks:
+      default:
+        aliases: [telegram.zinusya.localhost]
+    healthcheck:
+      test: [CMD, python, -c, "import ssl,urllib.request; urllib.request.urlopen('https://localhost:8080/health',context=ssl.create_default_context(cafile='/tls/ca-bundle.pem'),timeout=2).close()"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 96m
+    memswap_limit: 96m
+    cpus: 0.5
+    pids_limit: 32
+    stop_grace_period: 5s
+  telegram-poller:
+    profiles: [telegram]
+    image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+    command: [python, -u, /test/poller.py]
+    env_file: [../../../config/shuttle.test.env]
+    environment:
+      TEST_TELEGRAM_BOT_ID: "${TEST_TELEGRAM_BOT_ID:-6087685431}"
+      TEST_WEBHOOK_URL: http://shuttle:8080/telegram/webhook
+      TEST_WEBHOOK_SECRET: "${TEST_WEBHOOK_SECRET}"
+    volumes: ["./poller.py:/test/poller.py:ro", "../../../.cache/shuttle-live-test/poller:/state"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    stop_grace_period: 5s
+volumes: {pgdata: {}, sandbox: {}, artifacts: {}}
+networks:
+  default:
+    name: shuttle-live-test_default

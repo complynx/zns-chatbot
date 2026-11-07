@@ -1,0 +1,528 @@
+package pluginlookup
+
+import (
+	"context"
+	"sync"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/riverqueue/river/rivertype"
+)
+
+func TestEmptyPluginLookup(t *testing.T) {
+	t.Parallel()
+
+	pluginLookup := NewPluginLookup(nil)
+
+	require.Nil(t, pluginLookup.ByKind(PluginKindHookInsertBegin))
+	require.Nil(t, pluginLookup.ByKind(PluginKindHookMetricEmit))
+	require.Nil(t, pluginLookup.ByKind(PluginKindHookWorkBegin))
+	require.Nil(t, pluginLookup.ByKind(PluginKindMiddlewareJobInsert))
+	require.Nil(t, pluginLookup.ByKind(PluginKindMiddlewareWorker))
+}
+
+func TestJobPluginLookup(t *testing.T) {
+	t.Parallel()
+
+	type testBundle struct{}
+
+	setup := func(t *testing.T) (*JobPluginLookup, *testBundle) { //nolint:unparam
+		t.Helper()
+
+		return NewJobPluginLookup(nil), &testBundle{}
+	}
+
+	t.Run("LooksUpHooks", func(t *testing.T) {
+		t.Parallel()
+
+		jobPluginLookup, _ := setup(t)
+
+		require.Nil(t, jobPluginLookup.ByJobArgs(&jobArgsNoHooks{}).ByKind(PluginKindHookInsertBegin))
+		require.Nil(t, jobPluginLookup.ByJobArgs(&jobArgsNoHooks{}).ByKind(PluginKindHookWorkBegin))
+		require.Nil(t, jobPluginLookup.ByJobArgs(&jobArgsNoHooks{}).ByKind(PluginKindHookWorkEnd))
+		require.Equal(t, []any{
+			&testHookInsertAndWorkBegin{},
+			&testHookInsertBegin{},
+		}, jobPluginLookup.ByJobArgs(&jobArgsWithCustomHooks{}).ByKind(PluginKindHookInsertBegin))
+		require.Equal(t, []any{
+			&testHookInsertAndWorkBegin{},
+			&testHookWorkBegin{},
+		}, jobPluginLookup.ByJobArgs(&jobArgsWithCustomHooks{}).ByKind(PluginKindHookWorkBegin))
+		require.Equal(t, []any{
+			&testHookWorkEnd{},
+		}, jobPluginLookup.ByJobArgs(&jobArgsWithCustomHooks{}).ByKind(PluginKindHookWorkEnd))
+
+		require.Len(t, jobPluginLookup.pluginLookupByKind, 2)
+
+		// Repeat lookups to make sure we get the same result.
+		require.Nil(t, jobPluginLookup.ByJobArgs(&jobArgsNoHooks{}).ByKind(PluginKindHookInsertBegin))
+		require.Nil(t, jobPluginLookup.ByJobArgs(&jobArgsNoHooks{}).ByKind(PluginKindHookWorkBegin))
+		require.Nil(t, jobPluginLookup.ByJobArgs(&jobArgsNoHooks{}).ByKind(PluginKindHookWorkEnd))
+		require.Equal(t, []any{
+			&testHookInsertAndWorkBegin{},
+			&testHookInsertBegin{},
+		}, jobPluginLookup.ByJobArgs(&jobArgsWithCustomHooks{}).ByKind(PluginKindHookInsertBegin))
+		require.Equal(t, []any{
+			&testHookInsertAndWorkBegin{},
+			&testHookWorkBegin{},
+		}, jobPluginLookup.ByJobArgs(&jobArgsWithCustomHooks{}).ByKind(PluginKindHookWorkBegin))
+		require.Equal(t, []any{
+			&testHookWorkEnd{},
+		}, jobPluginLookup.ByJobArgs(&jobArgsWithCustomHooks{}).ByKind(PluginKindHookWorkEnd))
+	})
+
+	t.Run("LooksUpPlugins", func(t *testing.T) {
+		t.Parallel()
+
+		jobPluginLookup, _ := setup(t)
+		args := &jobArgsWithCustomHooksAndPlugins{}
+
+		require.Equal(t, []any{
+			&testHookMiddlewarePlugin{},
+			&testHookInsertBegin{},
+		}, jobPluginLookup.ByJobArgs(args).ByKind(PluginKindHookInsertBegin))
+		require.Equal(t, []any{
+			&testHookWorkEnd{},
+		}, jobPluginLookup.ByJobArgs(args).ByKind(PluginKindHookWorkEnd))
+		require.Equal(t, []any{
+			&testHookMiddlewarePlugin{},
+			&testMiddlewareJobInsertAndWorker{},
+		}, jobPluginLookup.ByJobArgs(args).ByKind(PluginKindMiddlewareJobInsert))
+		require.Equal(t, []any{
+			&testMiddlewareJobInsertAndWorker{},
+		}, jobPluginLookup.ByJobArgs(args).ByKind(PluginKindMiddlewareWorker))
+		require.Equal(t, []rivertype.Hook{
+			&testHookMiddlewarePlugin{},
+			&testHookWorkEnd{},
+			&testHookInsertBegin{},
+		}, jobPluginLookup.ByJobArgs(args).Hooks())
+
+		require.Len(t, jobPluginLookup.pluginLookupByKind, 1)
+	})
+
+	t.Run("Stress", func(t *testing.T) {
+		t.Parallel()
+
+		jobPluginLookup, _ := setup(t)
+
+		var wg sync.WaitGroup
+
+		parallelLookupLoop := func(args rivertype.JobArgs) {
+			wg.Go(func() {
+				for range 50 {
+					jobPluginLookup.ByJobArgs(args)
+				}
+			})
+		}
+
+		parallelLookupLoop(&jobArgsNoHooks{})
+		parallelLookupLoop(&jobArgsWithCustomHooks{})
+		parallelLookupLoop(&jobArgsNoHooks{})
+		parallelLookupLoop(&jobArgsWithCustomHooks{})
+
+		wg.Wait()
+	})
+}
+
+func TestNewPluginLookupFromConfig(t *testing.T) {
+	t.Parallel()
+
+	hookPlugin := &testHookMiddlewarePlugin{}
+	middlewarePlugin := &testHookMiddlewarePlugin{}
+	plugin := &testHookMiddlewarePlugin{}
+
+	lookup := NewPluginLookupFromConfig(
+		nil,
+		[]rivertype.Hook{hookPlugin},
+		[]rivertype.Middleware{middlewarePlugin},
+		[]rivertype.Plugin{plugin},
+	)
+
+	require.Equal(t, []any{
+		plugin,
+		hookPlugin,
+	}, lookup.ByKind(PluginKindHookInsertBegin))
+	require.Equal(t, []any{
+		plugin,
+		middlewarePlugin,
+	}, lookup.ByKind(PluginKindMiddlewareJobInsert))
+}
+
+func TestPluginLookup(t *testing.T) {
+	t.Parallel()
+
+	type testBundle struct{}
+
+	setup := func(t *testing.T) (*PluginLookup, *testBundle) { //nolint:unparam
+		t.Helper()
+
+		lookup := NewPluginLookup([]any{
+			&testHookInsertAndWorkBegin{},
+			&testHookInsertBegin{},
+			&testHookMetricEmit{},
+			&testHookWorkBegin{},
+			&testHookWorkEnd{},
+			&testMiddlewareJobInsertAndWorker{},
+			&testMiddlewareJobInsert{},
+			&testMiddlewareWorker{},
+		})
+
+		return lookup, &testBundle{}
+	}
+
+	t.Run("LooksUpPlugins", func(t *testing.T) {
+		t.Parallel()
+
+		pluginLookup, _ := setup(t)
+
+		require.Equal(t, []any{
+			&testHookInsertAndWorkBegin{},
+			&testHookInsertBegin{},
+		}, pluginLookup.ByKind(PluginKindHookInsertBegin))
+		require.Equal(t, []any{
+			&testHookMetricEmit{},
+		}, pluginLookup.ByKind(PluginKindHookMetricEmit))
+		require.Equal(t, []any{
+			&testHookInsertAndWorkBegin{},
+			&testHookWorkBegin{},
+		}, pluginLookup.ByKind(PluginKindHookWorkBegin))
+		require.Equal(t, []any{
+			&testHookWorkEnd{},
+		}, pluginLookup.ByKind(PluginKindHookWorkEnd))
+
+		require.Equal(t, []any{
+			&testMiddlewareJobInsertAndWorker{},
+			&testMiddlewareJobInsert{},
+		}, pluginLookup.ByKind(PluginKindMiddlewareJobInsert))
+		require.Equal(t, []any{
+			&testMiddlewareJobInsertAndWorker{},
+			&testMiddlewareWorker{},
+		}, pluginLookup.ByKind(PluginKindMiddlewareWorker))
+
+		require.Len(t, pluginLookup.pluginsByKind, 6)
+
+		// Repeat lookups to make sure we get the same result.
+		require.Equal(t, []any{
+			&testHookInsertAndWorkBegin{},
+			&testHookInsertBegin{},
+		}, pluginLookup.ByKind(PluginKindHookInsertBegin))
+		require.Equal(t, []any{
+			&testHookMetricEmit{},
+		}, pluginLookup.ByKind(PluginKindHookMetricEmit))
+		require.Equal(t, []any{
+			&testHookInsertAndWorkBegin{},
+			&testHookWorkBegin{},
+		}, pluginLookup.ByKind(PluginKindHookWorkBegin))
+		require.Equal(t, []any{
+			&testHookWorkEnd{},
+		}, pluginLookup.ByKind(PluginKindHookWorkEnd))
+		require.Equal(t, []any{
+			&testMiddlewareJobInsertAndWorker{},
+			&testMiddlewareJobInsert{},
+		}, pluginLookup.ByKind(PluginKindMiddlewareJobInsert))
+		require.Equal(t, []any{
+			&testMiddlewareJobInsertAndWorker{},
+			&testMiddlewareWorker{},
+		}, pluginLookup.ByKind(PluginKindMiddlewareWorker))
+	})
+
+	t.Run("Stress", func(t *testing.T) {
+		t.Parallel()
+
+		pluginLookup, _ := setup(t)
+
+		var wg sync.WaitGroup
+
+		parallelLookupLoop := func(kind PluginKind) {
+			wg.Go(func() {
+				for range 50 {
+					pluginLookup.ByKind(kind)
+				}
+			})
+		}
+
+		parallelLookupLoop(PluginKindHookInsertBegin)
+		parallelLookupLoop(PluginKindHookMetricEmit)
+		parallelLookupLoop(PluginKindHookWorkBegin)
+		parallelLookupLoop(PluginKindHookInsertBegin)
+		parallelLookupLoop(PluginKindHookWorkBegin)
+
+		wg.Wait()
+	})
+
+	t.Run("LooksUpLegacyHooksAndMiddleware", func(t *testing.T) {
+		t.Parallel()
+
+		legacyHook := &testLegacyHookInsertBegin{}
+		legacyMiddleware := &testLegacyMiddlewareJobInsert{}
+
+		lookup := NewPluginLookupFromConfig(
+			nil,
+			[]rivertype.Hook{legacyHook},
+			[]rivertype.Middleware{legacyMiddleware},
+			nil,
+		)
+
+		hookPlugins := lookup.ByKind(PluginKindHookInsertBegin)
+		require.Len(t, hookPlugins, 1)
+
+		hook, isHookInsertBegin := hookPlugins[0].(rivertype.HookInsertBegin)
+		require.True(t, isHookInsertBegin)
+		require.NoError(t, hook.InsertBegin(context.Background(), &rivertype.JobInsertParams{}))
+		require.True(t, legacyHook.insertBeginCalled)
+
+		middlewarePlugins := lookup.ByKind(PluginKindMiddlewareJobInsert)
+		require.Len(t, middlewarePlugins, 1)
+
+		middleware, isJobInsertMiddleware := middlewarePlugins[0].(rivertype.JobInsertMiddleware)
+		require.True(t, isJobInsertMiddleware)
+		_, err := middleware.InsertMany(context.Background(), []*rivertype.JobInsertParams{{}}, func(context.Context) ([]*rivertype.JobInsertResult, error) {
+			legacyMiddleware.doInnerCalled = true
+			return nil, nil
+		})
+		require.NoError(t, err)
+		require.True(t, legacyMiddleware.doInnerCalled)
+	})
+}
+
+//
+// jobArgsNoHooks
+//
+
+var _ rivertype.JobArgs = &jobArgsNoHooks{}
+
+type jobArgsNoHooks struct{}
+
+func (jobArgsNoHooks) Kind() string { return "no_hooks" }
+
+//
+// jobArgsWithHooks
+//
+
+var (
+	_ rivertype.JobArgs = &jobArgsWithCustomHooks{}
+	_ jobArgsWithHooks  = &jobArgsWithCustomHooks{}
+)
+
+type jobArgsWithCustomHooks struct{}
+
+func (jobArgsWithCustomHooks) Hooks() []rivertype.Hook {
+	return []rivertype.Hook{
+		&testHookInsertAndWorkBegin{},
+		&testHookInsertBegin{},
+		&testHookWorkBegin{},
+		&testHookWorkEnd{},
+	}
+}
+
+func (jobArgsWithCustomHooks) Kind() string { return "with_custom_hooks" }
+
+//
+// jobArgsWithCustomHooksAndPlugins
+//
+
+var (
+	_ rivertype.JobArgs  = &jobArgsWithCustomHooksAndPlugins{}
+	_ jobArgsWithHooks   = &jobArgsWithCustomHooksAndPlugins{}
+	_ jobArgsWithPlugins = &jobArgsWithCustomHooksAndPlugins{}
+)
+
+type jobArgsWithCustomHooksAndPlugins struct{}
+
+func (jobArgsWithCustomHooksAndPlugins) Hooks() []rivertype.Hook {
+	return []rivertype.Hook{&testHookInsertBegin{}}
+}
+
+func (jobArgsWithCustomHooksAndPlugins) Kind() string { return "with_custom_hooks_and_plugins" }
+
+func (jobArgsWithCustomHooksAndPlugins) Plugins() []rivertype.Plugin {
+	return []rivertype.Plugin{
+		&testHookMiddlewarePlugin{},
+		&testMiddlewareJobInsertAndWorker{},
+		&testHookWorkEnd{},
+	}
+}
+
+//
+// testHookInsertAndWorkBegin
+//
+
+var (
+	_ rivertype.HookInsertBegin = &testHookInsertAndWorkBegin{}
+	_ rivertype.HookWorkBegin   = &testHookInsertAndWorkBegin{}
+)
+
+type testHookInsertAndWorkBegin struct{ rivertype.Hook }
+
+func (t *testHookInsertAndWorkBegin) IsPlugin() bool { return true }
+
+func (t *testHookInsertAndWorkBegin) InsertBegin(ctx context.Context, params *rivertype.JobInsertParams) error {
+	return nil
+}
+
+func (t *testHookInsertAndWorkBegin) WorkBegin(ctx context.Context, job *rivertype.JobRow) error {
+	return nil
+}
+
+//
+// testHookInsertBegin
+//
+
+var _ rivertype.HookInsertBegin = &testHookInsertBegin{}
+
+type testHookInsertBegin struct{ rivertype.Hook }
+
+func (t *testHookInsertBegin) IsPlugin() bool { return true }
+
+func (t *testHookInsertBegin) InsertBegin(ctx context.Context, params *rivertype.JobInsertParams) error {
+	return nil
+}
+
+//
+// testHookMetricEmit
+//
+
+var _ rivertype.HookMetricEmit = &testHookMetricEmit{}
+
+type testHookMetricEmit struct{ rivertype.Hook }
+
+func (t *testHookMetricEmit) IsPlugin() bool { return true }
+
+func (t *testHookMetricEmit) MetricEmit(ctx context.Context, params *rivertype.HookMetricEmitParams) {
+}
+
+//
+// testHookMiddlewarePlugin
+//
+
+var (
+	_ rivertype.HookInsertBegin     = &testHookMiddlewarePlugin{}
+	_ rivertype.JobInsertMiddleware = &testHookMiddlewarePlugin{}
+)
+
+type testHookMiddlewarePlugin struct {
+	_ byte
+}
+
+func (t *testHookMiddlewarePlugin) InsertBegin(ctx context.Context, params *rivertype.JobInsertParams) error {
+	return nil
+}
+
+func (t *testHookMiddlewarePlugin) InsertMany(ctx context.Context, manyParams []*rivertype.JobInsertParams, doInner func(context.Context) ([]*rivertype.JobInsertResult, error)) ([]*rivertype.JobInsertResult, error) {
+	return doInner(ctx)
+}
+
+func (t *testHookMiddlewarePlugin) IsHook() bool       { return true }
+func (t *testHookMiddlewarePlugin) IsMiddleware() bool { return true }
+func (t *testHookMiddlewarePlugin) IsPlugin() bool     { return true }
+
+//
+// testHookWorkBegin
+//
+
+var _ rivertype.HookWorkBegin = &testHookWorkBegin{}
+
+type testHookWorkBegin struct{ rivertype.Hook }
+
+func (t *testHookWorkBegin) IsPlugin() bool { return true }
+
+func (t *testHookWorkBegin) WorkBegin(ctx context.Context, job *rivertype.JobRow) error {
+	return nil
+}
+
+//
+// testHookWorkEnd
+//
+
+var _ rivertype.HookWorkEnd = &testHookWorkEnd{}
+
+type testHookWorkEnd struct{ rivertype.Hook }
+
+func (t *testHookWorkEnd) IsPlugin() bool { return true }
+
+func (t *testHookWorkEnd) WorkEnd(ctx context.Context, job *rivertype.JobRow, err error) error {
+	return nil
+}
+
+//
+// testMiddlewareInsertAndWorkBegin
+//
+
+var (
+	_ rivertype.JobInsertMiddleware = &testMiddlewareJobInsertAndWorker{}
+	_ rivertype.WorkerMiddleware    = &testMiddlewareJobInsertAndWorker{}
+)
+
+type testMiddlewareJobInsertAndWorker struct{ rivertype.Middleware }
+
+func (t *testMiddlewareJobInsertAndWorker) IsPlugin() bool { return true }
+
+func (t *testMiddlewareJobInsertAndWorker) InsertMany(ctx context.Context, manyParams []*rivertype.JobInsertParams, doInner func(context.Context) ([]*rivertype.JobInsertResult, error)) ([]*rivertype.JobInsertResult, error) {
+	return doInner(ctx)
+}
+
+func (t *testMiddlewareJobInsertAndWorker) Work(ctx context.Context, job *rivertype.JobRow, doInner func(context.Context) error) error {
+	return doInner(ctx)
+}
+
+//
+// testMiddlewareJobInsert
+//
+
+var _ rivertype.JobInsertMiddleware = &testMiddlewareJobInsert{}
+
+type testMiddlewareJobInsert struct{ rivertype.Middleware }
+
+func (t *testMiddlewareJobInsert) IsPlugin() bool { return true }
+
+func (t *testMiddlewareJobInsert) InsertMany(ctx context.Context, manyParams []*rivertype.JobInsertParams, doInner func(context.Context) ([]*rivertype.JobInsertResult, error)) ([]*rivertype.JobInsertResult, error) {
+	return doInner(ctx)
+}
+
+//
+// testMiddlewareWorker
+//
+
+var _ rivertype.WorkerMiddleware = &testMiddlewareWorker{}
+
+type testMiddlewareWorker struct{ rivertype.Middleware }
+
+func (t *testMiddlewareWorker) IsPlugin() bool { return true }
+
+func (t *testMiddlewareWorker) Work(ctx context.Context, job *rivertype.JobRow, doInner func(context.Context) error) error {
+	return doInner(ctx)
+}
+
+//
+// testLegacyHookInsertBegin
+//
+
+var _ rivertype.HookInsertBegin = &testLegacyHookInsertBegin{}
+
+type testLegacyHookInsertBegin struct {
+	insertBeginCalled bool
+}
+
+func (t *testLegacyHookInsertBegin) IsHook() bool { return true }
+
+func (t *testLegacyHookInsertBegin) InsertBegin(ctx context.Context, params *rivertype.JobInsertParams) error {
+	t.insertBeginCalled = true
+	return nil
+}
+
+//
+// testLegacyMiddlewareJobInsert
+//
+
+var _ rivertype.JobInsertMiddleware = &testLegacyMiddlewareJobInsert{}
+
+type testLegacyMiddlewareJobInsert struct {
+	doInnerCalled bool
+}
+
+func (t *testLegacyMiddlewareJobInsert) IsMiddleware() bool { return true }
+
+func (t *testLegacyMiddlewareJobInsert) InsertMany(ctx context.Context, manyParams []*rivertype.JobInsertParams, doInner func(context.Context) ([]*rivertype.JobInsertResult, error)) ([]*rivertype.JobInsertResult, error) {
+	return doInner(ctx)
+}

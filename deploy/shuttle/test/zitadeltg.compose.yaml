@@ -1,0 +1,31 @@
+# Append to the current owned model, including browser overlays. No IAM IdP is created.
+services:
+  zitadeltg:
+    profiles: [identity]
+    image: "${TEST_ZITADELTG_IMAGE:?Build and record an isolated provider image first}"
+    pull_policy: never
+    user: "1000:1000"
+    environment:
+      ZITADELTG_WEB_LOGIN_TOKEN: "${ZITADELTG_WEB_LOGIN_TOKEN:?Set dedicated Telegram Web Login credentials}"
+      SSL_CERT_FILE: /tls/ca-bundle.pem
+      GOMEMLIMIT: 96MiB
+      GOMAXPROCS: "2"
+    volumes:
+      - ./zitadeltg.yaml:/config/zitadeltg.yaml:ro
+      - ../../../.cache/shuttle-live-test/ca-bundle.pem:/tls/ca-bundle.pem:ro
+      - zitadeltg-signing:/data
+    networks: [browser]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    memswap_limit: 128m
+    cpus: 1
+    pids_limit: 64
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
+    stop_grace_period: 5s
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "2"}
+volumes:
+  zitadeltg-signing:

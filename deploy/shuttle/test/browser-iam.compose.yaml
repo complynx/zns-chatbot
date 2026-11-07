@@ -1,0 +1,4 @@
+# Only for the reviewed same-origin cutover, after gateway preflight.
+services:
+  zitadel:
+    ports: !reset []

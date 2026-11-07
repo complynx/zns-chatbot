@@ -1,0 +1,588 @@
+rule_files: [alerts.yaml]
+evaluation_interval: 30s
+tests:
+  - name: "healthy empty snapshots and old intentional user wait"
+    interval: 30s
+    input_series:
+      - series: "up{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_tasks_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_tasks_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_tasks_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_outbox_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_outbox_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_outbox_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_queue_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_queue_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_queue_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_tasks_unresolved{job=\"integrations/zinusya\",instance=\"complynx.net\",state=\"awaiting_user\"}"
+        values: "1+0x40"
+      - series: "zinusya_tasks_oldest_accepted_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\",state=\"awaiting_user\"}"
+        values: "86400+30x40"
+      - series: "zinusya_outbox_unresolved{job=\"integrations/zinusya\",instance=\"complynx.net\",state=\"delivery_unknown\"}"
+        values: "0+0x40"
+      - series: "zinusya_queue_due{job=\"integrations/zinusya\",instance=\"complynx.net\",kind=\"shuttle_task\",state=\"scheduled\"}"
+        values: "0+0x40"
+      - series: "zinusya_queue_oldest_scheduled_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\",kind=\"shuttle_task\",state=\"scheduled\"}"
+        values: "0+0x40"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ZinusyaScrapeUnavailable
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: ZinusyaTasksSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: ZinusyaOutboxSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: ZinusyaQueueSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: ZinusyaTaskUncertain
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: ZinusyaDeliveryUncertain
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: ZinusyaQueueOverdue
+        exp_alerts: []
+  - name: "target missing even if unrelated target is healthy"
+    interval: 30s
+    input_series:
+      - series: "up{job=\"integrations/zinusya\",instance=\"other.example\"}"
+        values: "1+0x40"
+    alert_rule_test:
+      - eval_time: 1m30s
+        alertname: ZinusyaScrapeUnavailable
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: ZinusyaScrapeUnavailable
+        exp_alerts:
+          - exp_labels: {"job": "integrations/zinusya", "instance": "complynx.net", "severity": "critical"}
+            exp_annotations: {"summary": "Zinusya metrics target is unavailable", "description": "Check the bot, Alloy target and private network. Missing telemetry does not prove that the bot stopped."}
+      - eval_time: 3m
+        alertname: ZinusyaTasksSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: ZinusyaOutboxSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: ZinusyaQueueSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: ZinusyaTaskUncertain
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: ZinusyaDeliveryUncertain
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: ZinusyaQueueOverdue
+        exp_alerts: []
+  - name: "scrape failure suppresses stale business alerts and resolves"
+    interval: 30s
+    input_series:
+      - series: "up{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0 0 0 0 0 0 1+0x34"
+      - series: "zinusya_tasks_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_tasks_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_tasks_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_outbox_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_outbox_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_outbox_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_queue_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_queue_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_queue_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_tasks_unresolved{job=\"integrations/zinusya\",instance=\"complynx.net\",state=\"auth_unknown\"}"
+        values: "1 1 1 1 1 1 0+0x34"
+      - series: "zinusya_outbox_unresolved{job=\"integrations/zinusya\",instance=\"complynx.net\",state=\"delivery_unknown\"}"
+        values: "1 1 1 1 1 1 0+0x34"
+    alert_rule_test:
+      - eval_time: 1m30s
+        alertname: ZinusyaScrapeUnavailable
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: ZinusyaScrapeUnavailable
+        exp_alerts:
+          - exp_labels: {"job": "integrations/zinusya", "instance": "complynx.net", "severity": "critical"}
+            exp_annotations: {"summary": "Zinusya metrics target is unavailable", "description": "Check the bot, Alloy target and private network. Missing telemetry does not prove that the bot stopped."}
+      - eval_time: 2m
+        alertname: ZinusyaTasksSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: ZinusyaOutboxSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: ZinusyaQueueSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: ZinusyaTaskUncertain
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: ZinusyaDeliveryUncertain
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: ZinusyaQueueOverdue
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaScrapeUnavailable
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaTasksSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaOutboxSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaQueueSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaTaskUncertain
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaDeliveryUncertain
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaQueueOverdue
+        exp_alerts: []
+  - name: "missing task family while another target has healthy data"
+    interval: 30s
+    input_series:
+      - series: "up{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_outbox_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_outbox_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_outbox_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_queue_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_queue_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_queue_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_tasks_collection_success{job=\"integrations/zinusya\",instance=\"other.example\"}"
+        values: "1+0x40"
+      - series: "zinusya_tasks_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"other.example\"}"
+        values: "1+30x40"
+      - series: "zinusya_tasks_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"other.example\"}"
+        values: "0+0x40"
+    alert_rule_test:
+      - eval_time: 1m30s
+        alertname: ZinusyaTasksSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: ZinusyaTasksSnapshotUnavailable
+        exp_alerts:
+          - exp_labels: {"job": "integrations/zinusya", "instance": "complynx.net", "severity": "warning"}
+            exp_annotations: {"summary": "Zinusya task snapshot is unavailable or stale", "description": "Check private metrics and PostgreSQL acquisition/query health. Missing task counts are not zero backlog."}
+  - name: "never successful outbox snapshot and subsequent recovery"
+    interval: 30s
+    input_series:
+      - series: "up{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_tasks_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_tasks_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_tasks_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_queue_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_queue_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_queue_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_outbox_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0 0 0 0 0 0 1+0x34"
+      - series: "zinusya_outbox_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0 0 0 0 0 0 181+30x34"
+      - series: "zinusya_outbox_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "_ _ _ _ _ _ 0+0x34"
+      - series: "zinusya_outbox_unresolved{job=\"integrations/zinusya\",instance=\"complynx.net\",state=\"delivery_unknown\"}"
+        values: "1 1 1 1 1 1 0+0x34"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ZinusyaOutboxSnapshotUnavailable
+        exp_alerts:
+          - exp_labels: {"job": "integrations/zinusya", "instance": "complynx.net", "severity": "warning"}
+            exp_annotations: {"summary": "Zinusya outbox snapshot is unavailable or stale", "description": "Check private metrics and PostgreSQL acquisition/query health. Missing delivery counts are not zero backlog."}
+      - eval_time: 2m
+        alertname: ZinusyaDeliveryUncertain
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaScrapeUnavailable
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaTasksSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaOutboxSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaQueueSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaTaskUncertain
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaDeliveryUncertain
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaQueueOverdue
+        exp_alerts: []
+  - name: "frozen successful queue timestamp is stale even with frozen age"
+    interval: 30s
+    input_series:
+      - series: "up{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_tasks_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_tasks_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_tasks_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_outbox_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_outbox_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_outbox_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_queue_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_queue_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_queue_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_queue_due{job=\"integrations/zinusya\",instance=\"complynx.net\",kind=\"shuttle_task\",state=\"scheduled\"}"
+        values: "1+0x40"
+      - series: "zinusya_queue_oldest_scheduled_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\",kind=\"shuttle_task\",state=\"scheduled\"}"
+        values: "600+0x40"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: ZinusyaQueueSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 4m30s
+        alertname: ZinusyaQueueSnapshotUnavailable
+        exp_alerts:
+          - exp_labels: {"job": "integrations/zinusya", "instance": "complynx.net", "severity": "warning"}
+            exp_annotations: {"summary": "Zinusya queue snapshot is unavailable or stale", "description": "Check private metrics and PostgreSQL acquisition/query health. Missing queue counts are not an empty queue."}
+      - eval_time: 10m
+        alertname: ZinusyaQueueOverdue
+        exp_alerts: []
+  - name: "success without snapshot age is incomplete"
+    interval: 30s
+    input_series:
+      - series: "up{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_outbox_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_outbox_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_outbox_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_queue_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_queue_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_queue_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_tasks_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_tasks_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ZinusyaTasksSnapshotUnavailable
+        exp_alerts:
+          - exp_labels: {"job": "integrations/zinusya", "instance": "complynx.net", "severity": "warning"}
+            exp_annotations: {"summary": "Zinusya task snapshot is unavailable or stale", "description": "Check private metrics and PostgreSQL acquisition/query health. Missing task counts are not zero backlog."}
+  - name: "task uncertainty hold and receipt recovery"
+    interval: 30s
+    input_series:
+      - series: "up{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_tasks_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_tasks_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_tasks_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_outbox_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_outbox_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_outbox_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_queue_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_queue_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_queue_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_tasks_unresolved{job=\"integrations/zinusya\",instance=\"complynx.net\",state=\"auth_unknown\"}"
+        values: "1 1 1 1 1 1 0+0x34"
+      - series: "zinusya_tasks_unresolved{job=\"integrations/zinusya\",instance=\"complynx.net\",state=\"delivery_unknown\"}"
+        values: "1 1 1 1 1 1 0+0x34"
+    alert_rule_test:
+      - eval_time: 1m30s
+        alertname: ZinusyaTaskUncertain
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: ZinusyaTaskUncertain
+        exp_alerts:
+          - exp_labels: {"job": "integrations/zinusya", "instance": "complynx.net", "severity": "warning", "state": "auth_unknown"}
+            exp_annotations: {"summary": "Zinusya has an uncertain task receipt", "description": "Inspect the saved task and original auth/delivery receipt. Do not replay uncertain actions or create a replacement run."}
+          - exp_labels: {"job": "integrations/zinusya", "instance": "complynx.net", "severity": "warning", "state": "delivery_unknown"}
+            exp_annotations: {"summary": "Zinusya has an uncertain task receipt", "description": "Inspect the saved task and original auth/delivery receipt. Do not replay uncertain actions or create a replacement run."}
+      - eval_time: 4m
+        alertname: ZinusyaScrapeUnavailable
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaTasksSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaOutboxSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaQueueSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaTaskUncertain
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaDeliveryUncertain
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaQueueOverdue
+        exp_alerts: []
+  - name: "delivery uncertainty hold and receipt recovery"
+    interval: 30s
+    input_series:
+      - series: "up{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_tasks_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_tasks_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_tasks_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_outbox_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_outbox_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_outbox_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_queue_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_queue_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_queue_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_outbox_unresolved{job=\"integrations/zinusya\",instance=\"complynx.net\",state=\"delivery_unknown\"}"
+        values: "1 1 1 1 1 1 0+0x34"
+    alert_rule_test:
+      - eval_time: 1m30s
+        alertname: ZinusyaDeliveryUncertain
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: ZinusyaDeliveryUncertain
+        exp_alerts:
+          - exp_labels: {"job": "integrations/zinusya", "instance": "complynx.net", "severity": "warning", "state": "delivery_unknown"}
+            exp_annotations: {"summary": "Zinusya has an uncertain Telegram delivery", "description": "Check the original outbox receipt and actual chat before any resend. Task and outbox alerts may describe the same incident."}
+      - eval_time: 4m
+        alertname: ZinusyaScrapeUnavailable
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaTasksSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaOutboxSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaQueueSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaTaskUncertain
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaDeliveryUncertain
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ZinusyaQueueOverdue
+        exp_alerts: []
+  - name: "overdue available scheduled and retryable jobs drain"
+    interval: 30s
+    input_series:
+      - series: "up{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_tasks_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_tasks_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_tasks_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_outbox_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_outbox_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_outbox_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_queue_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_queue_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_queue_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_queue_due{job=\"integrations/zinusya\",instance=\"complynx.net\",kind=\"shuttle_task\",state=\"available\"}"
+        values: "1+0x12 0+0x28"
+      - series: "zinusya_queue_oldest_scheduled_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\",kind=\"shuttle_task\",state=\"available\"}"
+        values: "301+0x12 0+0x28"
+      - series: "zinusya_queue_due{job=\"integrations/zinusya\",instance=\"complynx.net\",kind=\"shuttle_task\",state=\"scheduled\"}"
+        values: "1+0x12 0+0x28"
+      - series: "zinusya_queue_oldest_scheduled_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\",kind=\"shuttle_task\",state=\"scheduled\"}"
+        values: "301+0x12 0+0x28"
+      - series: "zinusya_queue_due{job=\"integrations/zinusya\",instance=\"complynx.net\",kind=\"shuttle_task\",state=\"retryable\"}"
+        values: "1+0x12 0+0x28"
+      - series: "zinusya_queue_oldest_scheduled_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\",kind=\"shuttle_task\",state=\"retryable\"}"
+        values: "301+0x12 0+0x28"
+    alert_rule_test:
+      - eval_time: 4m30s
+        alertname: ZinusyaQueueOverdue
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: ZinusyaQueueOverdue
+        exp_alerts:
+          - exp_labels: {"job": "integrations/zinusya", "instance": "complynx.net", "severity": "warning", "kind": "shuttle_task", "state": "available"}
+            exp_annotations: {"summary": "Zinusya has overdue queue work", "description": "Inspect scheduling, River promotion, worker capacity and dependencies. This measures scheduling lateness, not global progress or user-wait duration."}
+          - exp_labels: {"job": "integrations/zinusya", "instance": "complynx.net", "severity": "warning", "kind": "shuttle_task", "state": "scheduled"}
+            exp_annotations: {"summary": "Zinusya has overdue queue work", "description": "Inspect scheduling, River promotion, worker capacity and dependencies. This measures scheduling lateness, not global progress or user-wait duration."}
+          - exp_labels: {"job": "integrations/zinusya", "instance": "complynx.net", "severity": "warning", "kind": "shuttle_task", "state": "retryable"}
+            exp_annotations: {"summary": "Zinusya has overdue queue work", "description": "Inspect scheduling, River promotion, worker capacity and dependencies. This measures scheduling lateness, not global progress or user-wait duration."}
+      - eval_time: 7m
+        alertname: ZinusyaScrapeUnavailable
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: ZinusyaTasksSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: ZinusyaOutboxSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: ZinusyaQueueSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: ZinusyaTaskUncertain
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: ZinusyaDeliveryUncertain
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: ZinusyaQueueOverdue
+        exp_alerts: []
+  - name: "no overdue alert for zero count or exact threshold"
+    interval: 30s
+    input_series:
+      - series: "up{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_tasks_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_tasks_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_tasks_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_outbox_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_outbox_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_outbox_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_queue_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_queue_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_queue_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_queue_due{job=\"integrations/zinusya\",instance=\"complynx.net\",kind=\"shuttle_task\",state=\"scheduled\"}"
+        values: "0+0x40"
+      - series: "zinusya_queue_oldest_scheduled_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\",kind=\"shuttle_task\",state=\"scheduled\"}"
+        values: "999+0x40"
+      - series: "zinusya_queue_due{job=\"integrations/zinusya\",instance=\"complynx.net\",kind=\"shuttle_task\",state=\"retryable\"}"
+        values: "1+0x40"
+      - series: "zinusya_queue_oldest_scheduled_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\",kind=\"shuttle_task\",state=\"retryable\"}"
+        values: "300+0x40"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ZinusyaScrapeUnavailable
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: ZinusyaTasksSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: ZinusyaOutboxSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: ZinusyaQueueSnapshotUnavailable
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: ZinusyaTaskUncertain
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: ZinusyaDeliveryUncertain
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: ZinusyaQueueOverdue
+        exp_alerts: []
+  - name: "failed task collector suppresses retained uncertainty series"
+    interval: 30s
+    input_series:
+      - series: "up{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_outbox_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_outbox_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_outbox_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_queue_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+0x40"
+      - series: "zinusya_queue_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_queue_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_tasks_collection_success{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_tasks_last_success_timestamp_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "1+30x40"
+      - series: "zinusya_tasks_snapshot_age_seconds{job=\"integrations/zinusya\",instance=\"complynx.net\"}"
+        values: "0+0x40"
+      - series: "zinusya_tasks_unresolved{job=\"integrations/zinusya\",instance=\"complynx.net\",state=\"auth_unknown\"}"
+        values: "1+0x40"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ZinusyaTasksSnapshotUnavailable
+        exp_alerts:
+          - exp_labels: {"job": "integrations/zinusya", "instance": "complynx.net", "severity": "warning"}
+            exp_annotations: {"summary": "Zinusya task snapshot is unavailable or stale", "description": "Check private metrics and PostgreSQL acquisition/query health. Missing task counts are not zero backlog."}
+      - eval_time: 3m
+        alertname: ZinusyaTaskUncertain
+        exp_alerts: []

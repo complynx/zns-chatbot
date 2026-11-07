@@ -1,0 +1,2 @@
+CREATE DATABASE loom;
+CREATE DATABASE shuttle;

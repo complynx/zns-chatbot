@@ -1,0 +1,20 @@
+# Example only. Supply a private PostgreSQL/IAM/Loom network and secrets locally.
+services:
+  shuttle:
+    build:
+      context: ../..
+      dockerfile: deploy/shuttle/Dockerfile
+    restart: unless-stopped
+    stop_grace_period: 5s
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - ../../config/shuttle.yaml:/etc/shuttle/config.yaml:ro
+    env_file: ../../config/shuttle.env
+    ports:
+      - "127.0.0.1:18080:8080"
+      - "127.0.0.1:19090:9090"
+    environment:
+      SHUTTLE_HTTP_ADDRESS: "0.0.0.0:8080"
+      SHUTTLE_INTERNAL_ADDRESS: "0.0.0.0:9090"

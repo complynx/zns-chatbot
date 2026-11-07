@@ -1,0 +1,217 @@
+package river
+
+import (
+	"bytes"
+	"context"
+	"log/slog"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/stretchr/testify/require"
+
+	"github.com/riverqueue/river/internal/jobcompleter"
+	"github.com/riverqueue/river/internal/jobstats"
+	"github.com/riverqueue/river/riverdbtest"
+	"github.com/riverqueue/river/riverdriver"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
+	"github.com/riverqueue/river/rivershared/baseservice"
+	"github.com/riverqueue/river/rivershared/riversharedtest"
+	"github.com/riverqueue/river/rivershared/startstoptest"
+	"github.com/riverqueue/river/rivershared/testfactory"
+	"github.com/riverqueue/river/rivertype"
+)
+
+func Test_SubscriptionManager(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	type testBundle struct {
+		exec        riverdriver.Executor
+		subscribeCh chan []jobcompleter.CompleterJobUpdated
+		tx          pgx.Tx
+	}
+
+	setup := func(t *testing.T) (*subscriptionManager, *testBundle) {
+		t.Helper()
+
+		tx := riverdbtest.TestTxPgx(ctx, t)
+		exec := riverpgxv5.New(nil).UnwrapExecutor(tx)
+
+		subscribeCh := make(chan []jobcompleter.CompleterJobUpdated, 1)
+		manager := newSubscriptionManager(riversharedtest.BaseServiceArchetype(t), subscribeCh)
+
+		require.NoError(t, manager.Start(ctx))
+		t.Cleanup(manager.Stop)
+
+		return manager, &testBundle{
+			exec:        exec,
+			subscribeCh: subscribeCh,
+			tx:          tx,
+		}
+	}
+
+	t.Run("DistributesRequestedEventsToSubscribers", func(t *testing.T) {
+		t.Parallel()
+
+		manager, bundle := setup(t)
+		t.Cleanup(func() { close(bundle.subscribeCh) })
+
+		sub, cancelSub := manager.SubscribeConfig(&SubscribeConfig{ChanSize: 10, Kinds: []EventKind{EventKindJobCompleted, EventKindJobInterrupted, EventKindJobSnoozed}})
+		t.Cleanup(cancelSub)
+
+		// Send some events
+		job1 := testfactory.Job(ctx, t, bundle.exec, &testfactory.JobOpts{State: new(rivertype.JobStateCompleted), FinalizedAt: new(time.Now())})
+		job2 := testfactory.Job(ctx, t, bundle.exec, &testfactory.JobOpts{State: new(rivertype.JobStateCancelled), FinalizedAt: new(time.Now())})
+		job3 := testfactory.Job(ctx, t, bundle.exec, &testfactory.JobOpts{State: new(rivertype.JobStateRetryable)})
+		job4 := testfactory.Job(ctx, t, bundle.exec, &testfactory.JobOpts{State: new(rivertype.JobStateScheduled)})
+		job5 := testfactory.Job(ctx, t, bundle.exec, &testfactory.JobOpts{State: new(rivertype.JobStateAvailable)})
+
+		makeStats := func(complete, wait, run time.Duration) *jobstats.JobStatistics {
+			return &jobstats.JobStatistics{
+				CompleteDuration:  complete,
+				QueueWaitDuration: wait,
+				RunDuration:       run,
+			}
+		}
+
+		bundle.subscribeCh <- []jobcompleter.CompleterJobUpdated{
+			{Job: job1, JobStats: makeStats(101, 102, 103), Reason: riverdriver.JobSetStateReasonCompleted}, // completed, should be sent
+			{Job: job2, JobStats: makeStats(201, 202, 203), Reason: riverdriver.JobSetStateReasonCancelled}, // cancelled, should be skipped
+		}
+		bundle.subscribeCh <- []jobcompleter.CompleterJobUpdated{
+			{Job: job3, JobStats: makeStats(301, 302, 303), Reason: riverdriver.JobSetStateReasonFailed},      // retryable, should be skipped
+			{Job: job4, JobStats: makeStats(401, 402, 403), Reason: riverdriver.JobSetStateReasonSnoozed},     // snoozed/scheduled, should be sent
+			{Job: job5, JobStats: makeStats(501, 502, 503), Reason: riverdriver.JobSetStateReasonInterrupted}, // interrupted/available, should be sent
+		}
+
+		received := riversharedtest.WaitOrTimeoutN(t, sub, 3)
+		require.Equal(t, EventKindJobCompleted, received[0].Kind)
+		require.Equal(t, job1.ID, received[0].Job.ID)
+		require.Equal(t, rivertype.JobStateCompleted, received[0].Job.State)
+		require.Equal(t, time.Duration(101), received[0].JobStats.CompleteDuration)
+		require.Equal(t, time.Duration(102), received[0].JobStats.QueueWaitDuration)
+		require.Equal(t, time.Duration(103), received[0].JobStats.RunDuration)
+		require.Equal(t, EventKindJobSnoozed, received[1].Kind)
+		require.Equal(t, job4.ID, received[1].Job.ID)
+		require.Equal(t, rivertype.JobStateScheduled, received[1].Job.State)
+		require.Equal(t, time.Duration(401), received[1].JobStats.CompleteDuration)
+		require.Equal(t, time.Duration(402), received[1].JobStats.QueueWaitDuration)
+		require.Equal(t, time.Duration(403), received[1].JobStats.RunDuration)
+		require.Equal(t, EventKindJobInterrupted, received[2].Kind)
+		require.Equal(t, job5.ID, received[2].Job.ID)
+		require.Equal(t, rivertype.JobStateAvailable, received[2].Job.State)
+		require.Equal(t, time.Duration(501), received[2].JobStats.CompleteDuration)
+		require.Equal(t, time.Duration(502), received[2].JobStats.QueueWaitDuration)
+		require.Equal(t, time.Duration(503), received[2].JobStats.RunDuration)
+
+		manager.statsMu.Lock()
+		statsAggregate := manager.statsAggregate
+		statsNumJobs := manager.statsNumJobs
+		manager.statsMu.Unlock()
+		require.Equal(t, 5, statsNumJobs)
+		require.Equal(t, time.Duration(101+201+301+401+501), statsAggregate.CompleteDuration)
+		require.Equal(t, time.Duration(102+202+302+402+502), statsAggregate.QueueWaitDuration)
+		require.Equal(t, time.Duration(103+203+303+403+503), statsAggregate.RunDuration)
+
+		cancelSub()
+		select {
+		case value, stillOpen := <-sub:
+			require.False(t, stillOpen, "subscription channel should be closed")
+			require.Nil(t, value, "subscription channel should be closed")
+		default:
+			require.Fail(t, "subscription channel should have been closed")
+		}
+	})
+
+	t.Run("StartStopRepeatedly", func(t *testing.T) {
+		// This service does not use the typical `startstoptest.Stress()` test
+		// because there are some additional steps required after a `Stop` for the
+		// subsequent `Start` to succeed. It's also not friendly for multiple
+		// concurrent calls to `Start` and `Stop`, but this is fine because the only
+		// usage within `Client` is already protected by a mutex.
+		t.Parallel()
+
+		manager, bundle := setup(t)
+
+		subscribeCh := bundle.subscribeCh
+		for range 100 {
+			close(subscribeCh)
+			manager.Stop()
+
+			subscribeCh = make(chan []jobcompleter.CompleterJobUpdated, 1)
+			manager.ResetSubscribeChan(subscribeCh)
+
+			require.NoError(t, manager.Start(ctx))
+		}
+		close(subscribeCh)
+	})
+
+	t.Run("StartStopStress", func(t *testing.T) {
+		t.Parallel()
+
+		svc, bundle := setup(t)
+
+		// Close the subscription channel in advance so that stops can leave
+		// successfully.
+		close(bundle.subscribeCh)
+
+		startstoptest.Stress(ctx, t, svc)
+	})
+
+	t.Run("LogsDroppedQueueEvents", func(t *testing.T) {
+		t.Parallel()
+
+		var logBuf bytes.Buffer
+
+		manager := newSubscriptionManager(&baseservice.Archetype{
+			Logger: slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})),
+			Time:   riversharedtest.BaseServiceArchetype(t).Time,
+		}, nil)
+
+		sub, cancelSub := manager.SubscribeConfig(&SubscribeConfig{ChanSize: 1, Kinds: []EventKind{EventKindQueuePaused}})
+		t.Cleanup(cancelSub)
+
+		manager.distributeQueueEventWithContext(ctx, &Event{
+			Kind:  EventKindQueuePaused,
+			Queue: &rivertype.Queue{Name: "default"},
+		})
+		manager.distributeQueueEventWithContext(ctx, &Event{
+			Kind:  EventKindQueuePaused,
+			Queue: &rivertype.Queue{Name: "default"},
+		})
+
+		require.Len(t, sub, 1)
+		require.Contains(t, strings.TrimSpace(logBuf.String()), "Subscription event dropped due to full buffer")
+		require.Contains(t, logBuf.String(), "event_kind=queue_paused")
+	})
+
+	t.Run("PanicOnNegativeChanSize", func(t *testing.T) {
+		t.Parallel()
+
+		manager := newSubscriptionManager(riversharedtest.BaseServiceArchetype(t), nil)
+
+		require.PanicsWithValue(t, "SubscribeConfig.ChanSize must be greater or equal to 1", func() {
+			_, _ = manager.SubscribeConfig(&SubscribeConfig{
+				ChanSize: -1,
+				Kinds:    []EventKind{EventKindQueuePaused},
+			})
+		})
+	})
+
+	t.Run("UsesDefaultChanSizeWhenZero", func(t *testing.T) {
+		t.Parallel()
+
+		manager := newSubscriptionManager(riversharedtest.BaseServiceArchetype(t), nil)
+
+		sub, cancelSub := manager.SubscribeConfig(&SubscribeConfig{
+			ChanSize: 0,
+			Kinds:    []EventKind{EventKindQueuePaused},
+		})
+		t.Cleanup(cancelSub)
+
+		require.Equal(t, subscribeChanSizeDefault, cap(sub))
+	})
+}
