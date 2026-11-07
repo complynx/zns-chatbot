@@ -24,8 +24,8 @@ func configFile(t *testing.T, suffix string) string {
 func TestLogLevelConfiguration(t *testing.T) {
 	for _, level := range []string{"debug", "info", "warn", "error", "invalid"} {
 		t.Run(level, func(t *testing.T) {
-			t.Setenv("SHUTTLE_LOG_LEVEL", "")
-			require.NoError(t, os.Unsetenv("SHUTTLE_LOG_LEVEL"))
+			t.Setenv("ZNS_CHATBOT_LOG_LEVEL", "")
+			require.NoError(t, os.Unsetenv("ZNS_CHATBOT_LOG_LEVEL"))
 			path := configFile(t, "")
 			data, err := os.ReadFile(path)
 			require.NoError(t, err)
@@ -38,7 +38,7 @@ func TestLogLevelConfiguration(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.Equal(t, level, c.LogLevel)
-			t.Setenv("SHUTTLE_LOG_LEVEL", "error")
+			t.Setenv("ZNS_CHATBOT_LOG_LEVEL", "error")
 			c, err = config.Load(path)
 			require.NoError(t, err)
 			require.Equal(t, "error", c.LogLevel)
@@ -59,7 +59,7 @@ func TestEmbeddedDescriptorStartupConfiguration(t *testing.T) {
 		{name: "negative concurrency", fields: "enabled: true\n  journal: ./private-journal\n  concurrency: -1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("SHUTTLE_DESCRIPTOR_CLIENT_SECRET", "synthetic-secret")
+			t.Setenv("ZNS_CHATBOT_DESCRIPTOR_CLIENT_SECRET", "synthetic-secret")
 			suffix := "\ndescriptor:\n  " + tc.fields + "\n  subject: descriptor-subject\n  client_id: descriptor-client\n"
 			_, err := config.Load(configFile(t, suffix))
 			if tc.valid {
@@ -72,11 +72,11 @@ func TestEmbeddedDescriptorStartupConfiguration(t *testing.T) {
 	}
 }
 func TestStartupConfigOverridesAndBotNamespace(t *testing.T) {
-	t.Setenv("SHUTTLE_TELEGRAM_TOKEN", "789:another_fake_token")
-	t.Setenv("SHUTTLE_HTTP_TIMEOUT", "2s")
-	t.Setenv("SHUTTLE_LOOM_BASE_URL", "http://loom:8080")
-	t.Setenv("SHUTTLE_OTEL_ENDPOINT", "http://alloy:4318")
-	t.Setenv("SHUTTLE_MINI_APP_ORIGIN", "https://app.example.invalid")
+	t.Setenv("ZNS_CHATBOT_TELEGRAM_TOKEN", "789:another_fake_token")
+	t.Setenv("ZNS_CHATBOT_HTTP_TIMEOUT", "2s")
+	t.Setenv("ZNS_CHATBOT_LOOM_BASE_URL", "http://loom:8080")
+	t.Setenv("ZNS_CHATBOT_OTEL_ENDPOINT", "http://alloy:4318")
+	t.Setenv("ZNS_CHATBOT_MINI_APP_ORIGIN", "https://app.example.invalid")
 	c, err := config.Load(configFile(t, ""))
 	require.NoError(t, err)
 	require.Equal(t, int64(789), c.Telegram.BotID)
@@ -87,16 +87,16 @@ func TestStartupConfigOverridesAndBotNamespace(t *testing.T) {
 }
 func TestInvalidStartupDoesNotRevealCredentials(t *testing.T) {
 	for _, tc := range []struct{ name, env, value string }{
-		{"timeout", "SHUTTLE_HTTP_TIMEOUT", "0s"},
-		{"shutdown", "SHUTTLE_SHUTDOWN_TIMEOUT", "6s"},
-		{"issuer", "SHUTTLE_IDENTITY_ISSUER", "http://evil.example/secret-token"},
-		{"userinfo", "SHUTTLE_LOOM_BASE_URL", "https://user:secret-token@loom.example"},
-		{"ratio", "SHUTTLE_OTEL_SAMPLE_RATIO", "NaN"},
-		{"port", "SHUTTLE_HTTP_ADDRESS", "localhost:99999"},
-		{"bot", "SHUTTLE_TELEGRAM_TOKEN", "0:secret-token"},
-		{"app scheme", "SHUTTLE_MINI_APP_ORIGIN", "http://app.example/secret-token"},
-		{"app path", "SHUTTLE_MINI_APP_ORIGIN", "https://app.example/secret-token"},
-		{"app credentials", "SHUTTLE_MINI_APP_ORIGIN", "https://user:secret-token@app.example"},
+		{"timeout", "ZNS_CHATBOT_HTTP_TIMEOUT", "0s"},
+		{"shutdown", "ZNS_CHATBOT_SHUTDOWN_TIMEOUT", "6s"},
+		{"issuer", "ZNS_CHATBOT_IDENTITY_ISSUER", "http://evil.example/secret-token"},
+		{"userinfo", "ZNS_CHATBOT_LOOM_BASE_URL", "https://user:secret-token@loom.example"},
+		{"ratio", "ZNS_CHATBOT_OTEL_SAMPLE_RATIO", "NaN"},
+		{"port", "ZNS_CHATBOT_HTTP_ADDRESS", "localhost:99999"},
+		{"bot", "ZNS_CHATBOT_TELEGRAM_TOKEN", "0:secret-token"},
+		{"app scheme", "ZNS_CHATBOT_MINI_APP_ORIGIN", "http://app.example/secret-token"},
+		{"app path", "ZNS_CHATBOT_MINI_APP_ORIGIN", "https://app.example/secret-token"},
+		{"app credentials", "ZNS_CHATBOT_MINI_APP_ORIGIN", "https://user:secret-token@app.example"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(tc.env, tc.value)
@@ -114,7 +114,7 @@ func TestUnknownYAMLAndTrailingDocumentAreRejected(t *testing.T) {
 	}
 }
 func TestLoopbackIssuerIsExplicitTestSeam(t *testing.T) {
-	t.Setenv("SHUTTLE_IDENTITY_ISSUER", "http://127.0.0.1:8888")
+	t.Setenv("ZNS_CHATBOT_IDENTITY_ISSUER", "http://127.0.0.1:8888")
 	_, err := config.Load(configFile(t, ""))
 	require.NoError(t, err)
 }
@@ -149,13 +149,13 @@ func TestMiniAppLocalRedirectStartupConfiguration(t *testing.T) {
 		{name: "bad bool", origin: "https://app.example.invalid", allow: "secret-token"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("SHUTTLE_MINI_APP_ORIGIN", tc.origin)
-			t.Setenv("SHUTTLE_MINI_APP_LAUNCH_URL", tc.launch)
+			t.Setenv("ZNS_CHATBOT_MINI_APP_ORIGIN", tc.origin)
+			t.Setenv("ZNS_CHATBOT_MINI_APP_LAUNCH_URL", tc.launch)
 			allow := tc.allow
 			if allow == "" {
 				allow = "false"
 			}
-			t.Setenv("SHUTTLE_MINI_APP_ALLOW_LOCAL_HTTP", allow)
+			t.Setenv("ZNS_CHATBOT_MINI_APP_ALLOW_LOCAL_HTTP", allow)
 			c, err := config.Load(configFile(t, ""))
 			if !tc.valid {
 				require.Error(t, err)
@@ -179,7 +179,7 @@ func TestMiniAppLocalHTTPEnvironmentFalseOverridesYAML(t *testing.T) {
 	c, err := config.Load(path)
 	require.NoError(t, err)
 	require.True(t, c.MiniAppAllowLocalHTTP)
-	t.Setenv("SHUTTLE_MINI_APP_ALLOW_LOCAL_HTTP", "false")
+	t.Setenv("ZNS_CHATBOT_MINI_APP_ALLOW_LOCAL_HTTP", "false")
 	_, err = config.Load(path)
 	require.Error(t, err)
 }

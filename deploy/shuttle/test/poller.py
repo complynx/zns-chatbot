@@ -28,7 +28,7 @@ def private_update(update, allowed_user=None):
     return type(uid) is int and 0 < uid < 1 << 52 and (allowed_user is None or uid == allowed_user) and not user.get("is_bot", False) and chat.get("type") == "private" and chat.get("id") == uid
 
 def check_bot(base=None):
-    base = base or "https://api.telegram.org/bot" + os.environ["SHUTTLE_TELEGRAM_TOKEN"].strip() + "/"
+    base = base or "https://api.telegram.org/bot" + os.environ["ZNS_CHATBOT_TELEGRAM_TOKEN"].strip() + "/"
     me = post(base + "getMe", {})["result"]
     if me['id'] != int(os.environ['TEST_TELEGRAM_BOT_ID']):
         raise RuntimeError('Unexpected bot identity')
@@ -62,7 +62,7 @@ def main(base=None, cursor=None):
     allowed_user = int(os.environ["TEST_TELEGRAM_USER_ID"])
     if not 0 < allowed_user < 1 << 52:
         raise ValueError("Invalid test account")
-    token = os.environ["SHUTTLE_TELEGRAM_TOKEN"].strip()
+    token = os.environ["ZNS_CHATBOT_TELEGRAM_TOKEN"].strip()
     base = base or "https://api.telegram.org/bot" + token + "/"
     me = check_bot(base)
     print("Polling test bot", me["id"], me.get("username", ""), flush=True)

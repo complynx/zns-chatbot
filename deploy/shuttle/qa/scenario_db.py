@@ -100,8 +100,8 @@ def protected_directory(directory):
     directory = pathlib.Path(directory)
     qa.need(directory.is_dir() and not any(directory.iterdir()) and not directory.is_symlink(), "Fresh protected scenario directory required")
     if os.name == "nt":
-        script = "$a=Get-Acl -LiteralPath $env:SHUTTLE_QA_AUDIT;$r=@($a.Access);$s=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value;if(-not $a.AreAccessRulesProtected -or $r.Count -ne 1 -or $r[0].IsInherited -or $r[0].IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value -ne $s -or $r[0].AccessControlType -ne 'Allow' -or $r[0].FileSystemRights -ne 'FullControl' -or $r[0].InheritanceFlags -ne ([System.Security.AccessControl.InheritanceFlags]::ObjectInherit -bor [System.Security.AccessControl.InheritanceFlags]::ContainerInherit) -or $r[0].PropagationFlags -ne [System.Security.AccessControl.PropagationFlags]::None){throw 'Private DACL required'}"
-        run(["pwsh", "-NoProfile", "-NonInteractive", "-Command", script], env={**os.environ, "SHUTTLE_QA_AUDIT": str(directory)}, stdout=subprocess.PIPE)
+        script = "$a=Get-Acl -LiteralPath $env:ZNS_CHATBOT_QA_AUDIT;$r=@($a.Access);$s=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value;if(-not $a.AreAccessRulesProtected -or $r.Count -ne 1 -or $r[0].IsInherited -or $r[0].IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value -ne $s -or $r[0].AccessControlType -ne 'Allow' -or $r[0].FileSystemRights -ne 'FullControl' -or $r[0].InheritanceFlags -ne ([System.Security.AccessControl.InheritanceFlags]::ObjectInherit -bor [System.Security.AccessControl.InheritanceFlags]::ContainerInherit) -or $r[0].PropagationFlags -ne [System.Security.AccessControl.PropagationFlags]::None){throw 'Private DACL required'}"
+        run(["pwsh", "-NoProfile", "-NonInteractive", "-Command", script], env={**os.environ, "ZNS_CHATBOT_QA_AUDIT": str(directory)}, stdout=subprocess.PIPE)
     else:
         qa.need(directory.stat().st_mode & 0o077 == 0, "Private mode required")
     return directory

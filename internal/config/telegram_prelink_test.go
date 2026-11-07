@@ -17,7 +17,7 @@ func prelinkEnv(t *testing.T) string {
 		"ISSUER": "https://provider.invalid/tg", "JWKS_URL": "https://provider.invalid/tg/keys",
 		"AUDIENCE": "zinusya-prelink", "PROVIDER_ID": "fixture-idp", "SERVICE_BEARER": key,
 	} {
-		t.Setenv("SHUTTLE_TELEGRAM_PRELINK_"+name, value)
+		t.Setenv("ZNS_CHATBOT_TELEGRAM_PRELINK_"+name, value)
 	}
 	return key
 }
@@ -50,7 +50,7 @@ func TestTelegramPrelinkStartupRejectsIncompleteOrSharedTrust(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			key := prelinkEnv(t)
-			t.Setenv("SHUTTLE_TELEGRAM_PRELINK_"+tc.env, tc.value)
+			t.Setenv("ZNS_CHATBOT_TELEGRAM_PRELINK_"+tc.env, tc.value)
 			_, err := config.Load(configFile(t, ""))
 			require.Error(t, err)
 			require.NotContains(t, err.Error(), key)
@@ -65,7 +65,7 @@ func TestTelegramPrelinkStartupRejectsIncompleteOrSharedTrust(t *testing.T) {
 	} {
 		t.Run("shared-"+env, func(t *testing.T) {
 			key := prelinkEnv(t)
-			t.Setenv("SHUTTLE_"+env, key)
+			t.Setenv("ZNS_CHATBOT_"+env, key)
 			_, err := config.Load(configFile(t, ""))
 			require.Error(t, err)
 			require.NotContains(t, err.Error(), key)

@@ -12,7 +12,7 @@ Put the token for `@complynx_test_bot` in the ignored file
 `config/shuttle.test.env`:
 
 ```dotenv
-SHUTTLE_TELEGRAM_TOKEN=your-test-bot-token
+ZNS_CHATBOT_TELEGRAM_TOKEN=your-test-bot-token
 TEST_TELEGRAM_USER_ID=your-authorized-account-numeric-id
 ```
 

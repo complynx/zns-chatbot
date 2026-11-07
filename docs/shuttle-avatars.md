@@ -163,7 +163,7 @@ Migration 20 adds `shuttle_avatars`. Apply it with the normal `-migrate` command
 before starting the candidate. The Docker build installs both executables.
 For a manual Linux build, build `./cmd/shuttle` and `./cmd/zinusya-avatar`, then
 configure the trusted absolute `avatar_executable` path. Its default is
-`/usr/local/bin/zinusya-avatar`; `SHUTTLE_AVATAR_EXECUTABLE` overrides YAML.
+`/usr/local/bin/zinusya-avatar`; `ZNS_CHATBOT_AVATAR_EXECUTABLE` overrides YAML.
 The companion must exist at startup. Credentials and business policies do not
 belong in its command line.
 

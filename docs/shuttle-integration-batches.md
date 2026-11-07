@@ -15,7 +15,7 @@ compiler, and a disposable migrated-by-tests PostgreSQL database. These are test
 dependencies. The production bot and its container do not require Python or GCC.
 Fixtures create separate schemas. Use only a database owned by the test runner.
 
-Set `SHUTTLE_TEST_DATABASE_URL` to that database, then run from the checkout:
+Set `ZNS_CHATBOT_TEST_DATABASE_URL` to that database, then run from the checkout:
 
 ```sh
 python3 -m unittest discover -s tools -p test_integration_runner.py
