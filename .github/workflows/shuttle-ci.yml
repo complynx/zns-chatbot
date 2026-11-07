@@ -44,7 +44,8 @@ jobs:
           python3 tools/check-dependencies.py
       - name: Unit tests with PostgreSQL and race detector
         run: |
-          go test -race -timeout 10m -parallel 4 ./cmd/... ./internal/... ./migrations/...
+          # Packages share PostgreSQL; bound concurrent schema migrations across packages.
+          go test -race -timeout 10m -p 1 -parallel 4 ./cmd/... ./internal/... ./migrations/...
           python3 -m unittest discover -s tools -p test_integration_runner.py
       - name: Test stand ingress and egress guards
         run: python3 -m unittest discover -s deploy/shuttle/test -p 'test_*.py'
