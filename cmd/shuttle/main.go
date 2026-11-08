@@ -64,6 +64,7 @@ func runArgs(output io.Writer, args []string) error {
 	flags := flag.NewFlagSet("zinusya", flag.ContinueOnError)
 	path := flags.String("config", "config/zinusya.yaml", "Startup YAML path")
 	migrate := flags.Bool("migrate", false, "Apply database migrations and exit")
+	installation := registerInstallationFlags(flags)
 	check := flags.Bool("check-config", false, "Validate startup configuration without network or database access")
 	banTelegram := flags.Int64("ban-telegram-user", 0, "Block one Telegram user locally and exit")
 	banReason := flags.String("ban-reason", "", "Reason recorded with the local ban")
@@ -72,7 +73,7 @@ func runArgs(output io.Writer, args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	banMode, err := validateStartupModes(flags, *check, *migrate, *banTelegram, *banActor, *banReason)
+	banMode, err := validateStartupModes(flags, *check, *migrate, *banTelegram, *banActor, *banReason, *installation)
 	if err != nil {
 		return err
 	}
@@ -97,7 +98,7 @@ func runArgs(output io.Writer, args []string) error {
 	}
 	defer store.Close()
 	if *migrate {
-		return migrateDatabase(startup, store)
+		return migrateAndInstall(startup, store, *installation, output)
 	}
 	if banMode {
 		return runBanTelegramUser(startup, store, c.Telegram.BotID,
