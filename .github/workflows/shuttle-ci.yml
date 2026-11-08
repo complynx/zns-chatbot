@@ -94,8 +94,8 @@ jobs:
         run: golangci-lint run ./cmd/... ./internal/... ./migrations/... ./integration/...
       - name: Build Linux binary and container
         run: |
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o "$RUNNER_TEMP/shuttle" ./cmd/shuttle
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o "$RUNNER_TEMP/shuttle-import" ./cmd/shuttle-import
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o "$RUNNER_TEMP/zinusya" ./cmd/shuttle
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o "$RUNNER_TEMP/zinusya-import" ./cmd/shuttle-import
           docker build --platform linux/amd64 -f deploy/shuttle/Dockerfile -t shuttle:ci .
 
   integration:

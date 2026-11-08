@@ -2,7 +2,7 @@ log_level: info # debug, info, warn or error; ZNS_CHATBOT_LOG_LEVEL overrides th
 # Supply credentials using ZNS_CHATBOT_DATABASE_URL, ZNS_CHATBOT_TELEGRAM_TOKEN,
 # ZNS_CHATBOT_TELEGRAM_WEBHOOK_SECRET and ZNS_CHATBOT_IDENTITY_* environment variables.
 # Env overrides YAML; runtime events, deadlines and business rules belong in DB.
-# Validate locally with: shuttle -config config/shuttle.yaml -check-config
+# Validate locally with: zinusya -config config/shuttle.yaml -check-config
 # This does not connect to dependencies or validate their credentials.
 database_url: postgres://shuttle:example@localhost:5432/shuttle
 http_address: 127.0.0.1:8080

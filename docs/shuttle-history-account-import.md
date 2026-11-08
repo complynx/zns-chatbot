@@ -1,6 +1,6 @@
 # Historical account import
 
-`shuttle-import apply-accounts` creates the missing application accounts after
+`zinusya-import apply-accounts` creates the missing application accounts after
 historical archive indexing and separate IAM account reconciliation. It imports
 no passes, balances, tasks or confirmed profile names. Telegram names remain
 hints; avatar sources remain owner-checked Telegram references fetched on demand.
@@ -53,10 +53,10 @@ migration/cutover ownership and backup rules; production execution requires its
 separate authorization.
 
 ```sh
-shuttle-import apply-accounts -config /private/app.yaml -plan /private/accounts.json -authorization-file /private/operator.jwt
+zinusya-import apply-accounts -config /private/app.yaml -plan /private/accounts.json -authorization-file /private/operator.jwt
 ```
 
-The release Dockerfile includes `/usr/local/bin/shuttle-import`; override the
+The release Dockerfile includes `/usr/local/bin/zinusya-import`; override the
 ordinary bot entrypoint for this operator command and mount only the required
 private files. A build from the modified sources is required before using the
 new command; an older accepted bot image does not contain it.

@@ -43,8 +43,8 @@ production copy здесь не читаются.
 python -E deploy/shuttle/qa/history_fixture.py --bot-id LOCAL_TEST_BOT_ID --telegram-user-id SELECTED_TEST_OWNER --instance NEW_UUID
 # Явная локальная запись fixture, затем maintained import/validation.
 python -E deploy/shuttle/qa/history_fixture.py --bot-id LOCAL_TEST_BOT_ID --telegram-user-id SELECTED_TEST_OWNER --instance NEW_UUID --write-private-dir PRIVATE_FIXTURE_DIR
-shuttle-import -manifest PRIVATE_FIXTURE_DIR/snapshot.json -output PRIVATE_NEW_ARCHIVE
-shuttle-import -verify PRIVATE_NEW_ARCHIVE -sha256 EXACT_SHA
+zinusya-import -manifest PRIVATE_FIXTURE_DIR/snapshot.json -output PRIVATE_NEW_ARCHIVE
+zinusya-import -verify PRIVATE_NEW_ARCHIVE -sha256 EXACT_SHA
 ```
 
 `history_operator.py` использует те же `inspect/plan/observe/apply` flags и guards,
@@ -64,7 +64,7 @@ headers. Размер этого synthetic QA upload ограничен8MiB. Fla
 После неизвестного ответа root запрашивает status исходной operation; новый
 operation не является восстановлением старого.
 
-Отдельный maintained `shuttle-import apply-accounts` сопоставляет уже applied
+Отдельный maintained `zinusya-import apply-accounts` сопоставляет уже applied
 users records с проверенными IAM accounts под реальным app-admin JWT. Он не
 создаёт IAM пользователя, деньги, pass, live task или confirmed name. Использовать
 только если сценарию действительно нужны отсутствующие app accounts; обычный

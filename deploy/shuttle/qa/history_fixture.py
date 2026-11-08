@@ -32,7 +32,7 @@ def write_fixture(directory, bot_id, owner, instance):
             stream.write(raw)
         manifest["collections"].append({"role": role, "name": "synthetic_" + role, "path": name, "sha256": hashlib.sha256(raw).hexdigest(), "single_bot_collection": role == "messages"})
     qa.write_once(directory / "snapshot.json", manifest)
-    return {"synthetic_only": True, "users": 1, "messages": 2, "live_tasks_created": 0, "next": "maintained shuttle-import inspect/build/verify, then separately reviewed archive upload/history apply; no Telegram events fabricated"}
+    return {"synthetic_only": True, "users": 1, "messages": 2, "live_tasks_created": 0, "next": "maintained zinusya-import inspect/build/verify, then separately reviewed archive upload/history apply; no Telegram events fabricated"}
 
 
 def main():

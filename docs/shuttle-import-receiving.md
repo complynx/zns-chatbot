@@ -1,13 +1,13 @@
 # Receiving legacy archives
 
-This step verifies an archive created by `shuttle-import -manifest ... -output ...`.
+This step verifies an archive created by `zinusya-import -manifest ... -output ...`.
 It does not extract files, store uploads, create users, import history, update live
 profiles, enqueue replies or credit money. It adds no database migration.
 
 ## Offline verification
 
 ```sh
-shuttle-import -verify history.tar.gz -sha256 EXPECTED_LOWERCASE_SHA256
+zinusya-import -verify history.tar.gz -sha256 EXPECTED_LOWERCASE_SHA256
 ```
 
 Obtain the expected digest from the sender's separate receipt. A digest detects

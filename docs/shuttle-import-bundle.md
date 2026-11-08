@@ -11,8 +11,8 @@ It does not fetch avatar bytes or expose historical records to the agent.
 Build the separate operator CLI with Go 1.27.2 and supply a new destination:
 
 ```sh
-go build -o /tmp/shuttle-import ./cmd/shuttle-import
-/tmp/shuttle-import -manifest /private/snapshot/snapshot.json \
+go build -o /tmp/zinusya-import ./cmd/shuttle-import
+/tmp/zinusya-import -manifest /private/snapshot/snapshot.json \
   -output /private/archives/legacy-v1.tar.gz > /private/archive-receipt.json
 ```
 

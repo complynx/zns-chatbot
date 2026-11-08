@@ -105,7 +105,7 @@ Telegram не удаляется**. Полная очистка app-state дос
 `scenario_db.py` — отдельный исполняемый source для app-only switch, без IAM
 изменений. Он использует существующие runtime/migrator roles, сохраняет старую
 DB и config, snapshot-ит остановленный app, полностью декодирует архив, запускает
-maintained `shuttle -migrate`, создаёт app-only compose overlay и проверяет
+maintained `zinusya -migrate`, создаёт app-only compose overlay и проверяет
 `/readyz`, exact deployment binding и пустые counts. Unknown/pending app/Loom
 work блокирует switch; ingress и provider должны быть held. Ошибка после эффекта
 сохраняет intent; автоматического повтора/rollback нет.

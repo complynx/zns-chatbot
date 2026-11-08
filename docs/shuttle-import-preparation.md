@@ -1,6 +1,6 @@
 # Offline legacy snapshot inspection
 
-`shuttle-import` validates an operator-prepared local export. It does not connect
+`zinusya-import` validates an operator-prepared local export. It does not connect
 to MongoDB, PostgreSQL, Zitadel, Loom or Telegram. It does not import users, create
 tasks/passes, credit payments, fetch images, or change source files. This is the
 first import preparation slice, not a completed migration or cutover tool.
@@ -81,8 +81,8 @@ transcript and does not prove response delivery. File metadata or
 Build the separate CLI on the operator's platform, then inspect a local snapshot:
 
 ```sh
-go build -o /tmp/shuttle-import ./cmd/shuttle-import
-/tmp/shuttle-import -manifest /private/snapshot/snapshot.json > /private/snapshot-report.json
+go build -o /tmp/zinusya-import ./cmd/shuttle-import
+/tmp/zinusya-import -manifest /private/snapshot/snapshot.json > /private/snapshot-report.json
 ```
 
 The application Docker image contains the bot and avatar renderer; it does not

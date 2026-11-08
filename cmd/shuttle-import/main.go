@@ -1,4 +1,4 @@
-// shuttle-import validates snapshots and provides explicit operator import commands.
+// zinusya-import validates snapshots and provides explicit operator import commands.
 package main
 
 import (
@@ -25,7 +25,7 @@ func run(args []string, output, diagnostics io.Writer) int {
 	if len(args) > 0 && args[0] == "apply-accounts" {
 		return runAccounts(args[1:], output, diagnostics)
 	}
-	flags := flag.NewFlagSet("shuttle-import", flag.ContinueOnError)
+	flags := flag.NewFlagSet("zinusya-import", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	manifest := flags.String("manifest", "", "Local snapshot manifest path")
 	archive := flags.String("output", "", "Create a verified private archive at a new path")
@@ -35,7 +35,7 @@ func run(args []string, output, diagnostics io.Writer) int {
 		!validMode(*manifest, *archive, *verify, *digest) {
 		_, _ = fmt.Fprintln(
 			diagnostics,
-			"usage: shuttle-import -manifest snapshot.json [-output new-archive.tar.gz] | -verify archive.tar.gz -sha256 digest",
+			"usage: zinusya-import -manifest snapshot.json [-output new-archive.tar.gz] | -verify archive.tar.gz -sha256 digest",
 		)
 		return exitInvalidInput
 	}
