@@ -8,6 +8,23 @@ go build -o /tmp/zinusya-avatar ./cmd/zinusya-avatar
 ZNS_CHATBOT_AVATAR_EXECUTABLE=/tmp/zinusya-avatar go run ./cmd/shuttle -config config/zinusya.yaml -migrate
 ```
 
+For an installation with separate database roles, the same command can finish
+runtime grants and one-time settings initialization:
+
+```sh
+zinusya -config config/zinusya.yaml -migrate -install-runtime-role zinusya_runtime \
+  -initial-language ru -initial-parallel-tasks 8
+```
+
+The connection must use the migrator/owner credentials. The runtime login role
+must already exist and must not have administrative or schema-create privileges.
+After app and River migrations, installation grants database/schema access,
+current table/sequence privileges and defaults for future objects created by this
+migrator. Initial settings are audited once, only at settings version 1 with no
+users/tasks. Existing settings and data are preserved on repeat runs. The JSON
+receipt contains no credentials. This command starts no runtime, IAM, Telegram,
+Loom or provider work. Omitting installation flags retains migration-only behavior.
+
 Apply migrations explicitly before ordinary startup. After the schema is ready, run the same application command without -migrate. The avatar renderer is a separate trusted executable; its absolute path must be available before processing. Startup validates bot/IAM identity and the database binding. One application instance owns its task schema; the instance lease requires at least two task-pool connections.
 
 Webhook registration is an operator action, never an automatic startup mutation. Readiness requires PostgreSQL; IAM or Loom downtime can leave accepted work waiting. A graceful stop preserves task ownership and uncertain external effects for recovery. See the [architecture](shuttle-architecture.md), [schema baseline](shuttle-schema.md) and [deployment identity invariant](shuttle-deployment-scope.md).

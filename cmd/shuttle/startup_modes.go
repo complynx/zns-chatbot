@@ -4,11 +4,13 @@ import (
 	"errors"
 	"flag"
 	"strings"
+
+	"github.com/complynx/zns-chatbot/internal/db"
 )
 
 // validateStartupModes rejects ambiguous operator commands before opening dependencies.
 func validateStartupModes(flags *flag.FlagSet, check, migrate bool,
-	telegramID int64, actor, reason string,
+	telegramID int64, actor, reason string, installation db.InstallationOptions,
 ) (bool, error) {
 	ban, banOptions := false, false
 	flags.Visit(func(f *flag.Flag) {
@@ -26,5 +28,7 @@ func validateStartupModes(flags *flag.FlagSet, check, migrate bool,
 		strings.TrimSpace(reason) == "" || strings.TrimSpace(actor) == "") {
 		return false, errors.New("ban requires a positive Telegram ID, operator and reason in its own startup mode")
 	}
-	return ban, nil
+	_, err := installationOptions(flags, migrate,
+		installation.RuntimeRole, installation.DefaultLanguage, installation.MaxParallelTasks)
+	return ban, err
 }
