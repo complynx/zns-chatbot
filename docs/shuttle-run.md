@@ -24,7 +24,7 @@ go test -count=1 -p 1 -parallel 4 ./cmd/... ./internal/... ./migrations/... ./in
 CGO_ENABLED=1 go test -race -count=1 -p 1 -parallel 4 ./cmd/... ./internal/... ./migrations/...
 python3 tools/test-integration.py NEW_OUTPUT_DIRECTORY
 golangci-lint run ./cmd/... ./internal/... ./migrations/... ./integration/...
-CGO_ENABLED=0 go build ./cmd/shuttle
+CGO_ENABLED=0 go build -o zinusya ./cmd/shuttle
 ```
 
 Run database-heavy commands sequentially within the available connection and memory budget. The [integration runner](shuttle-integration-batches.md) bounds the complete PostgreSQL package and verifies exact discovery coverage. A successful subset does not establish complete-suite acceptance. Use the [QA procedure](shuttle-qa.md) for native/agent behavior and the [roadmap](shuttle-roadmap.md) for remaining work. Concrete installation configuration is maintained separately.
@@ -41,3 +41,6 @@ Preserve the exact runtime bytes, including spaces, newlines and Unicode.
 Use named constants for long reusable descriptions. Keep schema descriptions and
 validation equivalent when moving metadata out of a struct tag. Do not exempt
 strings from the limit or suppress a length check to hide unreadable content.
+
+Release binaries: `zinusya`, `zinusya-import`, `zinusya-symbols`, and `zinusya-avatar`.
+Shuttle names the implementation version; source and configuration paths retain that name.

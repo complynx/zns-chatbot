@@ -61,7 +61,7 @@ func run(output io.Writer) error {
 }
 
 func runArgs(output io.Writer, args []string) error {
-	flags := flag.NewFlagSet("shuttle", flag.ContinueOnError)
+	flags := flag.NewFlagSet("zinusya", flag.ContinueOnError)
 	path := flags.String("config", "config/shuttle.yaml", "Startup YAML path")
 	migrate := flags.Bool("migrate", false, "Apply database migrations and exit")
 	check := flags.Bool("check-config", false, "Validate startup configuration without network or database access")

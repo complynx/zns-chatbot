@@ -1,7 +1,7 @@
 """Supported history/archive JSON operations using the same local one-shot guards.
 
 Raw gzip upload uses the documented /internal/admin/legacy/store contract;
-account adoption remains the maintained shuttle-import apply-accounts command.
+account adoption remains the maintained zinusya-import apply-accounts command.
 """
 import operator_cli as qa
 

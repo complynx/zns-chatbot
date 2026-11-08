@@ -129,7 +129,7 @@ func runAccounts(args []string, output, diagnostics io.Writer) int {
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 ||
 		*configPath == "" || *planPath == "" || *credentialPath == "" {
 		_, _ = fmt.Fprintln(diagnostics,
-			"usage: shuttle-import apply-accounts -config app.yaml -plan plan.json -authorization-file admin.jwt")
+			"usage: zinusya-import apply-accounts -config app.yaml -plan plan.json -authorization-file admin.jwt")
 		return exitInvalidInput
 	}
 	fail := func() int {
