@@ -32,10 +32,18 @@ func testStore(t *testing.T) *db.Store {
 	if e != nil {
 		t.Fatal(e)
 	}
+	t.Cleanup(p.Close)
 	schema := "test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
 	if _, e = p.Exec(ctx, "CREATE SCHEMA "+schema); e != nil {
 		t.Fatal(e)
 	}
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if _, err := p.Exec(cleanupCtx, "DROP SCHEMA "+schema+" CASCADE"); err != nil {
+			t.Errorf("drop test schema %s: %v", schema, err)
+		}
+	})
 	parsed, e := url.Parse(dsn)
 	if e != nil {
 		t.Fatal(e)
@@ -47,7 +55,7 @@ func testStore(t *testing.T) *db.Store {
 	if e != nil {
 		t.Fatal(e)
 	}
-	t.Cleanup(func() { s.Close(); _, _ = p.Exec(ctx, "DROP SCHEMA "+schema+" CASCADE"); p.Close() })
+	t.Cleanup(s.Close)
 	if e = s.Migrate(ctx); e != nil {
 		t.Fatal(e)
 	}
