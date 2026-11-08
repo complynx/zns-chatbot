@@ -116,6 +116,8 @@ type peers struct {
 	key                                     *ecdsa.PrivateKey
 	signer                                  jose.Signer
 	users                                   map[string]map[string]any
+	userGrants                              map[string]map[string]any
+	grantWriteStatus, grantWrites           int
 	unavailableTokenSubjects                map[string]bool
 	tokenHook                               func(string)
 	tokenExpiry                             time.Time
@@ -211,6 +213,9 @@ func (p *peers) identity(w http.ResponseWriter, r *http.Request) {
 	defer p.mu.Unlock()
 	if p.iamDown {
 		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+	if p.initialUserGrants(w, r) {
 		return
 	}
 	switch r.URL.Path {

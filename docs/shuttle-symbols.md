@@ -83,6 +83,15 @@ Descriptor enabled/control-loop state and retained blocked-entry count are expos
 through metrics with separate alerts. A running loop does not prove remote IAM,
 provider funding or successful model dispatch; core readiness covers intake and DB.
 
+The embedded worker also polls its own Loom wallet once a minute with a bounded
+request. Metric callbacks read the cached snapshot only. Available credit already
+excludes reservations. Failed reads suppress balance gauges and retain the last
+successful timestamp, so missing data is not reported as zero credit.
+Separate alert rules cover low credit, no available credit and unavailable or
+stale observations. A positive balance does not prove that the next reservation
+fits. Reading the wallet can apply an already configured monthly refill; it does
+not dispatch a model or issue an administrative credit adjustment.
+
 The standalone CLI remains available for operator recovery and explicit runs.
 Do not run it against a journal already owned by the embedded worker.
 

@@ -71,7 +71,22 @@ func (c *Client) find(ctx context.Context, email string, credential Credential) 
 // recordOrigin must persist technical provenance before create (true), or record
 // a verified existing-account lookup (false), without downgrading prior technical
 // provenance after an unknown create. A failed callback prevents creation/return.
+// Call only before the local subject binding completes. The initial Loom base
+// grant is verified before return; subsequent sessions never restore removed roles.
 func (c *Client) EnsureUser(
+	ctx context.Context, u telegram.User, proposedUserID string, recordOrigin func(context.Context, bool) error,
+) (Account, error) {
+	account, err := c.ensureUser(ctx, u, proposedUserID, recordOrigin)
+	if err != nil {
+		return Account{}, err
+	}
+	if err = c.ensureInitialLoomGrant(ctx, account); err != nil {
+		return Account{}, err
+	}
+	return account, nil
+}
+
+func (c *Client) ensureUser(
 	ctx context.Context, u telegram.User, proposedUserID string, recordOrigin func(context.Context, bool) error,
 ) (Account, error) {
 	if u.ID <= 0 || u.ID > maxTelegramID || u.IsBot || proposedUserID == "" || len(proposedUserID) > maxUserIDLength ||
