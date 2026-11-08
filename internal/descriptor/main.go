@@ -52,7 +52,7 @@ type ownership struct {
 
 func parse() arguments {
 	var a arguments
-	flag.StringVar(&a.config, "config", "config/shuttle.yaml", "Startup YAML")
+	flag.StringVar(&a.config, "config", "config/zinusya.yaml", "Startup YAML")
 	flag.StringVar(&a.kind, "kind", "", "sticker or emoji")
 	flag.StringVar(&a.id, "id", "", "Unique sticker ID or numeric custom emoji ID")
 	flag.StringVar(&a.journal, "journal", "", "Private procedure directory; reuse to observe original work")

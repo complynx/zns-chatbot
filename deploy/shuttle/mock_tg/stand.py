@@ -272,7 +272,7 @@ def start(name):
         manifest['stage'] = 'migration_started'
         save(state, manifest)
         run(cmd + ['run', '--rm', '--no-deps', 'loom', 'migrate'], state)
-        run(cmd + ['run', '--rm', '--no-deps', 'shuttle', '-config', '/etc/shuttle/config.yaml', '-migrate'], state)
+        run(cmd + ['run', '--rm', '--no-deps', 'shuttle', '-config', '/etc/zinusya/config.yaml', '-migrate'], state)
         manifest['stage'] = 'migrated'
         save(state, manifest)
     run(cmd + ['up', '-d', '--no-build', '--pull', 'never'], state)

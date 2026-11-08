@@ -30,7 +30,7 @@ func TestLoomSkillsYAMLIsOptionalAndTyped(t *testing.T) {
 	for _, value := range []string{"", "true", "false", "invalid-value"} {
 		t.Run(value, func(t *testing.T) {
 			t.Parallel()
-			data, err := os.ReadFile("../../config/shuttle.example.yaml")
+			data, err := os.ReadFile("../../config/zinusya.example.yaml")
 			require.NoError(t, err)
 			data = []byte(strings.ReplaceAll(string(data), "\r\n", "\n"))
 			if value != "" {

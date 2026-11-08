@@ -18,7 +18,7 @@ try {
             & python deploy/shuttle/test/prepare.py
             if($LASTEXITCODE -ne 0){throw 'Test IAM preparation failed'}
             Invoke-CheckedDocker ($taskCompose+@('--profile','telegram','run','--rm','--no-deps','telegram-poller','python','/test/poller.py','--check'))
-            Invoke-CheckedDocker ($taskCompose+@('--profile','app','run','--rm','shuttle','-config','/etc/shuttle/config.yaml','-migrate'))
+            Invoke-CheckedDocker ($taskCompose+@('--profile','app','run','--rm','shuttle','-config','/etc/zinusya/config.yaml','-migrate'))
             Invoke-CheckedDocker ($taskCompose+@('--profile','app','up','-d'))
             Invoke-CheckedDocker ($taskCompose+@('--profile','telegram','up','-d','telegram-poller'))
         }

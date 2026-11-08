@@ -126,7 +126,7 @@ func contactSheet(ctx context.Context, tg Telegram, set telegram.StickerSet) (me
 // Only Telegram file reads are retried. A transient preview fetch must not
 // immediately strand an acknowledged original upload. Loom effects are never replayed here.
 func readVisualFile(ctx context.Context, tg Telegram, id string) ([]byte, error) {
-	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("shuttle-symbols").Start(ctx, "symbols.read_file")
+	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("zinusya-symbols").Start(ctx, "symbols.read_file")
 	defer span.End()
 	const attempts = 3
 	const retryDelay = 250 * time.Millisecond
