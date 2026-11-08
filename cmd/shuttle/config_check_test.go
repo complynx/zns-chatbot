@@ -27,6 +27,7 @@ func TestCheckConfigurationRejectsInvalidInput(t *testing.T) {
 		{"-ban-telegram-user", "1"},
 		{"-ban-telegram-user", "0", "-ban-reason", "test"},
 		{"-ban-reason", "test"},
+		{"-ban-public-reason", "test"},
 		{"-ban-actor", "operator:shuttle-cli"},
 		{"-ban-telegram-user", "1", "-ban-reason", "test", "-check-config"},
 		{"-ban-telegram-user", "1", "-ban-reason", "test", "-migrate"},

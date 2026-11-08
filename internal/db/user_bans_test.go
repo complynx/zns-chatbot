@@ -3,6 +3,7 @@ package db_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"testing"
 
@@ -19,7 +20,7 @@ func TestBanTelegramUserBeforeOnboardingAndReplay(t *testing.T) {
 	t.Parallel()
 	s := testStore(t)
 	ctx := t.Context()
-	first, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "test access restriction")
+	first, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "test access restriction", "")
 	require.NoError(t, err)
 	require.True(t, first.Revoked)
 	require.False(t, first.PreviouslyRevoked)
@@ -32,7 +33,7 @@ func TestBanTelegramUserBeforeOnboardingAndReplay(t *testing.T) {
 	var group sync.WaitGroup
 	for range 6 {
 		group.Go(func() {
-			got, replayErr := s.BanTelegramUser(ctx, 1, 2, "operator:test", "test access restriction")
+			got, replayErr := s.BanTelegramUser(ctx, 1, 2, "operator:test", "test access restriction", "")
 			if replayErr != nil {
 				t.Error(replayErr)
 				return
@@ -46,7 +47,7 @@ func TestBanTelegramUserBeforeOnboardingAndReplay(t *testing.T) {
 	reopened, err := db.Open(ctx, s.Pool().Config().ConnString())
 	require.NoError(t, err)
 	t.Cleanup(reopened.Close)
-	replay, err := reopened.BanTelegramUser(ctx, 1, 2, "operator:test", "test access restriction")
+	replay, err := reopened.BanTelegramUser(ctx, 1, 2, "operator:test", "test access restriction", "")
 	require.NoError(t, err)
 	require.Equal(t, first, replay)
 	var actor, reason string
@@ -73,7 +74,7 @@ func TestBanTelegramUserBeforeOnboardingAndReplay(t *testing.T) {
 	// Unsupported external flag clearing must not make an old receipt claim a live ban.
 	_, err = s.Pool().Exec(ctx, `UPDATE shuttle_users SET revoked=false WHERE id=$1`, first.UserID)
 	require.NoError(t, err)
-	_, err = s.BanTelegramUser(ctx, 1, 2, "operator:test", "test access restriction")
+	_, err = s.BanTelegramUser(ctx, 1, 2, "operator:test", "test access restriction", "")
 	require.ErrorIs(t, err, db.ErrConflict)
 }
 
@@ -81,7 +82,7 @@ func TestRevokedIntakeHasNoSideEffectsAndIsBotScoped(t *testing.T) {
 	t.Parallel()
 	s := testStore(t)
 	ctx := t.Context()
-	ban, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "test block")
+	ban, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "test block", "")
 	require.NoError(t, err)
 	enqueued := false
 	request := db.IntakeRequest{
@@ -124,7 +125,7 @@ func TestBanTelegramUserLinkedTargetAndExistingRevocation(t *testing.T) {
 	activation := miniAppActivation(claim, attempt)
 	_, err = s.ActivateMiniAppSession(ctx, activation)
 	require.NoError(t, err)
-	ban, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "linked target")
+	ban, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "linked target", "")
 	require.NoError(t, err)
 	require.Equal(t, attempt.User.ID, ban.UserID)
 	owner, err := s.GetUser(ctx, ban.UserID)
@@ -135,7 +136,7 @@ func TestBanTelegramUserLinkedTargetAndExistingRevocation(t *testing.T) {
 	require.ErrorIs(t, err, db.ErrMiniAppDenied)
 	_, err = s.ActivateMiniAppSession(ctx, activation)
 	require.ErrorIs(t, err, db.ErrMiniAppDenied)
-	second, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "additional reason")
+	second, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "additional reason", "")
 	require.NoError(t, err)
 	require.True(t, second.PreviouslyRevoked)
 	require.NotEqual(t, ban.ID, second.ID)
@@ -146,7 +147,7 @@ func TestRevokedIntakeRejectsPreviouslyAcceptedUpdate(t *testing.T) {
 	s := testStore(t)
 	ctx := t.Context()
 	first := accepted(t, s, 1)
-	_, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "test duplicate block")
+	_, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "test duplicate block", "")
 	require.NoError(t, err)
 	_, _, err = s.Intake(
 		ctx,
@@ -170,7 +171,7 @@ func TestBanTelegramUserRejectsInvalidArguments(t *testing.T) {
 		{0, 2, "operator", "reason"}, {1, 0, "operator", "reason"}, {1, 1 << 52, "operator", "reason"},
 		{1, 2, " ", "reason"}, {1, 2, "operator", " "}, {1, 2, "operator", "\t\n"},
 	} {
-		_, err := s.BanTelegramUser(t.Context(), args.bot, args.target, args.actor, args.reason)
+		_, err := s.BanTelegramUser(t.Context(), args.bot, args.target, args.actor, args.reason, "")
 		require.ErrorIs(t, err, db.ErrUserBanInvalid)
 	}
 }
@@ -181,7 +182,7 @@ func TestBanTelegramUserAuditFailureRollsBackPlaceholderAndRevocation(t *testing
 	ctx := t.Context()
 	_, err := s.Pool().Exec(ctx, `ALTER TABLE shuttle_user_bans ADD CONSTRAINT reject_test_ban CHECK (false) NOT VALID`)
 	require.NoError(t, err)
-	_, err = s.BanTelegramUser(ctx, 1, 2, "operator:test", "test audit failure")
+	_, err = s.BanTelegramUser(ctx, 1, 2, "operator:test", "test audit failure", "")
 	require.Error(t, err)
 	for _, table := range []string{"shuttle_users", "shuttle_user_bans", "shuttle_identity_audit"} {
 		var count int
@@ -194,13 +195,13 @@ func TestBanTelegramUserAuditSurvivesMigrationRollback(t *testing.T) {
 	t.Parallel()
 	s := testStore(t)
 	ctx := t.Context()
-	first, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "test durable audit")
+	first, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "test durable audit", "")
 	require.NoError(t, err)
 	history := migrationHistory(t, s)
 	_, err = baselineProvider(t, s).ApplyVersion(ctx, 77, false)
 	require.ErrorContains(t, err, "user ban audit must be preserved")
 	require.Equal(t, history, migrationHistory(t, s))
-	replay, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "test durable audit")
+	replay, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "test durable audit", "")
 	require.NoError(t, err)
 	require.Equal(t, first, replay)
 }
@@ -209,7 +210,7 @@ func TestBanTelegramUserAuditRejectsBlankReasonAndActor(t *testing.T) {
 	t.Parallel()
 	s := testStore(t)
 	ctx := t.Context()
-	ban, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "test reason constraint")
+	ban, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "test reason constraint", "")
 	require.NoError(t, err)
 	for _, args := range []struct{ actor, reason string }{{"operator:test", " "}, {" ", "test reason"}} {
 		_, err = s.Pool().Exec(ctx, `INSERT INTO shuttle_user_bans
@@ -220,4 +221,61 @@ func TestBanTelegramUserAuditRejectsBlankReasonAndActor(t *testing.T) {
 	var count int
 	require.NoError(t, s.Pool().QueryRow(ctx, `SELECT count(*) FROM shuttle_user_bans`).Scan(&count))
 	require.Equal(t, 1, count)
+}
+
+func TestPublicBanReasonIsSeparateFromPrivateAuditAndHistoricalReplay(t *testing.T) {
+	t.Parallel()
+	s := testStore(t)
+	ctx := t.Context()
+	private, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "private investigation", "")
+	require.NoError(t, err)
+	text := publicBanText(t, s, 1, 2)
+	require.Empty(t, text)
+	public, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "private investigation", "Contact the team.")
+	require.NoError(t, err)
+	require.NotEqual(t, private.ID, public.ID)
+	require.Equal(t, "Contact the team.", public.PublicReason)
+	replay, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "private investigation", "")
+	require.NoError(t, err)
+	require.Equal(t, private, replay)
+	text = publicBanText(t, s, 1, 2)
+	require.Equal(t, public.PublicReason, text, "An old receipt cannot roll back the current public reason")
+	text = publicBanText(t, s, 3, 2)
+	require.Empty(t, text, "No disclosure across bots")
+	require.Empty(t, publicBanText(t, s, 1, 99), "No disclosure to another user of the same bot")
+	_, err = s.BanTelegramUser(ctx, 1, 2, "operator:test", "public reason cleared", "")
+	require.NoError(t, err)
+	text = publicBanText(t, s, 1, 2)
+	require.Empty(t, text)
+}
+
+func publicBanText(t *testing.T, s *db.Store, botID, telegramID int64) string {
+	t.Helper()
+	var text string
+	require.NoError(t, s.Pool().QueryRow(t.Context(), `SELECT COALESCE((SELECT ban_public_reason
+FROM shuttle_users WHERE bot_id=$1 AND tg_user_id=$2 AND revoked),'')`, botID, telegramID).Scan(&text))
+	return text
+}
+
+func TestPublicBanReasonValidationAndMigrationPreservation(t *testing.T) {
+	t.Parallel()
+	s := testStore(t)
+	ctx := t.Context()
+	for _, public := range []string{" ", "\t\n", string([]byte{0xff}), strings.Repeat("x", 1001)} {
+		_, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "internal", public)
+		require.ErrorIs(t, err, db.ErrUserBanInvalid)
+	}
+	private, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "private only", "")
+	require.NoError(t, err)
+	provider := baselineProvider(t, s)
+	_, err = provider.ApplyVersion(ctx, 78, false)
+	require.NoError(t, err, "An empty public extension can be rolled back without losing private audit")
+	require.NoError(t, s.Migrate(ctx))
+	replay, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "private only", "")
+	require.NoError(t, err)
+	require.Equal(t, private, replay, "Empty public reason preserves pre-extension replay hashes")
+	_, err = s.BanTelegramUser(ctx, 1, 2, "operator:test", "internal", "Public explanation")
+	require.NoError(t, err)
+	_, err = provider.ApplyVersion(ctx, 78, false)
+	require.ErrorContains(t, err, "public ban reasons must be preserved")
 }

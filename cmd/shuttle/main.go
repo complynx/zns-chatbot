@@ -67,6 +67,7 @@ func runArgs(output io.Writer, args []string) error {
 	check := flags.Bool("check-config", false, "Validate startup configuration without network or database access")
 	banTelegram := flags.Int64("ban-telegram-user", 0, "Block one Telegram user locally and exit")
 	banReason := flags.String("ban-reason", "", "Reason recorded with the local ban")
+	banPublicReason := flags.String("ban-public-reason", "", "Optional reason shown to the blocked user")
 	banActor := flags.String("ban-actor", "", "Operator recorded with the local ban")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -99,7 +100,8 @@ func runArgs(output io.Writer, args []string) error {
 		return migrateDatabase(startup, store)
 	}
 	if banMode {
-		return runBanTelegramUser(startup, store, c.Telegram.BotID, *banTelegram, *banActor, *banReason, output)
+		return runBanTelegramUser(startup, store, c.Telegram.BotID,
+			*banTelegram, *banActor, *banReason, *banPublicReason, output)
 	}
 	settings, err := store.Settings(startup)
 	if err != nil {

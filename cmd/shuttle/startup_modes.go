@@ -15,7 +15,7 @@ func validateStartupModes(flags *flag.FlagSet, check, migrate bool,
 		switch f.Name {
 		case "ban-telegram-user":
 			ban = true
-		case "ban-actor", "ban-reason":
+		case "ban-actor", "ban-reason", "ban-public-reason":
 			banOptions = true
 		}
 	})

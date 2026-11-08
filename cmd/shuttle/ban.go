@@ -15,10 +15,10 @@ func runBanTelegramUser(
 	ctx context.Context,
 	store *db.Store,
 	botID, telegramUserID int64,
-	actor, reason string,
+	actor, reason, publicReason string,
 	output io.Writer,
 ) error {
-	result, err := store.BanTelegramUser(ctx, botID, telegramUserID, actor, reason)
+	result, err := store.BanTelegramUser(ctx, botID, telegramUserID, actor, reason, publicReason)
 	if err != nil {
 		return fmt.Errorf("ban local Telegram user: %w", err)
 	}

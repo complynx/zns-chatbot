@@ -141,7 +141,7 @@ func (s *Store) Intake(
 		return Task{}, false, e
 	}
 	if u.Revoked {
-		return Task{}, false, ErrUserRevoked
+		return Task{}, false, &UserRevokedError{PublicReason: u.BanPublicReason}
 	}
 	c, e := q.EnsureConversation(ctx, sqlc.EnsureConversationParams{ID: uuid.New(), UserID: u.ID, ChatID: r.ChatID})
 	if e != nil {

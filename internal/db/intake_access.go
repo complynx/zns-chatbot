@@ -19,7 +19,7 @@ func existingActiveTask(ctx context.Context, q *sqlc.Queries, id uuid.UUID) (Tas
 		return Task{}, false, err
 	}
 	if owner.Revoked {
-		return Task{}, false, ErrUserRevoked
+		return Task{}, false, &UserRevokedError{PublicReason: owner.BanPublicReason}
 	}
 	return task(existing), true, nil
 }

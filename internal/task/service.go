@@ -391,6 +391,11 @@ func (s *Service) Stop(ctx context.Context) error {
 	return nil
 }
 func (s *Service) accept(ctx context.Context, update telegram.Update, raw json.RawMessage) (db.Task, bool, error) {
+	if user, valid := update.PrivateUser(); valid {
+		if err := s.store.CheckTelegramAccess(ctx, s.options.BotID, user.ID); err != nil {
+			return db.Task{}, false, err
+		}
+	}
 	request, err := normalize(update, raw)
 	if err != nil {
 		return db.Task{}, false, err
@@ -435,6 +440,13 @@ func (s *Service) record(ctx context.Context, component, outcome string) {
 }
 func (s *Service) Accept(ctx context.Context, update telegram.Update, raw json.RawMessage) (db.Task, bool, error) {
 	task, duplicate, err := s.accept(ctx, update, raw)
+	if errors.Is(err, db.ErrUserRevoked) {
+		var publicReason string
+		if revoked, ok := errors.AsType[*db.UserRevokedError](err); ok {
+			publicReason = revoked.PublicReason
+		}
+		s.replyToBannedUser(ctx, update, publicReason)
+	}
 	if update.CallbackQuery != nil && update.CallbackQuery.ID != "" &&
 		(err == nil || errors.Is(err, ErrUnsupportedUpdate) || errors.Is(err, db.ErrUserRevoked)) {
 		// Callback acknowledgement affects only the Telegram spinner, not durable acceptance.

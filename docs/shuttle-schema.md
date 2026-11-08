@@ -3,7 +3,7 @@
 The consolidated application baseline is version 76 in [00076_schema.sql](../migrations/00076_schema.sql).
 A fresh empty application schema receives the preserved version-73 DDL and the version-74/75/76 extensions.
 Completed versions 73, 74 and 75 receive only their missing extensions. Existing history, objects and accepted
-data remain in place. Later changes use additive migrations; the current version is 77.
+data remain in place. Later changes use additive migrations; the current version is 78.
 
 Before connecting, run `shuttle -config config/shuttle.yaml -check-config` to validate
 startup YAML and environment overrides. This mode makes no network or database
@@ -24,6 +24,10 @@ Version 77 adds durable local Telegram ban receipts with required actor and reas
 It does not backfill bans or modify existing account access. Its Down migration refuses
 nonempty audit history. Apply prepared restrictions separately before accepting users;
 see [local bans](shuttle-user-bans.md).
+
+Version 78 separates optional public ban text from the required internal reason.
+Existing accounts and receipts receive empty public text. Published text is kept
+in the ban audit; its Down migration refuses retained public text.
 
 Down is supported only for an unused fresh version-76 baseline with unchanged initial settings. Any version-75 or earlier history, including an unapplied record, blocks Down before DDL. The guard locks application tables and refuses retained domain or operation data. River owns its separate migration history. No automatic Down path deletes live data.
 

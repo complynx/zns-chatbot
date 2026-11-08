@@ -7,6 +7,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/require"
@@ -62,7 +63,7 @@ func baselineFreshDownUpAndPartialLegacyRefusal(t *testing.T) {
 		var version int64
 		require.NoError(t, s.Pool().QueryRow(t.Context(),
 			"SELECT max(version_id) FROM goose_db_version WHERE is_applied").Scan(&version))
-		require.EqualValues(t, 77, version)
+		require.EqualValues(t, 78, version)
 		_, err := provider.DownTo(t.Context(), 0)
 		require.NoError(t, err)
 		var tables int
@@ -121,7 +122,19 @@ func baselineKeepsLegacy73HistoryAndAcceptedData(t *testing.T) {
 	require.NoError(t, err)
 	_, err = legacy.Up(t.Context())
 	require.NoError(t, err)
-	task := accepted(t, s, 1)
+	// Seed with the legacy schema, independently of current generated queries.
+	taskID := uuid.New()
+	_, err = s.Pool().Exec(t.Context(), `WITH owner AS (
+INSERT INTO shuttle_users(id,bot_id,tg_user_id) VALUES(gen_random_uuid(),1,2) RETURNING id
+), conversation AS (
+INSERT INTO shuttle_conversations(id,user_id,chat_id,next_seq)
+SELECT gen_random_uuid(),id,3,1 FROM owner RETURNING id,user_id
+)
+INSERT INTO shuttle_tasks(id,user_id,conversation_id,seq,request)
+SELECT $1,user_id,id,1,'{"kind":"message","text":"hello"}' FROM conversation`, taskID)
+	require.NoError(t, err)
+	task, err := s.GetTask(t.Context(), taskID)
+	require.NoError(t, err)
 	_, err = s.Pool().Exec(t.Context(), `DELETE FROM goose_db_version WHERE version_id>0;
 INSERT INTO goose_db_version(version_id,is_applied) SELECT generate_series(1,73),true;
 INSERT INTO shuttle_user_profiles(user_id,version,full_name,first_name,last_name,name_source)

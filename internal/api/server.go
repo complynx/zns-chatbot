@@ -167,16 +167,8 @@ func (s *Server) webhook(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]any{schemaTaskID: t.ID, "duplicate": duplicate})
 }
 func privateUpdate(u telegram.Update) bool {
-	valid := func(user telegram.User, chat telegram.Chat) bool {
-		return user.ID > 0 && user.ID < 1<<52 && !user.IsBot && chat.Type == "private" && chat.ID == user.ID
-	}
-	if u.Message != nil && u.CallbackQuery == nil && u.Message.From != nil {
-		return valid(*u.Message.From, u.Message.Chat)
-	}
-	if u.CallbackQuery != nil && u.Message == nil && u.CallbackQuery.Message != nil {
-		return valid(u.CallbackQuery.From, u.CallbackQuery.Message.Chat)
-	}
-	return false
+	_, valid := u.PrivateUser()
+	return valid
 }
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", contentTypeJSON)

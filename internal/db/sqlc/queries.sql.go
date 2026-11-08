@@ -236,7 +236,7 @@ func (q *Queries) AuditSettings(ctx context.Context, arg AuditSettingsParams) er
 }
 
 const avatarDeliveryRecipient = `-- name: AvatarDeliveryRecipient :one
-SELECT u.id, u.bot_id, u.tg_user_id, u.profile, u.zitadel_subject, u.zitadel_org, u.revoked FROM shuttle_avatar_deliveries n JOIN shuttle_users u ON u.id=n.user_id
+SELECT u.id, u.bot_id, u.tg_user_id, u.profile, u.zitadel_subject, u.zitadel_org, u.revoked, u.ban_public_reason FROM shuttle_avatar_deliveries n JOIN shuttle_users u ON u.id=n.user_id
 WHERE n.id=$1 AND u.bot_id=$2 AND u.zitadel_org=$3 AND NOT u.revoked
 AND u.zitadel_subject<>'' AND u.tg_user_id=n.telegram_user_id
 `
@@ -258,6 +258,7 @@ func (q *Queries) AvatarDeliveryRecipient(ctx context.Context, arg AvatarDeliver
 		&i.ZitadelSubject,
 		&i.ZitadelOrg,
 		&i.Revoked,
+		&i.BanPublicReason,
 	)
 	return i, err
 }
@@ -278,7 +279,7 @@ func (q *Queries) BindDeployment(ctx context.Context, arg BindDeploymentParams) 
 }
 
 const bindIdentity = `-- name: BindIdentity :one
-UPDATE shuttle_users SET zitadel_subject=$2,zitadel_org=$3 WHERE id=$1 AND (zitadel_subject='' OR zitadel_subject=$2) AND (zitadel_org='' OR zitadel_org=$3) RETURNING id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked
+UPDATE shuttle_users SET zitadel_subject=$2,zitadel_org=$3 WHERE id=$1 AND (zitadel_subject='' OR zitadel_subject=$2) AND (zitadel_org='' OR zitadel_org=$3) RETURNING id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked, ban_public_reason
 `
 
 type BindIdentityParams struct {
@@ -298,6 +299,7 @@ func (q *Queries) BindIdentity(ctx context.Context, arg BindIdentityParams) (Shu
 		&i.ZitadelSubject,
 		&i.ZitadelOrg,
 		&i.Revoked,
+		&i.BanPublicReason,
 	)
 	return i, err
 }
@@ -1410,7 +1412,7 @@ func (q *Queries) EnsureKnowledgeNotifications(ctx context.Context, arg EnsureKn
 
 const ensureTelegramUser = `-- name: EnsureTelegramUser :one
 INSERT INTO shuttle_users(id,bot_id,tg_user_id,profile) VALUES($1,$2,$3,$4)
-ON CONFLICT(bot_id,tg_user_id) DO UPDATE SET tg_user_id=shuttle_users.tg_user_id RETURNING id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked
+ON CONFLICT(bot_id,tg_user_id) DO UPDATE SET tg_user_id=shuttle_users.tg_user_id RETURNING id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked, ban_public_reason
 `
 
 type EnsureTelegramUserParams struct {
@@ -1436,6 +1438,7 @@ func (q *Queries) EnsureTelegramUser(ctx context.Context, arg EnsureTelegramUser
 		&i.ZitadelSubject,
 		&i.ZitadelOrg,
 		&i.Revoked,
+		&i.BanPublicReason,
 	)
 	return i, err
 }
@@ -3208,7 +3211,7 @@ func (q *Queries) GetRegistrationOperation(ctx context.Context, arg GetRegistrat
 }
 
 const getRevocationUser = `-- name: GetRevocationUser :one
-SELECT id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked FROM shuttle_users WHERE id=$1 AND bot_id=$2 AND zitadel_org=$3
+SELECT id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked, ban_public_reason FROM shuttle_users WHERE id=$1 AND bot_id=$2 AND zitadel_org=$3
 `
 
 type GetRevocationUserParams struct {
@@ -3228,6 +3231,7 @@ func (q *Queries) GetRevocationUser(ctx context.Context, arg GetRevocationUserPa
 		&i.ZitadelSubject,
 		&i.ZitadelOrg,
 		&i.Revoked,
+		&i.BanPublicReason,
 	)
 	return i, err
 }
@@ -3414,7 +3418,7 @@ func (q *Queries) GetTelegramPrelink(ctx context.Context, id uuid.UUID) (Shuttle
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked FROM shuttle_users WHERE id=$1
+SELECT id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked, ban_public_reason FROM shuttle_users WHERE id=$1
 `
 
 func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (ShuttleUser, error) {
@@ -3428,12 +3432,13 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (ShuttleUser, error
 		&i.ZitadelSubject,
 		&i.ZitadelOrg,
 		&i.Revoked,
+		&i.BanPublicReason,
 	)
 	return i, err
 }
 
 const getUserBySubject = `-- name: GetUserBySubject :one
-SELECT id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked FROM shuttle_users WHERE bot_id=$1 AND zitadel_org=$2 AND zitadel_subject=$3 ORDER BY tg_user_id LIMIT 1
+SELECT id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked, ban_public_reason FROM shuttle_users WHERE bot_id=$1 AND zitadel_org=$2 AND zitadel_subject=$3 ORDER BY tg_user_id LIMIT 1
 `
 
 type GetUserBySubjectParams struct {
@@ -3453,6 +3458,7 @@ func (q *Queries) GetUserBySubject(ctx context.Context, arg GetUserBySubjectPara
 		&i.ZitadelSubject,
 		&i.ZitadelOrg,
 		&i.Revoked,
+		&i.BanPublicReason,
 	)
 	return i, err
 }
@@ -6437,7 +6443,7 @@ func (q *Queries) KnowledgeEventArchived(ctx context.Context, arg KnowledgeEvent
 }
 
 const knowledgeNotificationRecipient = `-- name: KnowledgeNotificationRecipient :one
-SELECT u.id, u.bot_id, u.tg_user_id, u.profile, u.zitadel_subject, u.zitadel_org, u.revoked FROM shuttle_knowledge_notices n
+SELECT u.id, u.bot_id, u.tg_user_id, u.profile, u.zitadel_subject, u.zitadel_org, u.revoked, u.ban_public_reason FROM shuttle_knowledge_notices n
 JOIN shuttle_knowledge_notice_candidates c ON c.bot_id=n.bot_id AND c.organization_id=n.organization_id
 AND c.suggestion_id=n.suggestion_id AND c.recipient_id=n.recipient_id AND c.kind=n.kind
 JOIN shuttle_users u ON u.id=n.recipient_id
@@ -6461,6 +6467,7 @@ func (q *Queries) KnowledgeNotificationRecipient(ctx context.Context, arg Knowle
 		&i.ZitadelSubject,
 		&i.ZitadelOrg,
 		&i.Revoked,
+		&i.BanPublicReason,
 	)
 	return i, err
 }
@@ -9918,7 +9925,7 @@ func (q *Queries) LockAssignmentProposal(ctx context.Context, arg LockAssignment
 }
 
 const lockAuthorityActor = `-- name: LockAuthorityActor :one
-SELECT id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked FROM shuttle_users WHERE bot_id=$1 AND zitadel_org=$2 AND zitadel_subject=$3 AND NOT revoked FOR SHARE
+SELECT id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked, ban_public_reason FROM shuttle_users WHERE bot_id=$1 AND zitadel_org=$2 AND zitadel_subject=$3 AND NOT revoked FOR SHARE
 `
 
 type LockAuthorityActorParams struct {
@@ -9938,6 +9945,7 @@ func (q *Queries) LockAuthorityActor(ctx context.Context, arg LockAuthorityActor
 		&i.ZitadelSubject,
 		&i.ZitadelOrg,
 		&i.Revoked,
+		&i.BanPublicReason,
 	)
 	return i, err
 }
@@ -10382,7 +10390,7 @@ func (q *Queries) LockRegistrationEvent(ctx context.Context, arg LockRegistratio
 }
 
 const lockRegistrationUser = `-- name: LockRegistrationUser :one
-SELECT id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked FROM shuttle_users WHERE id=$1 AND bot_id=$2 AND zitadel_org=$3 AND NOT revoked FOR SHARE
+SELECT id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked, ban_public_reason FROM shuttle_users WHERE id=$1 AND bot_id=$2 AND zitadel_org=$3 AND NOT revoked FOR SHARE
 `
 
 type LockRegistrationUserParams struct {
@@ -10402,6 +10410,7 @@ func (q *Queries) LockRegistrationUser(ctx context.Context, arg LockRegistration
 		&i.ZitadelSubject,
 		&i.ZitadelOrg,
 		&i.Revoked,
+		&i.BanPublicReason,
 	)
 	return i, err
 }
@@ -10416,7 +10425,7 @@ func (q *Queries) LockResponseTask(ctx context.Context, id uuid.UUID) error {
 }
 
 const lockRevocationUsers = `-- name: LockRevocationUsers :many
-SELECT id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked FROM shuttle_users WHERE id=ANY($1::uuid[])
+SELECT id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked, ban_public_reason FROM shuttle_users WHERE id=ANY($1::uuid[])
 AND bot_id=$2 AND zitadel_org=$3
 ORDER BY id FOR UPDATE
 `
@@ -10444,6 +10453,7 @@ func (q *Queries) LockRevocationUsers(ctx context.Context, arg LockRevocationUse
 			&i.ZitadelSubject,
 			&i.ZitadelOrg,
 			&i.Revoked,
+			&i.BanPublicReason,
 		); err != nil {
 			return nil, err
 		}
@@ -10551,7 +10561,7 @@ func (q *Queries) LockTelegramPrelinkProof(ctx context.Context, arg LockTelegram
 }
 
 const lockTelegramUser = `-- name: LockTelegramUser :one
-SELECT id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked FROM shuttle_users WHERE id=$1 AND bot_id=$2 FOR UPDATE
+SELECT id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked, ban_public_reason FROM shuttle_users WHERE id=$1 AND bot_id=$2 FOR UPDATE
 `
 
 type LockTelegramUserParams struct {
@@ -10570,6 +10580,7 @@ func (q *Queries) LockTelegramUser(ctx context.Context, arg LockTelegramUserPara
 		&i.ZitadelSubject,
 		&i.ZitadelOrg,
 		&i.Revoked,
+		&i.BanPublicReason,
 	)
 	return i, err
 }
@@ -10605,7 +10616,7 @@ func (q *Queries) MassageBookingsOutsideEvent(ctx context.Context, arg MassageBo
 }
 
 const massageReminderRecipient = `-- name: MassageReminderRecipient :one
-SELECT u.id, u.bot_id, u.tg_user_id, u.profile, u.zitadel_subject, u.zitadel_org, u.revoked FROM shuttle_massage_reminders n
+SELECT u.id, u.bot_id, u.tg_user_id, u.profile, u.zitadel_subject, u.zitadel_org, u.revoked, u.ban_public_reason FROM shuttle_massage_reminders n
 JOIN shuttle_massage_bookings b ON b.id=n.booking_id JOIN shuttle_events e ON e.id=b.event_id
 JOIN shuttle_users u ON u.id=b.user_id
 WHERE n.id=$1::uuid AND e.bot_id=$2 AND e.organization_id=$3
@@ -10630,6 +10641,7 @@ func (q *Queries) MassageReminderRecipient(ctx context.Context, arg MassageRemin
 		&i.ZitadelSubject,
 		&i.ZitadelOrg,
 		&i.Revoked,
+		&i.BanPublicReason,
 	)
 	return i, err
 }
@@ -10646,7 +10658,7 @@ func (q *Queries) MassageScheduleVersion(ctx context.Context, eventID uuid.UUID)
 }
 
 const massageSpecialistNotificationRecipient = `-- name: MassageSpecialistNotificationRecipient :one
-SELECT u.id, u.bot_id, u.tg_user_id, u.profile, u.zitadel_subject, u.zitadel_org, u.revoked FROM shuttle_massage_specialist_notifications n
+SELECT u.id, u.bot_id, u.tg_user_id, u.profile, u.zitadel_subject, u.zitadel_org, u.revoked, u.ban_public_reason FROM shuttle_massage_specialist_notifications n
 JOIN shuttle_massage_bookings b ON b.id=n.booking_id JOIN shuttle_events e ON e.id=b.event_id
 JOIN shuttle_users u ON u.id=n.recipient_id AND u.bot_id=e.bot_id AND u.zitadel_org=e.organization_id
 JOIN shuttle_massage_specialist_bindings s ON s.event_id=b.event_id AND s.specialist_id=b.specialist_id
@@ -10678,6 +10690,7 @@ func (q *Queries) MassageSpecialistNotificationRecipient(ctx context.Context, ar
 		&i.ZitadelSubject,
 		&i.ZitadelOrg,
 		&i.Revoked,
+		&i.BanPublicReason,
 	)
 	return i, err
 }
@@ -10739,7 +10752,7 @@ func (q *Queries) OrderEvidenceEvent(ctx context.Context, arg OrderEvidenceEvent
 }
 
 const orderNotificationRecipient = `-- name: OrderNotificationRecipient :one
-SELECT u.id, u.bot_id, u.tg_user_id, u.profile, u.zitadel_subject, u.zitadel_org, u.revoked,EXISTS(SELECT 1 FROM shuttle_event_authorities a
+SELECT u.id, u.bot_id, u.tg_user_id, u.profile, u.zitadel_subject, u.zitadel_org, u.revoked, u.ban_public_reason,EXISTS(SELECT 1 FROM shuttle_event_authorities a
 WHERE a.event_id=e.id AND a.user_id=u.id AND a.role IN ('ambassador','administrator')) AS reviewer
 FROM shuttle_order_evidence_notices n
 JOIN shuttle_order_evidence ev ON ev.id=n.evidence_id
@@ -10775,6 +10788,7 @@ func (q *Queries) OrderNotificationRecipient(ctx context.Context, arg OrderNotif
 		&i.ShuttleUser.ZitadelSubject,
 		&i.ShuttleUser.ZitadelOrg,
 		&i.ShuttleUser.Revoked,
+		&i.ShuttleUser.BanPublicReason,
 		&i.Reviewer,
 	)
 	return i, err
@@ -14611,7 +14625,7 @@ func (q *Queries) RevokeMiniAppSession(ctx context.Context, id uuid.UUID) error 
 }
 
 const revokeUser = `-- name: RevokeUser :execrows
-UPDATE shuttle_users SET revoked=$2 WHERE id=$1
+UPDATE shuttle_users SET revoked=$2,ban_public_reason='' WHERE id=$1
 `
 
 type RevokeUserParams struct {
@@ -15502,7 +15516,7 @@ func (q *Queries) UpdateUserEventContext(ctx context.Context, arg UpdateUserEven
 }
 
 const upsertUser = `-- name: UpsertUser :one
-INSERT INTO shuttle_users(id,bot_id,tg_user_id,profile) VALUES($1,$2,$3,$4) ON CONFLICT(bot_id,tg_user_id) DO UPDATE SET profile=EXCLUDED.profile RETURNING id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked
+INSERT INTO shuttle_users(id,bot_id,tg_user_id,profile) VALUES($1,$2,$3,$4) ON CONFLICT(bot_id,tg_user_id) DO UPDATE SET profile=EXCLUDED.profile RETURNING id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked, ban_public_reason
 `
 
 type UpsertUserParams struct {
@@ -15528,6 +15542,7 @@ func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (Shuttle
 		&i.ZitadelSubject,
 		&i.ZitadelOrg,
 		&i.Revoked,
+		&i.BanPublicReason,
 	)
 	return i, err
 }
