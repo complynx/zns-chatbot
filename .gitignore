@@ -17,6 +17,7 @@ __pycache__
 *.local
 /.cache/
 /config/shuttle.yaml
+/config/zinusya.yaml
 /config/shuttle.env
 /config/shuttle.test.env
 /.worktrees/

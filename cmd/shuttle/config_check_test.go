@@ -11,7 +11,7 @@ func TestCheckConfigurationDoesNotConnect(t *testing.T) {
 	t.Parallel()
 	// The example has no reachable database or IAM. Validation must still finish.
 	var output bytes.Buffer
-	err := runArgs(&output, []string{"-config", "../../config/shuttle.example.yaml", "-check-config"})
+	err := runArgs(&output, []string{"-config", "../../config/zinusya.example.yaml", "-check-config"})
 	require.NoError(t, err)
 	require.Contains(t, output.String(), "dependencies and database not checked")
 	require.NotContains(t, output.String(), "fake-placeholder")

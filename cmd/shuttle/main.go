@@ -62,7 +62,7 @@ func run(output io.Writer) error {
 
 func runArgs(output io.Writer, args []string) error {
 	flags := flag.NewFlagSet("zinusya", flag.ContinueOnError)
-	path := flags.String("config", "config/shuttle.yaml", "Startup YAML path")
+	path := flags.String("config", "config/zinusya.yaml", "Startup YAML path")
 	migrate := flags.Bool("migrate", false, "Apply database migrations and exit")
 	check := flags.Bool("check-config", false, "Validate startup configuration without network or database access")
 	banTelegram := flags.Int64("ban-telegram-user", 0, "Block one Telegram user locally and exit")

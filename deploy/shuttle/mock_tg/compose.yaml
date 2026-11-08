@@ -125,7 +125,7 @@ services:
     labels: {zinusya.qa.owner: "${QA_OWNER}", zinusya.qa.kind: mock-tg, clx.harness.service: "http://shuttle:9090/internal/agent/manifest"}
     environment: {SSL_CERT_FILE: /tls/ca-bundle.pem}
     ports: ["127.0.0.1:${QA_BOT_PORT}:8080", "127.0.0.1:${QA_INTERNAL_PORT}:9090"]
-    volumes: ["${QA_STATE}/shuttle.yaml:/etc/shuttle/config.yaml:ro", "${QA_STATE}/ca-bundle.pem:/tls/ca-bundle.pem:ro"]
+    volumes: ["${QA_STATE}/shuttle.yaml:/etc/zinusya/config.yaml:ro", "${QA_STATE}/ca-bundle.pem:/tls/ca-bundle.pem:ro"]
     depends_on: [postgres, zitadel, telegram]
 volumes:
   pgdata: {labels: {zinusya.qa.owner: "${QA_OWNER}"}}

@@ -99,7 +99,7 @@ const instructions = "Describe only the target Telegram visual symbol. Return on
 func (f Flow) Step(ctx context.Context, auth loom.Auth, s *State, save func(State) error) error {
 	tracer := f.Tracer
 	if tracer == nil {
-		tracer = trace.SpanFromContext(ctx).TracerProvider().Tracer("shuttle-symbols")
+		tracer = trace.SpanFromContext(ctx).TracerProvider().Tracer("zinusya-symbols")
 	}
 	ctx, span := tracer.Start(ctx, "symbols.describe_step", trace.WithAttributes(
 		attribute.String("descriptor.phase", s.Phase), attribute.String("symbol.kind", s.Reference.Kind)))

@@ -18,9 +18,9 @@ COPY --from=build /out/zinusya-import /usr/local/bin/zinusya-import
 COPY --from=build /out/zinusya-symbols /usr/local/bin/zinusya-symbols
 COPY deploy/shuttle/licenses/dependencies /licenses/dependencies/
 COPY deploy/shuttle/licenses/avatars /licenses/avatars/
-COPY LICENSE /licenses/shuttle/LICENSE
+COPY LICENSE /licenses/zinusya/LICENSE
 COPY --from=build /usr/local/go/LICENSE /usr/local/go/PATENTS /licenses/go/
 USER 10001:10001
 STOPSIGNAL SIGTERM
 ENTRYPOINT ["/usr/local/bin/zinusya"]
-CMD ["-config", "/etc/shuttle/config.yaml"]
+CMD ["-config", "/etc/zinusya/config.yaml"]

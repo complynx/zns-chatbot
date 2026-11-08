@@ -5,7 +5,7 @@ A fresh empty application schema receives the preserved version-73 DDL and the v
 Completed versions 73, 74 and 75 receive only their missing extensions. Existing history, objects and accepted
 data remain in place. Later changes use additive migrations; the current version is 78.
 
-Before connecting, run `zinusya -config config/shuttle.yaml -check-config` to validate
+Before connecting, run `zinusya -config config/zinusya.yaml -check-config` to validate
 startup YAML and environment overrides. This mode makes no network or database
 calls and starts no workers. It does not verify remote credentials or schema state.
 Apply application and River migrations separately with `-migrate`, using the schema

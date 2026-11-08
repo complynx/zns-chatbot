@@ -3,7 +3,7 @@
 An operator can block a known Telegram user ID before onboarding, using the existing Shuttle binary and its configured database:
 
 ```sh
-zinusya -config config/shuttle.yaml -ban-telegram-user 123456789 -ban-actor operator:alice -ban-reason "Reviewed local access restriction"
+zinusya -config config/zinusya.yaml -ban-telegram-user 123456789 -ban-actor operator:alice -ban-reason "Reviewed local access restriction"
 ```
 
 Use the bot configuration for the intended deployment. The target is scoped by that configured bot ID. This command requires operator access to the database configuration; it is not a user-facing API or an IAM role grant. Run database migrations before using it. It cannot be combined with normal startup, `-migrate`, or `-check-config`.

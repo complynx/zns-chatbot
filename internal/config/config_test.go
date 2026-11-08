@@ -14,7 +14,7 @@ import (
 
 func configFile(t *testing.T, suffix string) string {
 	t.Helper()
-	data, err := os.ReadFile("../../config/shuttle.example.yaml")
+	data, err := os.ReadFile("../../config/zinusya.example.yaml")
 	require.NoError(t, err)
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(path, append(data, []byte(suffix)...), 0600))

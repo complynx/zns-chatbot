@@ -10,7 +10,7 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     volumes:
-      - ../../config/shuttle.yaml:/etc/shuttle/config.yaml:ro
+      - ../../config/zinusya.yaml:/etc/zinusya/config.yaml:ro
     env_file: ../../config/shuttle.env
     ports:
       - "127.0.0.1:18080:8080"

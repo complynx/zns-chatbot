@@ -91,12 +91,12 @@ services:
   shuttle:
     profiles: [app]
     image: shuttle-test-bot:local
-    command: [-config, /etc/shuttle/config.yaml]
+    command: [-config, /etc/zinusya/config.yaml]
     env_file: [../../../config/shuttle.test.env]
     environment: {ZNS_CHATBOT_TELEGRAM_WEBHOOK_SECRET: "${TEST_WEBHOOK_SECRET}", ZNS_CHATBOT_TELEGRAM_BASE_URL: "https://telegram.zinusya.localhost:8080", SSL_CERT_FILE: /tls/ca-bundle.pem}
     ports: ["127.0.0.1:18382:8080", "127.0.0.1:19382:9090"]
     labels: {clx.harness.service: "http://shuttle:9090/internal/agent/manifest"}
-    volumes: ["../../../.cache/shuttle-live-test/shuttle.yaml:/etc/shuttle/config.yaml:ro", "../../../.cache/shuttle-live-test/ca-bundle.pem:/tls/ca-bundle.pem:ro"]
+    volumes: ["../../../.cache/shuttle-live-test/shuttle.yaml:/etc/zinusya/config.yaml:ro", "../../../.cache/shuttle-live-test/ca-bundle.pem:/tls/ca-bundle.pem:ro"]
     depends_on: {postgres: {condition: service_healthy}, telegram-guard: {condition: service_healthy}}
     read_only: true
     cap_drop: [ALL]

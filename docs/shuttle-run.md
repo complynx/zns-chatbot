@@ -3,9 +3,9 @@
 Use the Go toolchain pinned by go.mod. The application keeps typed startup configuration and secrets separate from durable business settings. Copy the example for a private developer configuration and supply the required ZNS_CHATBOT_* secret environment variables. Do not commit the populated configuration.
 
 ```sh
-cp config/shuttle.example.yaml config/shuttle.yaml
+cp config/zinusya.example.yaml config/zinusya.yaml
 go build -o /tmp/zinusya-avatar ./cmd/zinusya-avatar
-ZNS_CHATBOT_AVATAR_EXECUTABLE=/tmp/zinusya-avatar go run ./cmd/shuttle -config config/shuttle.yaml -migrate
+ZNS_CHATBOT_AVATAR_EXECUTABLE=/tmp/zinusya-avatar go run ./cmd/shuttle -config config/zinusya.yaml -migrate
 ```
 
 Apply migrations explicitly before ordinary startup. After the schema is ready, run the same application command without -migrate. The avatar renderer is a separate trusted executable; its absolute path must be available before processing. Startup validates bot/IAM identity and the database binding. One application instance owns its task schema; the instance lease requires at least two task-pool connections.
