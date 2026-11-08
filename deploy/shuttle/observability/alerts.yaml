@@ -33,6 +33,51 @@ groups:
           summary: Zinusya visual descriptions require reconciliation
           description: Inspect retained blocked journals and their original effects. Do not replay uploads or paid actions; restart after operator reconciliation.
 
+      - alert: ZinusyaDescriptorBillingUnavailable
+        expr: |
+          ((zinusya_descriptor_enabled{job="integrations/zinusya",instance="complynx.net"} == 1)
+          and on(job, instance) (up{job="integrations/zinusya",instance="complynx.net"} == 1))
+          unless on(job, instance)
+          ((zinusya_descriptor_billing_collection_success{job="integrations/zinusya",instance="complynx.net"} == 1)
+          and (zinusya_descriptor_billing_last_success_timestamp_seconds{job="integrations/zinusya",instance="complynx.net"} > 0)
+          and (zinusya_descriptor_billing_last_success_timestamp_seconds{job="integrations/zinusya",instance="complynx.net"} > time() - 180)
+          and zinusya_descriptor_billing_available_microcredits{job="integrations/zinusya",instance="complynx.net"}
+          and zinusya_descriptor_billing_reserved_microcredits{job="integrations/zinusya",instance="complynx.net"})
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: Zinusya descriptor billing source is unavailable or stale
+          description: Check the own-account billing probe, machine authorization and Loom. Missing billing data is not zero credit; a running descriptor does not prove funding.
+
+      - alert: ZinusyaDescriptorCreditsLow
+        expr: |
+          (zinusya_descriptor_billing_available_microcredits{job="integrations/zinusya",instance="complynx.net"} < 1000000)
+          and (zinusya_descriptor_billing_available_microcredits{job="integrations/zinusya",instance="complynx.net"} > 0)
+          and on(job, instance) (zinusya_descriptor_enabled{job="integrations/zinusya",instance="complynx.net"} == 1)
+          and on(job, instance) (up{job="integrations/zinusya",instance="complynx.net"} == 1)
+          and on(job, instance) (zinusya_descriptor_billing_collection_success{job="integrations/zinusya",instance="complynx.net"} == 1)
+          and on(job, instance) (zinusya_descriptor_billing_last_success_timestamp_seconds{job="integrations/zinusya",instance="complynx.net"} > 0)
+          and on(job, instance) (zinusya_descriptor_billing_last_success_timestamp_seconds{job="integrations/zinusya",instance="complynx.net"} > time() - 180)
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: Zinusya descriptor available credit is below one USD
+          description: Own-wallet available credit already excludes reservations. At the configured micro-USD tariff it is below $1. Review the $5 monthly target and held funds; a positive balance may still be insufficient for the next reservation.
+
+      - alert: ZinusyaDescriptorNoAvailableCredits
+        expr: |
+          (zinusya_descriptor_billing_available_microcredits{job="integrations/zinusya",instance="complynx.net"} <= 0)
+          and on(job, instance) (zinusya_descriptor_enabled{job="integrations/zinusya",instance="complynx.net"} == 1)
+          and on(job, instance) (up{job="integrations/zinusya",instance="complynx.net"} == 1)
+          and on(job, instance) (zinusya_descriptor_billing_collection_success{job="integrations/zinusya",instance="complynx.net"} == 1)
+          and on(job, instance) (zinusya_descriptor_billing_last_success_timestamp_seconds{job="integrations/zinusya",instance="complynx.net"} > 0)
+          and on(job, instance) (zinusya_descriptor_billing_last_success_timestamp_seconds{job="integrations/zinusya",instance="complynx.net"} > time() - 180)
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: Zinusya descriptor has no available credit
+          description: The fresh own-wallet balance cannot cover a positive paid reservation. Check configured funding and held reservations. A run budget_exhausted reason is a separate run limit, not evidence of wallet exhaustion.
+
       - alert: ZinusyaTasksSnapshotUnavailable
         expr: |
           (up{job="integrations/zinusya",instance="complynx.net"} == 1)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/complynx/zns-chatbot/internal/config"
 	"github.com/complynx/zns-chatbot/internal/db"
@@ -69,11 +70,21 @@ func embeddedDescriptor(c config.Config, store *db.Store, obs *observability.Tel
 	}
 	worker, err := descriptor.New(descriptor.Options{Store: store, BotID: c.Telegram.BotID,
 		Flow: symboldescribe.Flow{Telegram: tg, Loom: lc, Tracer: obs.Tracer()}, Machine: machine,
+		BillingRead: func(ctx context.Context) (loom.CreditBalance, error) {
+			credential, tokenErr := machine.Token(ctx, time.Minute)
+			if tokenErr != nil {
+				return loom.CreditBalance{}, tokenErr
+			}
+			return lc.OwnCredits(ctx, credential.Token)
+		},
 		Journal: c.Descriptor.Journal, Concurrency: c.Descriptor.Concurrency})
 	if err != nil {
 		return nil, err
 	}
 	if err = obs.ObserveDescriptor(true, worker.Snapshot); err != nil {
+		return nil, err
+	}
+	if err = obs.ObserveDescriptorBilling(worker.BillingSnapshot); err != nil {
 		return nil, err
 	}
 	return worker, nil

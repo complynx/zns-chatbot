@@ -23,6 +23,7 @@ type Options struct {
 	BotID       int64
 	Journal     string
 	Concurrency int
+	BillingRead func(context.Context) (loom.CreditBalance, error)
 }
 
 // Worker runs bounded descriptor slots in the application process.
@@ -34,6 +35,7 @@ type Worker struct {
 	failures chan error
 	state    string
 	blocked  int64
+	billing  billingProbe
 }
 
 // New prepares a worker without opening a pool or starting background work.
@@ -81,6 +83,7 @@ func (w *Worker) Start(parent context.Context) error {
 	go func() {
 		defer close(w.done)
 		defer releaseWorker(lock)
+		defer w.startBilling(ctx)()
 		const maxDelay = 5 * time.Minute
 		loopErr := superviseDescriptor(ctx, descriptorPoll, maxDelay, w.setState, func() error {
 			return watchQueue(ctx, a, d, func(parent context.Context, next arguments) error {
