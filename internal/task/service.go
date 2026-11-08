@@ -436,7 +436,7 @@ func (s *Service) record(ctx context.Context, component, outcome string) {
 func (s *Service) Accept(ctx context.Context, update telegram.Update, raw json.RawMessage) (db.Task, bool, error) {
 	task, duplicate, err := s.accept(ctx, update, raw)
 	if update.CallbackQuery != nil && update.CallbackQuery.ID != "" &&
-		(err == nil || errors.Is(err, ErrUnsupportedUpdate)) {
+		(err == nil || errors.Is(err, ErrUnsupportedUpdate) || errors.Is(err, db.ErrUserRevoked)) {
 		// Callback acknowledgement affects only the Telegram spinner, not durable acceptance.
 		ack, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 		ackErr := s.tg.AnswerCallbackQuery(ack, update.CallbackQuery.ID, "")

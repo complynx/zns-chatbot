@@ -1412,6 +1412,16 @@ type ShuttleUser struct {
 	Revoked        bool      `json:"revoked"`
 }
 
+type ShuttleUserBan struct {
+	ID                uuid.UUID          `json:"id"`
+	UserID            uuid.UUID          `json:"user_id"`
+	Actor             string             `json:"actor"`
+	Reason            string             `json:"reason"`
+	RequestHash       []byte             `json:"request_hash"`
+	PreviouslyRevoked bool               `json:"previously_revoked"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
 type ShuttleUserEventContext struct {
 	UserID  uuid.UUID   `json:"user_id"`
 	EventID pgtype.UUID `json:"event_id"`

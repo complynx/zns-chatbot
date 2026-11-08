@@ -62,7 +62,7 @@ func baselineFreshDownUpAndPartialLegacyRefusal(t *testing.T) {
 		var version int64
 		require.NoError(t, s.Pool().QueryRow(t.Context(),
 			"SELECT max(version_id) FROM goose_db_version WHERE is_applied").Scan(&version))
-		require.EqualValues(t, 76, version)
+		require.EqualValues(t, 77, version)
 		_, err := provider.DownTo(t.Context(), 0)
 		require.NoError(t, err)
 		var tables int
@@ -138,6 +138,7 @@ SELECT user_id,1,'Анна Иванова','Анна','Иванова','user' FR
 		"relnamespace=current_schema()::regnamespace " +
 		"AND NOT starts_with(relname,'shuttle_reaction') " +
 		"AND NOT starts_with(relname,'shuttle_telegram_reactions') AND relname NOT IN " +
+		"('shuttle_user_bans','shuttle_user_bans_pkey','shuttle_user_bans_user_id_request_hash_key') AND relname NOT IN " +
 		"('shuttle_symbols','shuttle_symbols_pkey','shuttle_symbols_pending','shuttle_tasks_symbols'," +
 		"'shuttle_symbol_decay','shuttle_symbol_decay_pkey')"
 	require.NoError(t, s.Pool().QueryRow(t.Context(), objectQuery).Scan(&objects))
@@ -244,7 +245,8 @@ func baselineRollbackPreservesAcceptedData(t *testing.T) {
 	s := testStore(t)
 	task := accepted(t, s, 1)
 	history := migrationHistory(t, s)
-	_, err := baselineProvider(t, s).DownTo(t.Context(), 0)
+	// Check the baseline's own refusal without first rolling back later migrations.
+	_, err := baselineProvider(t, s).ApplyVersion(t.Context(), 76, false)
 	require.ErrorContains(t, err, "baseline data must be exported before rollback")
 	require.Equal(t, history, migrationHistory(t, s))
 	retained, err := s.GetTask(t.Context(), task.ID)

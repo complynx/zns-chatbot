@@ -128,8 +128,7 @@ func (s *Store) Intake(
 	q := s.q.WithTx(tx)
 	id, e := q.FindInbox(ctx, sqlc.FindInboxParams{BotID: r.BotID, UpdateID: r.UpdateID})
 	if e == nil {
-		existing, lookupErr := q.GetTask(ctx, id)
-		return task(existing), true, lookupErr
+		return existingActiveTask(ctx, q, id)
 	}
 	if !errors.Is(e, pgx.ErrNoRows) {
 		return Task{}, false, e
@@ -140,6 +139,9 @@ func (s *Store) Intake(
 	)
 	if e != nil {
 		return Task{}, false, e
+	}
+	if u.Revoked {
+		return Task{}, false, ErrUserRevoked
 	}
 	c, e := q.EnsureConversation(ctx, sqlc.EnsureConversationParams{ID: uuid.New(), UserID: u.ID, ChatID: r.ChatID})
 	if e != nil {

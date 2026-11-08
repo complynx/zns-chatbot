@@ -12,13 +12,16 @@ Apply migrations explicitly before ordinary startup. After the schema is ready, 
 
 Webhook registration is an operator action, never an automatic startup mutation. Readiness requires PostgreSQL; IAM or Loom downtime can leave accepted work waiting. A graceful stop preserves task ownership and uncertain external effects for recovery. See the [architecture](shuttle-architecture.md), [schema baseline](shuttle-schema.md) and [deployment identity invariant](shuttle-deployment-scope.md).
 
+An operator can apply a [local Telegram ban](shuttle-user-bans.md) before onboarding.
+The same binary records a required actor and reason without starting workers.
+
 ## Tests and builds
 
 Set ZNS_CHATBOT_TEST_DATABASE_URL to a disposable PostgreSQL database owned by the runner. Tests create isolated schemas. Use a focused test selection while changing a contract; required CI checks cover the complete supported packages. Race checks need CGO and a C compiler; the release binary uses CGO disabled.
 
 ```sh
-go test -parallel 4 ./cmd/... ./internal/... ./migrations/... ./integration/...
-CGO_ENABLED=1 go test -race -parallel 4 ./cmd/... ./internal/... ./migrations/...
+go test -count=1 -p 1 -parallel 4 ./cmd/... ./internal/... ./migrations/... ./integration/...
+CGO_ENABLED=1 go test -race -count=1 -p 1 -parallel 4 ./cmd/... ./internal/... ./migrations/...
 python3 tools/test-integration.py NEW_OUTPUT_DIRECTORY
 golangci-lint run ./cmd/... ./internal/... ./migrations/... ./integration/...
 CGO_ENABLED=0 go build ./cmd/shuttle

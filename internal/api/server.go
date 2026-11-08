@@ -152,6 +152,10 @@ func (s *Server) webhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	t, duplicate, err := s.tasks.Accept(r.Context(), update, body)
+	if errors.Is(err, db.ErrUserRevoked) {
+		writeJSON(w, http.StatusOK, map[string]any{"ignored": true, schemaReason: "access_revoked"})
+		return
+	}
 	if errors.Is(err, task.ErrUnsupportedUpdate) {
 		writeJSON(w, http.StatusOK, map[string]any{"ignored": true, schemaReason: "unsupported_update"})
 		return
