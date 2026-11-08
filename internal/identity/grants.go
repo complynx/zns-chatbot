@@ -43,14 +43,23 @@ func (c *Client) ensureInitialLoomGrant(ctx context.Context, account Account) er
 	if _, err = c.getAccount(ctx, credential, account.Subject, account.SyntheticEmail); err != nil {
 		return err
 	}
-	// An earlier credential may predate the grant. Fence in-flight issuance and
-	// discard cached role claims before returning to the local binding caller.
-	c.Invalidate(account.Subject)
-	defer c.Invalidate(account.Subject)
+	_, err, _ = c.flight.Do("initial-loom-grant:"+account.Subject, func() (any, error) {
+		return nil, c.reconcileInitialLoomGrant(ctx, credential, account)
+	})
+	return err
+}
+
+func (c *Client) reconcileInitialLoomGrant(ctx context.Context, credential Credential, account Account) error {
 	found, err := c.initialLoomGrant(ctx, credential, account.Subject)
 	if err != nil || found {
 		return err
 	}
+	// Only grant creation changes authority. Read-only bootstrap retries must not
+	// invalidate a concurrent login that already verified this existing grant.
+	// Coalescing the check/create also prevents redundant local creators from
+	// invalidating tokens issued after the first creator has finished.
+	c.Invalidate(account.Subject)
+	defer c.Invalidate(account.Subject)
 	var response struct {
 		ID string `json:"userGrantId"`
 	}

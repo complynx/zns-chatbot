@@ -299,3 +299,22 @@ func TestInitialLoomGrantRefreshesClaimsButNeverRestoresOnSessionRefresh(t *test
 	require.Equal(t, 1, f.grants.writes)
 	require.True(t, old.ExpiresAt.After(time.Now()))
 }
+
+func TestExistingInitialLoomGrantDoesNotInvalidateConcurrentAuthorization(t *testing.T) {
+	t.Parallel()
+	f, c := fixture(t)
+	f.users = []iamUser{testUser("persisted-id")}
+	_, err := bootstrapFixtureUser(t.Context(), c)
+	require.NoError(t, err)
+	credential, err := c.UserToken(t.Context(), "persisted-id")
+	require.NoError(t, err)
+	fence := c.InvalidationFence("persisted-id")
+	_, err = bootstrapFixtureUser(t.Context(), c)
+	require.NoError(t, err)
+	require.True(t, fence(), "a read-only bootstrap must not reject in-flight authorization")
+	c.mu.Lock()
+	require.Equal(t, credential, c.tokens["persisted-id"])
+	c.mu.Unlock()
+	c.Invalidate("persisted-id")
+	require.False(t, fence(), "explicit access invalidation must still fence authorization")
+}
