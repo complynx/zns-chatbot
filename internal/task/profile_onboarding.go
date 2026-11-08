@@ -124,6 +124,7 @@ func appendProfileContext(
 			"Shuttle отправит их после сохранения подтверждённого имени и завершения этого run.",
 	))
 	text.WriteString(personaPrompt(language))
+	text.WriteString(personaBoundaryInstructions)
 	if skillsEnabled {
 		text.WriteString(skillsInstructions)
 		return nil
