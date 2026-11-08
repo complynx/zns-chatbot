@@ -13,6 +13,26 @@ groups:
           summary: Zinusya metrics target is unavailable
           description: Check the bot, Alloy target and private network. Missing telemetry does not prove that the bot stopped.
 
+      - alert: ZinusyaDescriptorUnavailable
+        expr: |
+          (zinusya_descriptor_enabled{job="integrations/zinusya",instance="complynx.net"} == 1)
+          unless on(job, instance)
+          (zinusya_descriptor_state{job="integrations/zinusya",instance="complynx.net",state="running"} == 1)
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: Zinusya visual descriptor is unavailable
+          description: Core intake can remain ready. Inspect descriptor logs and journal ownership; do not delete uncertain receipts or replace original runs.
+
+      - alert: ZinusyaDescriptorReconciliationRequired
+        expr: |
+          zinusya_descriptor_blocked{job="integrations/zinusya",instance="complynx.net"} > 0
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: Zinusya visual descriptions require reconciliation
+          description: Inspect retained blocked journals and their original effects. Do not replay uploads or paid actions; restart after operator reconciliation.
+
       - alert: ZinusyaTasksSnapshotUnavailable
         expr: |
           (up{job="integrations/zinusya",instance="complynx.net"} == 1)

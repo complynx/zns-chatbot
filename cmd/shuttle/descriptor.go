@@ -44,6 +44,9 @@ func waitApplication(ctx context.Context, cancel context.CancelFunc,
 //nolint:nilnil // A nil worker intentionally disables this optional background service.
 func embeddedDescriptor(c config.Config, store *db.Store, obs *observability.Telemetry) (*descriptor.Worker, error) {
 	if !c.Descriptor.Enabled {
+		if obs != nil {
+			return nil, obs.ObserveDescriptor(false, nil)
+		}
 		return nil, nil
 	}
 	h := &http.Client{Timeout: c.HTTPTimeout}
@@ -64,7 +67,14 @@ func embeddedDescriptor(c config.Config, store *db.Store, obs *observability.Tel
 	if err != nil {
 		return nil, err
 	}
-	return descriptor.New(descriptor.Options{Store: store, BotID: c.Telegram.BotID,
+	worker, err := descriptor.New(descriptor.Options{Store: store, BotID: c.Telegram.BotID,
 		Flow: symboldescribe.Flow{Telegram: tg, Loom: lc, Tracer: obs.Tracer()}, Machine: machine,
 		Journal: c.Descriptor.Journal, Concurrency: c.Descriptor.Concurrency})
+	if err != nil {
+		return nil, err
+	}
+	if err = obs.ObserveDescriptor(true, worker.Snapshot); err != nil {
+		return nil, err
+	}
+	return worker, nil
 }

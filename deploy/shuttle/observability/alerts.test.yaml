@@ -1,6 +1,53 @@
 rule_files: [alerts.yaml]
 evaluation_interval: 30s
 tests:
+  - name: "descriptor disabled or healthy does not alert"
+    interval: 30s
+    input_series:
+      - series: 'zinusya_descriptor_enabled{job="integrations/zinusya",instance="complynx.net"}'
+        values: "0+0x10 1+0x10"
+      - series: 'zinusya_descriptor_state{job="integrations/zinusya",instance="complynx.net",state="running"}'
+        values: "0+0x10 1+0x10"
+      - series: 'zinusya_descriptor_blocked{job="integrations/zinusya",instance="complynx.net"}'
+        values: "0+0x21"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ZinusyaDescriptorUnavailable
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: ZinusyaDescriptorUnavailable
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: ZinusyaDescriptorReconciliationRequired
+        exp_alerts: []
+
+  - name: "descriptor failure and unknown effects remain visible while core stays up"
+    interval: 30s
+    input_series:
+      - series: 'up{job="integrations/zinusya",instance="complynx.net"}'
+        values: "1+0x10"
+      - series: 'zinusya_descriptor_enabled{job="integrations/zinusya",instance="complynx.net"}'
+        values: "1+0x10"
+      - series: 'zinusya_descriptor_state{job="integrations/zinusya",instance="complynx.net",state="running"}'
+        values: "0+0x10"
+      - series: 'zinusya_descriptor_blocked{job="integrations/zinusya",instance="complynx.net"}'
+        values: "1+0x10"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ZinusyaDescriptorUnavailable
+        exp_alerts:
+          - exp_labels: {job: "integrations/zinusya", instance: "complynx.net", severity: warning}
+            exp_annotations:
+              summary: Zinusya visual descriptor is unavailable
+              description: Core intake can remain ready. Inspect descriptor logs and journal ownership; do not delete uncertain receipts or replace original runs.
+      - eval_time: 3m
+        alertname: ZinusyaDescriptorReconciliationRequired
+        exp_alerts:
+          - exp_labels: {job: "integrations/zinusya", instance: "complynx.net", severity: warning}
+            exp_annotations:
+              summary: Zinusya visual descriptions require reconciliation
+              description: Inspect retained blocked journals and their original effects. Do not replay uploads or paid actions; restart after operator reconciliation.
+
   - name: "healthy empty snapshots and old intentional user wait"
     interval: 30s
     input_series:

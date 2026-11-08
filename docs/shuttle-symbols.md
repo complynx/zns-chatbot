@@ -66,9 +66,22 @@ model preferences. Normal intake records an unknown catalog entry. Set
 process. The worker shares its database pool and uses bounded goroutines; no
 separate runtime service is required. It starts after deployment-binding checks
 and cancels active steps during application shutdown without closing the pool.
-Worker startup or fatal runtime errors are logged without stopping the core bot;
-fix the journal/dependency error and restart to resume. A stale lock still needs
-operator reconciliation. No schema change is needed.
+Worker startup or permanent runtime errors are logged without stopping the core bot.
+Positively classified transient catalog reads retry with exponential backoff capped
+at five minutes until shutdown. Unknown external effects and malformed journals
+remain blocked for operator reconciliation. No descriptor schema change is needed.
+
+Worker and procedure ownership use operating-system locks on persistent marked
+`worker.lock` and `procedure.lock` files. Clean shutdown and process death release
+ownership automatically. Never unlink or replace these new-format files while
+any worker or operator CLI may run: another inode could admit a second owner.
+Existing unmarked legacy locks fail closed. For the one-time transition, stop all
+old and new owners, inspect original journals and effects, then remove only the
+reconciled legacy lock files. Keep journals, pending markers and receipts intact.
+
+Descriptor enabled/control-loop state and retained blocked-entry count are exposed
+through metrics with separate alerts. A running loop does not prove remote IAM,
+provider funding or successful model dispatch; core readiness covers intake and DB.
 
 The standalone CLI remains available for operator recovery and explicit runs.
 Do not run it against a journal already owned by the embedded worker.
@@ -108,8 +121,8 @@ deadline. Backoff grows from two seconds to five minutes; a longer Telegram
 `RetryAfter` takes precedence. Temporary catalog database-read failures pause the
 affected discovery slot without stopping healthy active slots. Permanent failures
 and unknown mutation outcomes receive a private blocked marker for reconciliation;
-they do not start replacement work or hold other entries. A stale process lock after a crash
-also needs reconciliation before restarting. Catalog eviction leaves journals
+they do not start replacement work or hold other entries. Process death releases
+new-format OS locks; unknown effects still require reconciliation. Catalog eviction leaves journals
 intact and cannot make an old result overwrite a new generation.
 
 Transient Telegram media reads receive at most three attempts with a short,
