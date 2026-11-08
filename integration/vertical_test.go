@@ -116,6 +116,8 @@ type peers struct {
 	key                                     *ecdsa.PrivateKey
 	signer                                  jose.Signer
 	users                                   map[string]map[string]any
+	userGrants                              map[string]map[string]any
+	grantWriteStatus, grantWrites           int
 	unavailableTokenSubjects                map[string]bool
 	tokenHook                               func(string)
 	tokenExpiry                             time.Time
@@ -211,6 +213,9 @@ func (p *peers) identity(w http.ResponseWriter, r *http.Request) {
 	defer p.mu.Unlock()
 	if p.iamDown {
 		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+	if p.initialUserGrants(w, r) {
 		return
 	}
 	switch r.URL.Path {
@@ -654,9 +659,21 @@ func prepareHarness(t *testing.T, p *peers) *harness {
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dsn)
 	require.NoError(t, err)
+	t.Cleanup(pool.Close)
 	schema := "integration_" + strings.ReplaceAll(uuid.NewString(), "-", "")
 	_, err = pool.Exec(ctx, "CREATE SCHEMA "+schema)
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		// Dedicated browser QA exports failed fixtures before retiring its database.
+		if t.Failed() && os.Getenv("ZINUSYA_QA_KEEP_FAILED_SCHEMA") == "1" {
+			return
+		}
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if _, dropErr := pool.Exec(cleanupCtx, "DROP SCHEMA "+schema+" CASCADE"); dropErr != nil {
+			t.Errorf("drop integration schema %s: %v", schema, dropErr)
+		}
+	})
 	parsed, err := url.Parse(dsn)
 	require.NoError(t, err)
 	q := parsed.Query()
@@ -669,14 +686,7 @@ func prepareHarness(t *testing.T, p *peers) *harness {
 	parsed.RawQuery = q.Encode()
 	store, err := db.Open(ctx, parsed.String())
 	require.NoError(t, err)
-	t.Cleanup(func() {
-		store.Close()
-		// Dedicated browser QA exports failed fixtures before retiring its database.
-		if !t.Failed() || os.Getenv("ZINUSYA_QA_KEEP_FAILED_SCHEMA") != "1" {
-			_, _ = pool.Exec(ctx, "DROP SCHEMA "+schema+" CASCADE")
-		}
-		pool.Close()
-	})
+	t.Cleanup(store.Close)
 	require.NoError(t, store.Migrate(ctx))
 	require.NoError(t, task.MigrateQueue(ctx, store.Pool()))
 	return &harness{store: store, peers: p}

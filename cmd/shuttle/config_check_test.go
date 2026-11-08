@@ -24,6 +24,13 @@ func TestCheckConfigurationRejectsInvalidInput(t *testing.T) {
 		{"-config", "missing.yaml", "-check-config"},
 		{"-check-config", "-migrate"},
 		{"-check-config", "unexpected"},
+		{"-ban-telegram-user", "1"},
+		{"-ban-telegram-user", "0", "-ban-reason", "test"},
+		{"-ban-reason", "test"},
+		{"-ban-public-reason", "test"},
+		{"-ban-actor", "operator:shuttle-cli"},
+		{"-ban-telegram-user", "1", "-ban-reason", "test", "-check-config"},
+		{"-ban-telegram-user", "1", "-ban-reason", "test", "-migrate"},
 	} {
 		var output bytes.Buffer
 		require.Error(t, runArgs(&output, args))

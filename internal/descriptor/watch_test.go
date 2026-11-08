@@ -168,10 +168,11 @@ func TestDescriptorCatalogReadPreservesSafeCauseAndOriginalJournal(t *testing.T)
 	// A missing catalog row retains the established eviction behavior.
 	_, err = readJournal(a, path, db.SymbolRecord{}, pgx.ErrNoRows)
 	require.NoError(t, err)
-	// Without an original journal, the lookup cannot prove entry identity.
+	// Before journal creation a failed read cannot prove identity or start an effect.
+	// Its typed cause allows a bounded retry of that read against the original generation.
 	_, err = readJournal(a, filepath.Join(directory, "absent.json"), db.SymbolRecord{}, cause)
 	require.Error(t, err)
-	require.False(t, transientDescriptorRead(err))
+	require.True(t, transientDescriptorRead(err))
 }
 
 func TestQueuedGenerationCannotAdoptAnEntryReadmittedBeforeJournalCreation(t *testing.T) {

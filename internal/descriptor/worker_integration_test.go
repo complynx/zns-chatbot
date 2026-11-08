@@ -66,7 +66,7 @@ func TestEmbeddedWorkerSharesPoolStopsAndResumesOriginalRun(t *testing.T) {
 		t.Fatal("Stop returned before cancelling the active step")
 	}
 	_, err = os.Stat(filepath.Join(o.Journal, "worker.lock"))
-	require.ErrorIs(t, err, os.ErrNotExist)
+	require.NoError(t, err, "released OS lock must keep its inode")
 	_, err = d.store.Settings(t.Context())
 	require.NoError(t, err, "descriptor must not close the application's shared pool")
 	p.mu.Lock()

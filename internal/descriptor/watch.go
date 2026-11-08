@@ -239,6 +239,12 @@ func advanceEntry(ctx context.Context, a arguments, entry db.SymbolRecord,
 	}
 	if stepErr != nil {
 		state, readErr := descriptorState(next.journal)
+		if cause, ok := errors.AsType[*descriptorCatalogReadError](stepErr); ok &&
+			errors.Is(readErr, os.ErrNotExist) && transientCatalogRead(cause.error) {
+			// The initial catalog read failed before journal creation or any effect.
+			// Keep the durable active pointer and let the bounded supervisor retry.
+			return false, stepErr
+		}
 		if readErr == nil && state.ProcedureID != uuid.Nil && state.Generation == entry.Generation &&
 			state.Reference.Kind == entry.Reference.Kind && state.Reference.ID == entry.Reference.ID &&
 			state.Pending == "" && transientDescriptorRead(stepErr) {
@@ -248,6 +254,9 @@ func advanceEntry(ctx context.Context, a arguments, entry db.SymbolRecord,
 		// Never start a replacement for an uncertain mutation or rejected result.
 		if err = markBlocked(next.journal, stepErr); err != nil {
 			return false, err
+		}
+		if a.blocked != nil {
+			a.blocked()
 		}
 		logger := slog.Default().With("component", "descriptor")
 		logger.WarnContext(ctx, "descriptor entry requires reconciliation; original journal retained")

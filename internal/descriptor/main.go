@@ -38,6 +38,7 @@ type arguments struct {
 	generation                                          uuid.UUID
 	tracer                                              trace.Tracer
 	machine                                             *identity.MachineTokenSource
+	blocked                                             func()
 }
 type dependencies struct {
 	store *db.Store
@@ -167,11 +168,11 @@ func runEntry(ctx context.Context, a arguments, d dependencies) error {
 	if err != nil {
 		return err
 	}
-	lock, err := os.OpenFile(filepath.Join(a.journal, "procedure.lock"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	lock, err := journalLock(filepath.Join(a.journal, "procedure.lock"))
 	if err != nil {
 		return errors.New("procedure owned or requires stale-lock reconciliation")
 	}
-	defer func() { _ = lock.Close(); _ = os.Remove(lock.Name()) }()
+	defer lock.Close()
 	// Another process may have finished between the first read and this lock.
 	// Use only the current journal and catalog receipt while owning the procedure.
 	entry, lookupErr = d.store.PendingSymbol(ctx, d.bot, a.kind, a.id)
@@ -217,6 +218,9 @@ func readJournal(a arguments, path string, entry db.SymbolRecord, lookupErr erro
 	}
 	if !errors.Is(err, os.ErrNotExist) {
 		return s, errors.New("cannot read procedure journal")
+	}
+	if lookupErr != nil && !errors.Is(lookupErr, pgx.ErrNoRows) {
+		return s, &descriptorCatalogReadError{lookupErr}
 	}
 	if lookupErr != nil || entry.Described {
 		return s, errors.New("symbol absent or already described")

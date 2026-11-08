@@ -1,6 +1,53 @@
 rule_files: [alerts.yaml]
 evaluation_interval: 30s
 tests:
+  - name: "descriptor disabled or healthy does not alert"
+    interval: 30s
+    input_series:
+      - series: 'zinusya_descriptor_enabled{job="integrations/zinusya",instance="complynx.net"}'
+        values: "0+0x10 1+0x10"
+      - series: 'zinusya_descriptor_state{job="integrations/zinusya",instance="complynx.net",state="running"}'
+        values: "0+0x10 1+0x10"
+      - series: 'zinusya_descriptor_blocked{job="integrations/zinusya",instance="complynx.net"}'
+        values: "0+0x21"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ZinusyaDescriptorUnavailable
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: ZinusyaDescriptorUnavailable
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: ZinusyaDescriptorReconciliationRequired
+        exp_alerts: []
+
+  - name: "descriptor failure and unknown effects remain visible while core stays up"
+    interval: 30s
+    input_series:
+      - series: 'up{job="integrations/zinusya",instance="complynx.net"}'
+        values: "1+0x10"
+      - series: 'zinusya_descriptor_enabled{job="integrations/zinusya",instance="complynx.net"}'
+        values: "1+0x10"
+      - series: 'zinusya_descriptor_state{job="integrations/zinusya",instance="complynx.net",state="running"}'
+        values: "0+0x10"
+      - series: 'zinusya_descriptor_blocked{job="integrations/zinusya",instance="complynx.net"}'
+        values: "1+0x10"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ZinusyaDescriptorUnavailable
+        exp_alerts:
+          - exp_labels: {job: "integrations/zinusya", instance: "complynx.net", severity: warning}
+            exp_annotations:
+              summary: Zinusya visual descriptor is unavailable
+              description: Core intake can remain ready. Inspect descriptor logs and journal ownership; do not delete uncertain receipts or replace original runs.
+      - eval_time: 3m
+        alertname: ZinusyaDescriptorReconciliationRequired
+        exp_alerts:
+          - exp_labels: {job: "integrations/zinusya", instance: "complynx.net", severity: warning}
+            exp_annotations:
+              summary: Zinusya visual descriptions require reconciliation
+              description: Inspect retained blocked journals and their original effects. Do not replay uploads or paid actions; restart after operator reconciliation.
+
   - name: "healthy empty snapshots and old intentional user wait"
     interval: 30s
     input_series:
@@ -586,3 +633,185 @@ tests:
       - eval_time: 3m
         alertname: ZinusyaTaskUncertain
         exp_alerts: []
+
+  - name: descriptor billing low credit and replenishment recovery
+    interval: 30s
+    input_series:
+    - series: up{job="integrations/zinusya",instance="complynx.net"}
+      values: 1+0x16
+    - series: zinusya_descriptor_enabled{job="integrations/zinusya",instance="complynx.net"}
+      values: 1+0x16
+    - series: zinusya_descriptor_billing_collection_success{job="integrations/zinusya",instance="complynx.net"}
+      values: 1+0x16
+    - series: zinusya_descriptor_billing_last_success_timestamp_seconds{job="integrations/zinusya",instance="complynx.net"}
+      values: 1+30x16
+    - series: zinusya_descriptor_billing_reserved_microcredits{job="integrations/zinusya",instance="complynx.net"}
+      values: 4000000+0x16
+    - series: zinusya_descriptor_billing_available_microcredits{job="integrations/zinusya",instance="complynx.net"}
+      values: 500000+0x6 5000000+0x9
+    alert_rule_test:
+    - eval_time: 3m
+      alertname: ZinusyaDescriptorCreditsLow
+      exp_alerts:
+      - exp_labels:
+          job: integrations/zinusya
+          instance: complynx.net
+          severity: warning
+        exp_annotations:
+          summary: Zinusya descriptor available credit is below one USD
+          description: Own-wallet available credit already excludes reservations. At the configured micro-USD tariff it
+            is below $1. Review the $5 monthly target and held funds; a positive balance may still be insufficient for
+            the next reservation.
+    - eval_time: 6m
+      alertname: ZinusyaDescriptorCreditsLow
+      exp_alerts: []
+    - eval_time: 3m
+      alertname: ZinusyaDescriptorNoAvailableCredits
+      exp_alerts: []
+    - eval_time: 3m
+      alertname: ZinusyaDescriptorBillingUnavailable
+      exp_alerts: []
+  - name: descriptor billing reservations consume all spendable credit
+    interval: 30s
+    input_series:
+    - series: up{job="integrations/zinusya",instance="complynx.net"}
+      values: 1+0x16
+    - series: zinusya_descriptor_enabled{job="integrations/zinusya",instance="complynx.net"}
+      values: 1+0x16
+    - series: zinusya_descriptor_billing_collection_success{job="integrations/zinusya",instance="complynx.net"}
+      values: 1+0x16
+    - series: zinusya_descriptor_billing_last_success_timestamp_seconds{job="integrations/zinusya",instance="complynx.net"}
+      values: 1+30x16
+    - series: zinusya_descriptor_billing_reserved_microcredits{job="integrations/zinusya",instance="complynx.net"}
+      values: 4000000+0x16
+    - series: zinusya_descriptor_billing_available_microcredits{job="integrations/zinusya",instance="complynx.net"}
+      values: 0+0x16
+    alert_rule_test:
+    - eval_time: 3m
+      alertname: ZinusyaDescriptorNoAvailableCredits
+      exp_alerts:
+      - exp_labels:
+          job: integrations/zinusya
+          instance: complynx.net
+          severity: critical
+        exp_annotations:
+          summary: Zinusya descriptor has no available credit
+          description: The fresh own-wallet balance cannot cover a positive paid reservation. Check configured funding
+            and held reservations. A run budget_exhausted reason is a separate run limit, not evidence of wallet exhaustion.
+    - eval_time: 3m
+      alertname: ZinusyaDescriptorCreditsLow
+      exp_alerts: []
+    - eval_time: 3m
+      alertname: ZinusyaDescriptorBillingUnavailable
+      exp_alerts: []
+  - name: descriptor billing stale snapshot is not zero funding
+    interval: 30s
+    input_series:
+    - series: up{job="integrations/zinusya",instance="complynx.net"}
+      values: 1+0x16
+    - series: zinusya_descriptor_enabled{job="integrations/zinusya",instance="complynx.net"}
+      values: 1+0x16
+    - series: zinusya_descriptor_billing_collection_success{job="integrations/zinusya",instance="complynx.net"}
+      values: 1+0x16
+    - series: zinusya_descriptor_billing_last_success_timestamp_seconds{job="integrations/zinusya",instance="complynx.net"}
+      values: 1+0x16
+    - series: zinusya_descriptor_billing_reserved_microcredits{job="integrations/zinusya",instance="complynx.net"}
+      values: 4000000+0x16
+    - series: zinusya_descriptor_billing_available_microcredits{job="integrations/zinusya",instance="complynx.net"}
+      values: 0+0x16
+    alert_rule_test:
+    - eval_time: 6m
+      alertname: ZinusyaDescriptorBillingUnavailable
+      exp_alerts:
+      - exp_labels:
+          job: integrations/zinusya
+          instance: complynx.net
+          severity: warning
+        exp_annotations:
+          summary: Zinusya descriptor billing source is unavailable or stale
+          description: Check the own-account billing probe, machine authorization and Loom. Missing billing data is not
+            zero credit; a running descriptor does not prove funding.
+    - eval_time: 6m
+      alertname: ZinusyaDescriptorNoAvailableCredits
+      exp_alerts: []
+    - eval_time: 6m
+      alertname: ZinusyaDescriptorCreditsLow
+      exp_alerts: []
+  - name: descriptor billing failed probe and recovery
+    interval: 30s
+    input_series:
+    - series: up{job="integrations/zinusya",instance="complynx.net"}
+      values: 1+0x16
+    - series: zinusya_descriptor_enabled{job="integrations/zinusya",instance="complynx.net"}
+      values: 1+0x16
+    - series: zinusya_descriptor_billing_collection_success{job="integrations/zinusya",instance="complynx.net"}
+      values: 0+0x6 1+0x9
+    - series: zinusya_descriptor_billing_last_success_timestamp_seconds{job="integrations/zinusya",instance="complynx.net"}
+      values: 0+0x6 211+30x9
+    - series: zinusya_descriptor_billing_reserved_microcredits{job="integrations/zinusya",instance="complynx.net"}
+      values: 4000000+0x16
+    - series: zinusya_descriptor_billing_available_microcredits{job="integrations/zinusya",instance="complynx.net"}
+      values: 5000000+0x16
+    alert_rule_test:
+    - eval_time: 3m
+      alertname: ZinusyaDescriptorBillingUnavailable
+      exp_alerts:
+      - exp_labels:
+          job: integrations/zinusya
+          instance: complynx.net
+          severity: warning
+        exp_annotations:
+          summary: Zinusya descriptor billing source is unavailable or stale
+          description: Check the own-account billing probe, machine authorization and Loom. Missing billing data is not
+            zero credit; a running descriptor does not prove funding.
+    - eval_time: 6m
+      alertname: ZinusyaDescriptorBillingUnavailable
+      exp_alerts: []
+    - eval_time: 3m
+      alertname: ZinusyaDescriptorNoAvailableCredits
+      exp_alerts: []
+    - eval_time: 3m
+      alertname: ZinusyaDescriptorCreditsLow
+      exp_alerts: []
+  - name: descriptor billing missing data is unavailable not empty wallet
+    interval: 30s
+    input_series:
+    - series: up{job="integrations/zinusya",instance="complynx.net"}
+      values: 1+0x16
+    - series: zinusya_descriptor_enabled{job="integrations/zinusya",instance="complynx.net"}
+      values: 1+0x16
+    alert_rule_test:
+    - eval_time: 3m
+      alertname: ZinusyaDescriptorBillingUnavailable
+      exp_alerts:
+      - exp_labels:
+          job: integrations/zinusya
+          instance: complynx.net
+          severity: warning
+        exp_annotations:
+          summary: Zinusya descriptor billing source is unavailable or stale
+          description: Check the own-account billing probe, machine authorization and Loom. Missing billing data is not
+            zero credit; a running descriptor does not prove funding.
+    - eval_time: 3m
+      alertname: ZinusyaDescriptorNoAvailableCredits
+      exp_alerts: []
+    - eval_time: 3m
+      alertname: ZinusyaDescriptorCreditsLow
+      exp_alerts: []
+  - name: disabled descriptor has no billing missing-data alert
+    interval: 30s
+    input_series:
+    - series: up{job="integrations/zinusya",instance="complynx.net"}
+      values: 1+0x16
+    - series: zinusya_descriptor_enabled{job="integrations/zinusya",instance="complynx.net"}
+      values: 0+0x16
+    alert_rule_test:
+    - eval_time: 3m
+      alertname: ZinusyaDescriptorBillingUnavailable
+      exp_alerts: []
+    - eval_time: 3m
+      alertname: ZinusyaDescriptorNoAvailableCredits
+      exp_alerts: []
+    - eval_time: 3m
+      alertname: ZinusyaDescriptorCreditsLow
+      exp_alerts: []

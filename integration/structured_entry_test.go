@@ -187,15 +187,27 @@ func TestStructuredProfilePlainTextUsesSavedLanguageAndCurrentAuthorization(t *t
 	require.Contains(t, p.sent[1].Text, "/name — Изменить имя")
 	require.Empty(t, p.sent[1].Entities)
 	p.mu.Unlock()
+	pausedService := h.service
+	h.stop(t)
+	// Admit while access is valid, then revoke before the recovered worker runs.
+	// Revoked owners no longer enter intake, so a post-revocation request has no task.
+	update := telegram.Update{ID: 89402, Message: &telegram.Message{
+		ID: 89402, From: &telegram.User{ID: 456, FirstName: "Daniel", LanguageCode: "en"},
+		Chat: telegram.Chat{ID: 456, Type: "private"}, Text: "/profile",
+	}}
+	raw, err := json.Marshal(update)
+	require.NoError(t, err)
+	denied, _, err := pausedService.Accept(t.Context(), update, raw)
+	require.NoError(t, err)
 	_, err = h.store.Pool().Exec(context.Background(), "UPDATE shuttle_users SET revoked=true WHERE id=$1", user.ID)
 	require.NoError(t, err)
-	denied := h.submitText(t, 89402, "/profile")
-	h.await(t, denied, "failed")
+	h.start(t)
+	h.await(t, denied.ID, "failed")
 	h.awaitReplies(t, 3)
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	require.NotContains(t, p.sent[2].Text, "Daniel")
-	require.Contains(t, p.sent[2].Text, "You don’t have access")
+	require.Contains(t, p.sent[2].Text, "Сейчас у тебя нет доступа")
 	require.Zero(t, p.loomUnavailableCalls)
 }
 

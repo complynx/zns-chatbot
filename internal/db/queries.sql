@@ -120,7 +120,7 @@ SELECT * FROM shuttle_users WHERE id=$1;
 -- name: BindIdentity :one
 UPDATE shuttle_users SET zitadel_subject=$2,zitadel_org=$3 WHERE id=$1 AND (zitadel_subject='' OR zitadel_subject=$2) AND (zitadel_org='' OR zitadel_org=$3) RETURNING *;
 -- name: RevokeUser :execrows
-UPDATE shuttle_users SET revoked=$2 WHERE id=$1;
+UPDATE shuttle_users SET revoked=$2,ban_public_reason='' WHERE id=$1;
 
 -- name: GetRevocationUser :one
 SELECT * FROM shuttle_users WHERE id=$1 AND bot_id=$2 AND zitadel_org=$3;

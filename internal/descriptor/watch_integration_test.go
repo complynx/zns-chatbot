@@ -92,9 +92,17 @@ func descriptorStore(t *testing.T) *db.Store {
 	}
 	admin, err := db.Open(t.Context(), dsn)
 	require.NoError(t, err)
+	t.Cleanup(admin.Close)
 	schema := "descriptor_" + strings.ReplaceAll(uuid.NewString(), "-", "")
 	_, err = admin.Pool().Exec(t.Context(), "CREATE SCHEMA "+schema)
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if _, dropErr := admin.Pool().Exec(ctx, "DROP SCHEMA "+schema+" CASCADE"); dropErr != nil {
+			t.Errorf("drop isolated descriptor schema: %v", dropErr)
+		}
+	})
 	u, err := url.Parse(dsn)
 	require.NoError(t, err)
 	query := u.Query()
@@ -102,11 +110,7 @@ func descriptorStore(t *testing.T) *db.Store {
 	u.RawQuery = query.Encode()
 	store, err := db.Open(t.Context(), u.String())
 	require.NoError(t, err)
-	t.Cleanup(func() {
-		store.Close()
-		_, _ = admin.Pool().Exec(context.Background(), "DROP SCHEMA "+schema+" CASCADE")
-		admin.Close()
-	})
+	t.Cleanup(store.Close)
 	require.NoError(t, store.Migrate(t.Context()))
 	return store
 }

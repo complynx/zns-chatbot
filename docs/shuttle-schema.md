@@ -1,6 +1,9 @@
 # Application schema baseline
 
-The application baseline is version 76 in [00076_schema.sql](../migrations/00076_schema.sql), the single tracked SQL migration. A fresh empty application schema receives the preserved version-73 DDL and the version-74/75/76 extensions. Completed versions 73, 74 and 75 receive only their missing extensions. Existing history, objects and accepted data remain in place.
+The consolidated application baseline is version 76 in [00076_schema.sql](../migrations/00076_schema.sql).
+A fresh empty application schema receives the preserved version-73 DDL and the version-74/75/76 extensions.
+Completed versions 73, 74 and 75 receive only their missing extensions. Existing history, objects and accepted
+data remain in place. Later changes use additive migrations; the current version is 78.
 
 Before connecting, run `shuttle -config config/shuttle.yaml -check-config` to validate
 startup YAML and environment overrides. This mode makes no network or database
@@ -17,8 +20,17 @@ Version 75 adds the bounded sticker/custom emoji description catalogs, their per
 
 Version 76 adds chat reaction cursors and independent Telegram reaction projections. Desired state, deferred target mapping and immutable uncertain-attempt receipts survive restarts. It does not backfill reactions for older runs that did not negotiate the reaction policy.
 
+Version 77 adds durable local Telegram ban receipts with required actor and reason.
+It does not backfill bans or modify existing account access. Its Down migration refuses
+nonempty audit history. Apply prepared restrictions separately before accepting users;
+see [local bans](shuttle-user-bans.md).
+
+Version 78 separates optional public ban text from the required internal reason.
+Existing accounts and receipts receive empty public text. Published text is kept
+in the ban audit; its Down migration refuses retained public text.
+
 Down is supported only for an unused fresh version-76 baseline with unchanged initial settings. Any version-75 or earlier history, including an unapplied record, blocks Down before DDL. The guard locks application tables and refuses retained domain or operation data. River owns its separate migration history. No automatic Down path deletes live data.
 
-The fresh DDL is conditional PL/pgSQL, so sqlc cannot read it directly. Before `sqlc compile` or `sqlc generate`, run `python3 tools/prepare-shuttle-sqlc-schema.py`. This derives the ignored `.cache/shuttle-sqlc/schema.sql` from explicit fresh/common sections of the same migration; it is not a second maintained schema. The extractor rejects missing or repeated sections, and CI checks it before generation.
+The fresh DDL is conditional PL/pgSQL, so sqlc cannot read it directly. Before `sqlc compile` or `sqlc generate`, run `python3 tools/prepare-shuttle-sqlc-schema.py`. This derives the ignored `.cache/shuttle-sqlc/schema.sql` from explicit fresh/common baseline sections and ordered additive Up sections. It is not a second maintained schema. The extractor rejects missing or repeated sections and excludes Down DDL; CI checks it before generation.
 
 Historical migration numbers describe feature provenance. Compare actual schema and preserved data when checking compatibility. See the [deployment identity invariant](shuttle-deployment-scope.md), [historical account import](shuttle-history-account-import.md) and [QA procedure](shuttle-qa.md).

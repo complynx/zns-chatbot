@@ -41,6 +41,7 @@ type iamFixture struct {
 	userTokenExpiry                 time.Time
 	introRoleClaims                 map[string]any
 	machineScopeOnly                bool
+	grants                          initialGrantFixture
 }
 
 func fixture(t *testing.T) (*iamFixture, *Client) {
@@ -98,6 +99,9 @@ func (f *iamFixture) handle(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	respond := func(v any) { w.Header().Set("Content-Type", "application/json"); _ = json.NewEncoder(w).Encode(v) }
+	if f.grants.serve(w, r) {
+		return
+	}
 	switch r.URL.Path {
 	case "/.well-known/openid-configuration":
 		respond(

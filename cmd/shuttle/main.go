@@ -65,11 +65,16 @@ func runArgs(output io.Writer, args []string) error {
 	path := flags.String("config", "config/shuttle.yaml", "Startup YAML path")
 	migrate := flags.Bool("migrate", false, "Apply database migrations and exit")
 	check := flags.Bool("check-config", false, "Validate startup configuration without network or database access")
+	banTelegram := flags.Int64("ban-telegram-user", 0, "Block one Telegram user locally and exit")
+	banReason := flags.String("ban-reason", "", "Reason recorded with the local ban")
+	banPublicReason := flags.String("ban-public-reason", "", "Optional reason shown to the blocked user")
+	banActor := flags.String("ban-actor", "", "Operator recorded with the local ban")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	if flags.NArg() != 0 || (*check && *migrate) {
-		return errors.New("unexpected arguments or conflicting startup modes")
+	banMode, err := validateStartupModes(flags, *check, *migrate, *banTelegram, *banActor, *banReason)
+	if err != nil {
+		return err
 	}
 	c, err := config.Load(*path)
 	if err != nil {
@@ -93,6 +98,10 @@ func runArgs(output io.Writer, args []string) error {
 	defer store.Close()
 	if *migrate {
 		return migrateDatabase(startup, store)
+	}
+	if banMode {
+		return runBanTelegramUser(startup, store, c.Telegram.BotID,
+			*banTelegram, *banActor, *banReason, *banPublicReason, output)
 	}
 	settings, err := store.Settings(startup)
 	if err != nil {

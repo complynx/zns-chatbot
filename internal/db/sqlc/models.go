@@ -1403,13 +1403,25 @@ type ShuttleTelegramReaction struct {
 }
 
 type ShuttleUser struct {
-	ID             uuid.UUID `json:"id"`
-	BotID          int64     `json:"bot_id"`
-	TgUserID       int64     `json:"tg_user_id"`
-	Profile        []byte    `json:"profile"`
-	ZitadelSubject string    `json:"zitadel_subject"`
-	ZitadelOrg     string    `json:"zitadel_org"`
-	Revoked        bool      `json:"revoked"`
+	ID              uuid.UUID `json:"id"`
+	BotID           int64     `json:"bot_id"`
+	TgUserID        int64     `json:"tg_user_id"`
+	Profile         []byte    `json:"profile"`
+	ZitadelSubject  string    `json:"zitadel_subject"`
+	ZitadelOrg      string    `json:"zitadel_org"`
+	Revoked         bool      `json:"revoked"`
+	BanPublicReason string    `json:"ban_public_reason"`
+}
+
+type ShuttleUserBan struct {
+	ID                uuid.UUID          `json:"id"`
+	UserID            uuid.UUID          `json:"user_id"`
+	Actor             string             `json:"actor"`
+	Reason            string             `json:"reason"`
+	RequestHash       []byte             `json:"request_hash"`
+	PreviouslyRevoked bool               `json:"previously_revoked"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	PublicReason      string             `json:"public_reason"`
 }
 
 type ShuttleUserEventContext struct {
