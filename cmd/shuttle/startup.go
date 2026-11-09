@@ -42,10 +42,12 @@ type startupTelegram interface {
 }
 
 type startupLoom interface {
+	CheckReady(context.Context) error
 	CheckModels(context.Context, string) error
 }
 
-// Check only service identities and catalog access before any worker or listener.
+// Check actor credentials and public readiness before any worker or listener.
+// The marker-only actor cannot read its own Loom catalog; the descriptor checks its own.
 // Human exchange and prelink require a real user action and are not probed here.
 func checkStartupDependencies(ctx context.Context, botID int64,
 	iam startupIdentity, tg startupTelegram, lc startupLoom,
@@ -57,12 +59,12 @@ func checkStartupDependencies(ctx context.Context, botID int64,
 	if bot.ID != botID || !bot.IsBot {
 		return errors.New("startup Telegram bot identity mismatch")
 	}
-	credential, err := iam.CheckAccess(ctx)
+	_, err = iam.CheckAccess(ctx)
 	if err != nil {
 		return err
 	}
-	if err = lc.CheckModels(ctx, credential.Token); err != nil {
-		return fmt.Errorf("startup Loom service model catalog: %w", err)
+	if err = lc.CheckReady(ctx); err != nil {
+		return fmt.Errorf("startup Loom readiness: %w", err)
 	}
 	return nil
 }

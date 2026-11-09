@@ -34,23 +34,31 @@ func (p *startupProbe) CheckAccess(context.Context) (identity.Credential, error)
 }
 
 func (p *startupProbe) CheckModels(_ context.Context, token string) error {
-	p.calls = append(p.calls, "loom")
-	if p.fail == "loom" || token != "service-only" {
+	p.calls = append(p.calls, "catalog")
+	if p.fail == "catalog" || token != "service-only" {
 		return errors.New("rejected")
+	}
+	return nil
+}
+
+func (p *startupProbe) CheckReady(context.Context) error {
+	p.calls = append(p.calls, "ready")
+	if p.fail == "ready" {
+		return errors.New("unavailable")
 	}
 	return nil
 }
 
 func TestStartupDependenciesFailBeforeLaterChecks(t *testing.T) {
 	t.Parallel()
-	for _, failure := range []string{"telegram", "iam", "loom", ""} {
+	for _, failure := range []string{"telegram", "iam", "ready", ""} {
 		t.Run(failure, func(t *testing.T) {
 			t.Parallel()
 			p := &startupProbe{fail: failure, botID: 123}
 			err := checkStartupDependencies(t.Context(), p.botID, p, p, p)
 			if failure == "" {
 				require.NoError(t, err)
-				require.Equal(t, []string{"telegram", "iam", "loom"}, p.calls)
+				require.Equal(t, []string{"telegram", "iam", "ready"}, p.calls)
 			} else {
 				require.Error(t, err)
 				require.Equal(t, failure, p.calls[len(p.calls)-1])
