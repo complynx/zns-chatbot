@@ -45,6 +45,9 @@ func installationOptions(flags *flag.FlagSet, migrate bool, role, language strin
 }
 
 func migrateAndInstall(ctx context.Context, store *db.Store, o db.InstallationOptions, output io.Writer) error {
+	if err := store.CheckMigrationAccess(ctx, o.RuntimeRole); err != nil {
+		return fmt.Errorf("migration preflight: %w", err)
+	}
 	if err := migrateDatabase(ctx, store); err != nil {
 		return err
 	}

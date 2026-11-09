@@ -18,6 +18,13 @@ import (
 // Installation changes database-wide grants, so these tests use separate databases.
 func installationStore(t *testing.T) *db.Store {
 	t.Helper()
+	s := installationDatabase(t)
+	require.NoError(t, s.Migrate(t.Context()))
+	return s
+}
+
+func installationDatabase(t *testing.T) *db.Store {
+	t.Helper()
 	dsn := os.Getenv("ZNS_CHATBOT_TEST_DATABASE_URL")
 	if dsn == "" {
 		dsn = os.Getenv("ZNS_CHATBOT_TEST_DATABASE_DSN")
@@ -41,7 +48,6 @@ func installationStore(t *testing.T) *db.Store {
 	s, err := db.Open(t.Context(), u.String())
 	require.NoError(t, err)
 	t.Cleanup(s.Close)
-	require.NoError(t, s.Migrate(t.Context()))
 	return s
 }
 
