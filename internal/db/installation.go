@@ -57,12 +57,13 @@ func (s *Store) InstallRuntime(ctx context.Context, o InstallationOptions) (Inst
 		Scan(&result.SettingsVersion); err != nil {
 		return result, err
 	}
-	var safeRole bool
-	err = tx.QueryRow(ctx, `SELECT rolcanlogin AND NOT (rolsuper OR rolcreatedb OR rolcreaterole
-OR rolreplication OR rolbypassrls) AND rolname<>current_user
-FROM pg_roles WHERE rolname=$1`, o.RuntimeRole).Scan(&safeRole)
-	if err != nil || !safeRole {
-		return result, errors.New("runtime role must already exist as an unprivileged login")
+	var roleExists bool
+	err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=$1)", o.RuntimeRole).Scan(&roleExists)
+	if err != nil {
+		return result, err
+	}
+	if !roleExists {
+		return result, errors.New("runtime role must already exist")
 	}
 	role := pgx.Identifier{o.RuntimeRole}.Sanitize()
 	schema := pgx.Identifier{result.Schema}.Sanitize()
@@ -74,14 +75,6 @@ FROM pg_roles WHERE rolname=$1`, o.RuntimeRole).Scan(&safeRole)
 		if _, err = tx.Exec(ctx, statement); err != nil {
 			return result, err
 		}
-	}
-	var canCreate bool
-	if err = tx.QueryRow(ctx, "SELECT has_schema_privilege($1,$2,'CREATE')", o.RuntimeRole, result.Schema).
-		Scan(&canCreate); err != nil {
-		return result, err
-	}
-	if canCreate {
-		return result, errors.New("runtime role must not own or create objects in the application schema")
 	}
 	for _, statement := range []string{
 		"GRANT CONNECT,TEMPORARY ON DATABASE " + databaseName + " TO " + role,

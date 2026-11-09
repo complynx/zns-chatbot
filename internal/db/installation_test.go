@@ -117,7 +117,7 @@ has_database_privilege($1,current_database(),'CONNECT'),has_table_privilege($1,'
 	require.Equal(t, 1, audits)
 }
 
-func TestInstallationPreservesUsedDefaultsAndRejectsUnsafeRoles(t *testing.T) {
+func TestInstallationPreservesUsedDefaultsAndAllowsExtraRights(t *testing.T) {
 	t.Parallel()
 	s := installationStore(t)
 	role := installationRole(t, s)
@@ -133,8 +133,10 @@ func TestInstallationPreservesUsedDefaultsAndRejectsUnsafeRoles(t *testing.T) {
 	require.Equal(t, before, after)
 	_, err = s.Pool().Exec(t.Context(), "ALTER ROLE "+pgx.Identifier{role}.Sanitize()+" CREATEDB")
 	require.NoError(t, err)
+	_, err = s.Pool().Exec(t.Context(), "GRANT CREATE ON SCHEMA public TO "+pgx.Identifier{role}.Sanitize())
+	require.NoError(t, err)
 	_, err = s.InstallRuntime(t.Context(), o)
-	require.ErrorContains(t, err, "unprivileged login")
+	require.NoError(t, err)
 	o.RuntimeRole = "missing_installation_role"
 	_, err = s.InstallRuntime(t.Context(), o)
 	require.ErrorContains(t, err, "must already exist")

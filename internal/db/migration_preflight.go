@@ -44,21 +44,13 @@ WHERE d.datname=current_database()`).Scan(&writable, &schemaAccess, &databaseOwn
 }
 
 func (s *Store) checkInstallationRole(ctx context.Context, role string) error {
-	var safe, creates bool
-	err := s.pool.QueryRow(ctx, `SELECT
-r.rolcanlogin AND NOT (r.rolsuper OR r.rolcreatedb OR r.rolcreaterole OR r.rolreplication OR r.rolbypassrls)
-AND r.rolname<>current_user,
-pg_has_role(r.oid,n.nspowner,'USAGE') OR EXISTS(
-SELECT 1 FROM aclexplode(COALESCE(n.nspacl,acldefault('n',n.nspowner))) a
-WHERE a.privilege_type='CREATE' AND CASE WHEN a.grantee=0 THEN false
-ELSE pg_has_role(r.oid,a.grantee,'USAGE') END)
-FROM pg_roles r JOIN pg_namespace n ON n.nspname=current_schema() WHERE r.rolname=$1`, role).
-		Scan(&safe, &creates)
-	if err != nil || !safe {
-		return errors.New("runtime role must already exist as an unprivileged login")
+	var exists bool
+	err := s.pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=$1)", role).Scan(&exists)
+	if err != nil {
+		return errors.New("cannot verify runtime role")
 	}
-	if creates {
-		return errors.New("runtime role must not own or create objects in the application schema")
+	if !exists {
+		return errors.New("runtime role must already exist")
 	}
 	return nil
 }
