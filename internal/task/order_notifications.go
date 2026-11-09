@@ -84,7 +84,7 @@ func (s *Service) notifyOrder(ctx context.Context, args orderNotificationArgs) e
 		return s.store.BlockOrderNotification(ctx, scope, n.ID, n.Version)
 	}
 	if err != nil {
-		return river.JobSnooze(s.options.PollInterval)
+		return s.notificationRetry(err)
 	}
 	language, err := s.notificationLanguage(ctx, u)
 	if notificationDenied(err) {

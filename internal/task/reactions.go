@@ -49,6 +49,9 @@ func (s *Service) reactionAuth(ctx context.Context, id uuid.UUID) (loom.Auth, er
 	if err != nil {
 		return loom.Auth{}, err
 	}
+	if err = s.telegramUserAvailable(ctx, u); err != nil {
+		return loom.Auth{}, err
+	}
 	_, organization, _ := s.iam.DeploymentScope()
 	if u.Revoked || u.BotID != s.options.BotID || u.Organization != organization || u.Subject == "" {
 		return loom.Auth{}, identity.ErrDenied

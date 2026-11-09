@@ -268,7 +268,7 @@ func TestPublicBanReasonValidationAndMigrationPreservation(t *testing.T) {
 	private, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "private only", "")
 	require.NoError(t, err)
 	provider := baselineProvider(t, s)
-	_, err = provider.ApplyVersion(ctx, 78, false)
+	_, err = provider.DownTo(ctx, 77)
 	require.NoError(t, err, "An empty public extension can be rolled back without losing private audit")
 	require.NoError(t, s.Migrate(ctx))
 	replay, err := s.BanTelegramUser(ctx, 1, 2, "operator:test", "private only", "")
@@ -276,6 +276,6 @@ func TestPublicBanReasonValidationAndMigrationPreservation(t *testing.T) {
 	require.Equal(t, private, replay, "Empty public reason preserves pre-extension replay hashes")
 	_, err = s.BanTelegramUser(ctx, 1, 2, "operator:test", "internal", "Public explanation")
 	require.NoError(t, err)
-	_, err = provider.ApplyVersion(ctx, 78, false)
+	_, err = provider.DownTo(ctx, 77)
 	require.ErrorContains(t, err, "public ban reasons must be preserved")
 }

@@ -33,7 +33,9 @@ const typingCandidates = `WITH busy AS (
 ), eligible AS (
  SELECT b.chat_id,bool_or(coalesce(b.choosing_sticker,false)) AS choosing_sticker
  FROM busy b JOIN shuttle_users u ON u.id=b.user_id
- WHERE u.bot_id=$1 AND NOT u.revoked AND u.tg_user_id>0 AND b.chat_id=u.tg_user_id
+ WHERE NOT EXISTS (SELECT 1 FROM shuttle_telegram_availability a
+ WHERE a.bot_id=u.bot_id AND a.telegram_user_id=u.tg_user_id AND a.reason<>'')
+ AND u.bot_id=$1 AND NOT u.revoked AND u.tg_user_id>0 AND b.chat_id=u.tg_user_id
  AND (u.zitadel_org=$2 OR (u.zitadel_org='' AND u.zitadel_subject=''))
  GROUP BY b.chat_id
 ) `

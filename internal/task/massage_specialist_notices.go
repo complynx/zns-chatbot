@@ -105,7 +105,7 @@ func (s *Service) notifyMassageSpecialist(ctx context.Context, args massageSpeci
 		return s.store.BlockMassageSpecialistNotification(ctx, scope, n.ID, n.Version)
 	}
 	if err != nil {
-		return river.JobSnooze(s.options.PollInterval)
+		return s.notificationRetry(err)
 	}
 	language, err := s.notificationLanguage(ctx, u)
 	if notificationDenied(err) {

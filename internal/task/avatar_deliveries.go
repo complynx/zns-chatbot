@@ -106,7 +106,7 @@ func (s *Service) deliverAvatar(ctx context.Context, args avatarDeliveryArgs, jo
 		return s.blockAvatarDelivery(ctx, n)
 	}
 	if err != nil {
-		return river.JobSnooze(s.options.PollInterval)
+		return s.notificationRetry(err)
 	}
 	principal := db.ProfileScope{BotID: scope.BotID, Organization: scope.Organization, UserID: u.ID, Subject: u.Subject}
 	buttons, err := s.avatarCropMarkup(ctx, principal, u, n.ArtifactID)

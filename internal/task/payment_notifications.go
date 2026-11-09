@@ -97,7 +97,7 @@ func (s *Service) notifyPayment(ctx context.Context, args notificationArgs) erro
 		return s.store.BlockNotification(ctx, n)
 	}
 	if err != nil {
-		return river.JobSnooze(s.options.PollInterval)
+		return s.notificationRetry(err)
 	}
 	language, err := s.notificationLanguage(ctx, u)
 	if notificationDenied(err) {
@@ -180,6 +180,9 @@ func (s *Service) sendBusinessNotification(ctx context.Context, input telegram.S
 }
 
 func (s *Service) verifyNotificationUser(ctx context.Context, u db.User) error {
+	if err := s.telegramUserAvailable(ctx, u); err != nil {
+		return err
+	}
 	credential, err := s.iam.UserToken(ctx, u.Subject)
 	if err != nil {
 		return err

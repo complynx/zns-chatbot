@@ -87,7 +87,7 @@ func (s *Service) notifyKnowledge(ctx context.Context, args knowledgeNotificatio
 		return s.store.BlockKnowledgeNotification(ctx, scope, n.ID, n.Version)
 	}
 	if err != nil {
-		return river.JobSnooze(s.options.PollInterval)
+		return s.notificationRetry(err)
 	}
 	language, err := s.notificationLanguage(ctx, u)
 	if notificationDenied(err) {

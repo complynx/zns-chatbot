@@ -102,6 +102,9 @@ func (s *Service) wait() error { return river.JobSnooze(s.options.PollInterval) 
 func (s *Service) work(parent context.Context, id uuid.UUID) error {
 	ctx, cancel := context.WithTimeout(parent, s.options.AttemptTimeout)
 	defer cancel()
+	if err := s.taskTelegramAvailable(ctx, id); err != nil {
+		return err
+	}
 	t, err := s.store.Route(ctx, id)
 	if err != nil {
 		s.reportDatabaseFailure(ctx, id, "route", err)
