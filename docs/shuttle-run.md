@@ -5,11 +5,11 @@ Use the Go toolchain pinned by go.mod. The application keeps typed startup confi
 ```sh
 cp config/zinusya.example.yaml config/zinusya.yaml
 go build -o /tmp/zinusya-avatar ./cmd/zinusya-avatar
-ZNS_CHATBOT_AVATAR_EXECUTABLE=/tmp/zinusya-avatar go run ./cmd/shuttle -config config/zinusya.yaml -migrate
+ZNS_CHATBOT_AVATAR_EXECUTABLE=/tmp/zinusya-avatar go run ./cmd/shuttle -config config/zinusya.yaml
 ```
 
-For an installation with separate database roles, the same command can finish
-runtime grants and one-time settings initialization:
+For an explicit operator-only installation, `-migrate` can finish runtime grants
+and one-time settings initialization, then exit:
 
 ```sh
 zinusya -config config/zinusya.yaml -migrate -install-runtime-role zinusya_runtime \
@@ -25,7 +25,36 @@ users/tasks. Existing settings and data are preserved on repeat runs. The JSON
 receipt contains no credentials. This command starts no runtime, IAM, Telegram,
 Loom or provider work. Omitting installation flags retains migration-only behavior.
 
-Apply migrations explicitly before ordinary startup. After the schema is ready, run the same application command without -migrate. The avatar renderer is a separate trusted executable; its absolute path must be available before processing. Startup validates bot/IAM identity and the database binding. One application instance owns its task schema; the instance lease requires at least two task-pool connections.
+## Ordinary startup and restart
+
+ZiNuSya operates on retained production data. Ordinary startup must apply pending
+application and River migrations before loading runtime settings or composing runtime
+services. It then checks the installed schema and runtime access before workers,
+listeners or webhook setup. A migration failure stops startup; inspect its actual
+committed history before recovery. Do not use an automatic Down or rerun an import.
+
+Set `migration_database_url` or `ZNS_CHATBOT_MIGRATION_DATABASE_URL` for the dedicated
+startup migrator. Keep the runtime credential limited to application work. The
+migration stage has a five-minute budget independent of the HTTP probe timeout.
+Verify the actual database/schema target across the two connections, grant the
+runtime role derived from its live connection access to new objects, then close
+the migration connection. Existing settings stay unchanged.
+
+Without a separate migration credential, an already current schema and sufficient
+runtime access permit startup without DDL. If migration is required, the fallback
+runtime connection must have migration rights; use the dedicated credential for
+production role separation. See the [schema contract](shuttle-schema.md)
+and [live-upgrade gate](shuttle-qa.md#live-upgrades-and-restarts). Verify this startup
+path on the candidate binary before claiming it is active in an installed release.
+
+The explicit `-migrate` mode remains available for operator preparation and exits
+without starting runtime services. `-check-config` stays offline and applies no
+migrations. These modes are not a substitute for normal-startup acceptance.
+
+The avatar renderer is a separate trusted executable; its absolute path must be
+available before processing. Startup validates bot/IAM identity and the database
+binding. One application instance owns its task schema; the instance lease requires
+at least two task-pool connections.
 
 Webhook management is opt-in through `telegram.webhook_enabled` (default false). When enabled,
 `telegram.webhook_url` defaults to `mini_app_origin + /telegram/webhook`; an explicit HTTPS URL
@@ -86,8 +115,8 @@ keeps its existing delivery receipt and is not automatically replayed.
 
 A banned user still receives the required static access-denied reply to an incoming
 request; this exception does not resume tasks or change their ban or transport state.
-The state survives restarts. Apply schema migration 79 before starting this version;
-rollback refuses to drop active transport pauses. Application rollback can retain the
+The state survives restarts. Startup must finish schema migration 79 before runtime
+work; rollback refuses to drop active transport pauses. Application rollback can retain the
 additive table, but older application code does not enforce these pauses.
 
 ## Tests and builds
