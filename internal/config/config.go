@@ -93,6 +93,7 @@ type Config struct {
 	MiniAppOrigin          string          `yaml:"mini_app_origin"`
 	AvatarExecutable       string          `yaml:"avatar_executable"`
 	DatabaseURL            string          `yaml:"database_url"`
+	MigrationDatabaseURL   string          `yaml:"migration_database_url"`
 	HTTPAddress            string          `yaml:"http_address"`
 	InternalAddress        string          `yaml:"internal_address"`
 	HTTPTimeout            time.Duration   `yaml:"http_timeout"`
@@ -146,6 +147,7 @@ func Load(path string) (Config, error) {
 		"MINI_APP_LAUNCH_URL":                  &c.MiniAppLaunchURL,
 		"AVATAR_EXECUTABLE":                    &c.AvatarExecutable,
 		"DATABASE_URL":                         &c.DatabaseURL,
+		"MIGRATION_DATABASE_URL":               &c.MigrationDatabaseURL,
 		"HTTP_ADDRESS":                         &c.HTTPAddress,
 		"INTERNAL_ADDRESS":                     &c.InternalAddress,
 		"TELEGRAM_TOKEN":                       &c.Telegram.Token,
@@ -252,6 +254,12 @@ func (c Config) validateServices() error {
 	u, err := url.Parse(c.DatabaseURL)
 	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") || u.Host == "" {
 		return errors.New("invalid PostgreSQL URL")
+	}
+	if c.MigrationDatabaseURL != "" {
+		migration, parseErr := url.Parse(c.MigrationDatabaseURL)
+		if parseErr != nil || (migration.Scheme != "postgres" && migration.Scheme != "postgresql") || migration.Host == "" {
+			return errors.New("invalid migration PostgreSQL URL")
+		}
 	}
 	if !validURL(c.Telegram.BaseURL, false) || !validURL(c.Identity.Issuer, false) || !validURL(c.Loom.BaseURL, true) {
 		return errors.New("invalid startup service URL")

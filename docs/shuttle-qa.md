@@ -2,6 +2,44 @@
 
 Use the specification and domain contracts as the checklist. Record each requirement against the exact source, build and dependency versions used for that observation. Source review, developer tests, controlled orchestration, actual model behavior, real Telegram behavior and release readiness are separate evidence levels.
 
+## Live upgrades and restarts
+
+ZiNuSya already runs in production. Test schema/startup changes against an owned,
+populated copy or representative synthetic records. Use production copies only under
+their existing custody and privacy rules. Keep exact live inventory and run artifacts
+outside tracked documentation. The rows below are release requirements, not PASS claims.
+
+| Case | Required observation |
+| --- | --- |
+| Populated previous schema → candidate | Pending application and River migrations apply before runtime work. User/domain IDs, settings, history, memory references and original operation/delivery receipts retain their meaning. |
+| Repeat startup with current schema | No duplicate effects, reset settings or rewritten migration history. Pending and uncertain work keeps its original identity. |
+| Readiness and failure ordering | Bad credentials, wrong target, missing rights, migration failure or an unavailable database prevent workers, listeners and webhook setup. Record any already committed migration stage. |
+| Credential separation | Startup DDL uses the intended migrator; runtime retains its non-DDL role and access to new objects. Migration connections close before runtime work. |
+| Compatible version overlap | Where overlap or application rollback is supported, exercise the previous writer on the expanded schema and previous reader on representative new data. State unsupported behavior explicitly. |
+| Restart with unresolved work | Known-safe retries use original operations. Unknown sends, paid dispatches and other uncertain effects remain held; restart does not create replacement runs or consent. |
+| Rollback boundary | Keep application rollback separate from schema Down. Destructive Down guards retain live state; use a reviewed forward repair if rollback would lose data. |
+
+Cover a fresh database as a separate case. Do not replace populated-upgrade checks
+with a fresh install or weaken preservation assertions when adding a migration.
+Update ordered rollback fixtures to include newer migrations before reverting an
+older version. Reuse accepted unchanged business paths and run affected checks plus
+required CI; a schema change does not require another full manual feature matrix.
+
+Existing regression examples cover parts of this gate:
+
+- [Runtime preflight](../internal/db/runtime_preflight_test.go): read-only access checks and unapplied-schema rejection.
+- [Migration preflight](../internal/db/migration_preflight_test.go): role/read-only failures before DDL.
+- [Baseline lifecycle and old/new name writers](../internal/db/migrations_test.go): retained objects, history, settings and transactional writer compatibility.
+- [Prior schema upgrades](../internal/db/symbol_migration_test.go): retained catalog/task data.
+- [Availability rollback guard](../internal/db/telegram_availability_test.go): restart persistence and active-state preservation.
+
+These tests do not alone prove a newly introduced automatic-startup path. Its
+candidate acceptance must show migration ordering and failure isolation before
+external dependencies, workers, listeners or webhook mutation. After an authorized
+rollout, check the exact installed image, effective schema, readiness and recovery
+state. A merge may trigger automatic deployment: satisfy the migration/startup gate
+before authorizing that trigger.
+
 ## Interface matrix
 
 | Workflow family | Native only | Agent only | Native to agent | Agent to native |

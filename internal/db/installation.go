@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// InstallationOptions applies only to explicit operator migration commands.
+// InstallationOptions supports operator bootstrap and startup runtime-grant repair.
 // Initial settings never replace an existing settings revision or user data.
 type InstallationOptions struct {
 	RuntimeRole      string

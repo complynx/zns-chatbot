@@ -90,20 +90,25 @@ func runArgs(output io.Writer, args []string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	defer watchdog(ctx)()
-	startup, stopStartup := context.WithTimeout(ctx, c.HTTPTimeout)
-	defer stopStartup()
-	store, err := db.Open(startup, c.DatabaseURL)
+	store, err := openStartupStore(ctx, c.DatabaseURL, c.HTTPTimeout)
 	if err != nil {
-		return errors.New("open application database")
+		return err
 	}
 	defer store.Close()
-	if *migrate {
-		return migrateAndInstall(startup, store, *installation, output)
-	}
-	if banMode {
-		return runBanTelegramUser(startup, store, c.Telegram.BotID,
+	if *migrate || banMode {
+		operation, stop := context.WithTimeout(ctx, startupOperationTimeout(*migrate, c.HTTPTimeout))
+		defer stop()
+		if *migrate {
+			return migrateAndInstall(operation, store, *installation, output)
+		}
+		return runBanTelegramUser(operation, store, c.Telegram.BotID,
 			*banTelegram, *banActor, *banReason, *banPublicReason, output)
 	}
+	if err = migrateAtStartup(ctx, c.MigrationDatabaseURL, store, output); err != nil {
+		return err
+	}
+	startup, stopStartup := context.WithTimeout(ctx, c.HTTPTimeout)
+	defer stopStartup()
 	settings, err := loadRuntimeSettings(startup, store)
 	if err != nil {
 		return err
@@ -112,11 +117,7 @@ func runArgs(output io.Writer, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer func() {
-		cleanup, stop := context.WithTimeout(context.WithoutCancel(ctx), c.OTel.Timeout)
-		defer stop()
-		_ = obs.Shutdown(cleanup)
-	}()
+	defer shutdownTelemetry(ctx, c.OTel.Timeout, obs)
 	worker, err := embeddedDescriptor(startup, c, store, obs)
 	if err != nil {
 		return err
@@ -412,4 +413,10 @@ func observeDependencies(obs *observability.Telemetry, iam *identity.Client, sto
 		return errors.New("initialize outbox metrics")
 	}
 	return nil
+}
+
+func shutdownTelemetry(parent context.Context, timeout time.Duration, obs *observability.Telemetry) {
+	cleanup, stop := context.WithTimeout(context.WithoutCancel(parent), timeout)
+	defer stop()
+	_ = obs.Shutdown(cleanup)
 }
