@@ -20,6 +20,11 @@ type profileFixture struct {
 	status      int
 	loseReply   bool
 	ignoreWrite bool
+	links       []idpLink
+	partial     bool
+	linkReads   int
+	afterLinks  func(*profileFixture)
+	afterPatch  func(*profileFixture)
 }
 
 func namedFixture(t *testing.T) (*profileFixture, *Client, Account) {
@@ -29,7 +34,7 @@ func namedFixture(t *testing.T) (*profileFixture, *Client, Account) {
 	p.user.Human.Profile = ProfileName{FirstName: "Old", LastName: "Name"}
 	original := f.server.Config.Handler
 	f.server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v2/users/profile-user" {
+		if r.URL.Path != "/v2/users/profile-user" && r.URL.Path != "/v2/users/profile-user/links/_search" {
 			original.ServeHTTP(w, r)
 			return
 		}
@@ -37,6 +42,20 @@ func namedFixture(t *testing.T) (*profileFixture, *Client, Account) {
 		defer p.mu.Unlock()
 		if r.Header.Get("X-Zitadel-Orgid") != "org" || !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
 			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if r.URL.Path == "/v2/users/profile-user/links/_search" {
+			total := len(p.links)
+			if p.partial {
+				total++
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"result": p.links, "details": map[string]any{"totalResult": total},
+			})
+			p.linkReads++
+			if p.afterLinks != nil {
+				p.afterLinks(p)
+			}
 			return
 		}
 		if r.Method == http.MethodPatch {
@@ -72,6 +91,9 @@ func (p *profileFixture) patch(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = json.Unmarshal(b, &update)
 		p.user.Human.Profile = update.Human.Profile
+	}
+	if p.afterPatch != nil {
+		p.afterPatch(p)
 	}
 	if p.loseReply {
 		conn, _, err := w.(http.Hijacker).Hijack()

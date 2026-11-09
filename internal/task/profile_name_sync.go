@@ -3,7 +3,6 @@ package task
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -65,13 +64,17 @@ func (s *Service) syncProfileName(ctx context.Context, userID uuid.UUID) error {
 		return err
 	}
 	bot, organization, _ := s.iam.DeploymentScope()
-	err = s.store.DispatchProfileName(ctx, db.ProfileScope{
+	scope := db.ProfileScope{
 		BotID: bot, Organization: organization, Subject: u.Subject, UserID: userID,
-	}, func(name db.ProfileNameSync) error {
-		return s.iam.SyncProfileName(ctx, identity.Account{
-			Subject: u.Subject, OrganizationID: organization,
-			SyntheticEmail: fmt.Sprintf("tg+%d+%d@telegram.invalid", bot, u.TelegramUserID),
-		}, u.TelegramUserID, identity.ProfileName{FirstName: name.FirstName, LastName: name.LastName})
+	}
+	// Fetch durable link evidence before DispatchProfileName holds the owner transaction.
+	account, err := s.profileIAMAccount(ctx, scope, u)
+	if err != nil {
+		return err
+	}
+	err = s.store.DispatchProfileName(ctx, scope, func(name db.ProfileNameSync) error {
+		return s.iam.SyncProfileName(ctx, account, u.TelegramUserID,
+			identity.ProfileName{FirstName: name.FirstName, LastName: name.LastName})
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil

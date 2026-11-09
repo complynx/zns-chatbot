@@ -267,6 +267,8 @@ func identityOptions(c config.Config, settings db.VersionedSettings) identity.Op
 		LoomAudience:              i.Audience,
 		APIAudience:               i.APIAudience,
 		ActorID:                   i.ActorID,
+		TelegramProviderIssuer:    c.TelegramPrelink.Issuer,
+		TelegramProviderID:        c.TelegramPrelink.ProviderID,
 		ActorClientCredentials:    identity.ClientCredentials{ID: i.ActorClientID, Secret: i.ActorClientSecret},
 		ExchangeClientCredentials: identity.ClientCredentials{ID: i.ClientID, Secret: i.ClientSecret},
 		IntrospectionClientCredentials: identity.ClientCredentials{
