@@ -23,6 +23,8 @@ import (
 
 const registrationDetailsKeyLength = 32
 
+const schemeHTTPS = "https"
+
 const defaultHTTPTimeout = 10 * time.Second
 const defaultTraceRatio = 0.1
 const maxTokenLength = 256
@@ -30,10 +32,12 @@ const defaultTraceQueueSize = 256
 const defaultTraceTimeout = 250 * time.Millisecond
 
 type Telegram struct {
-	Token         string `yaml:"token"`
-	BotID         int64  `yaml:"-"`
-	BaseURL       string `yaml:"base_url"`
-	WebhookSecret string `yaml:"webhook_secret"`
+	WebhookEnabled bool   `yaml:"webhook_enabled"`
+	WebhookURL     string `yaml:"webhook_url"`
+	Token          string `yaml:"token"`
+	BotID          int64  `yaml:"-"`
+	BaseURL        string `yaml:"base_url"`
+	WebhookSecret  string `yaml:"webhook_secret"`
 }
 type Loom struct {
 	BaseURL       string `yaml:"base_url"`
@@ -147,6 +151,7 @@ func Load(path string) (Config, error) {
 		"TELEGRAM_TOKEN":                       &c.Telegram.Token,
 		"TELEGRAM_BASE_URL":                    &c.Telegram.BaseURL,
 		"TELEGRAM_WEBHOOK_SECRET":              &c.Telegram.WebhookSecret,
+		"TELEGRAM_WEBHOOK_URL":                 &c.Telegram.WebhookURL,
 		"LOOM_BASE_URL":                        &c.Loom.BaseURL,
 		"IDENTITY_ISSUER":                      &c.Identity.Issuer,
 		"IDENTITY_ORGANIZATION_ID":             &c.Identity.OrganizationID,
@@ -189,6 +194,7 @@ func (c Config) Validate() error {
 		c.validateListeners,
 		c.validateServices,
 		c.validateTelegram,
+		c.validateWebhook,
 		c.validateIdentity,
 		c.validateTelegramPrelink,
 		c.validateRegistrationDetails,
@@ -322,7 +328,7 @@ func validURL(endpoint string, allowHTTP bool) bool {
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || len(endpoint) > 2048 {
 		return false
 	}
-	if u.Scheme == "https" {
+	if u.Scheme == schemeHTTPS {
 		return true
 	}
 	if u.Scheme != "http" {
@@ -339,7 +345,7 @@ func (c Config) validateTelegramPrelink() error {
 	}
 	for _, endpoint := range []string{p.Issuer, p.JWKSURL} {
 		u, err := url.Parse(endpoint)
-		if err != nil || !validURL(endpoint, false) || u.Scheme != "https" || u.Hostname() == "" || u.ForceQuery ||
+		if err != nil || !validURL(endpoint, false) || u.Scheme != schemeHTTPS || u.Hostname() == "" || u.ForceQuery ||
 			u.Opaque != "" {
 			return errors.New("prelink HTTPS issuer and JWKS URL required")
 		}
@@ -396,6 +402,9 @@ func (c Config) MiniAppURL() string {
 
 // applyTypedEnvironment preserves parsing order and keeps startup errors free of values.
 func applyTypedEnvironment(c *Config) error {
+	if err := applyWebhookEnvironment(c); err != nil {
+		return err
+	}
 	if value, ok := os.LookupEnv("ZNS_CHATBOT_LOOM_SKILLS_ENABLED"); ok {
 		parsed, parseErr := strconv.ParseBool(value)
 		if parseErr != nil {

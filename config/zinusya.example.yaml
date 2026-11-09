@@ -27,6 +27,10 @@ telegram_prelink:
   service_bearer: ""
 avatar_executable: /usr/local/bin/zinusya-avatar
 telegram:
+  # Opt in after public HTTPS routing is installed. Disabled leaves Telegram unchanged.
+  webhook_enabled: false
+  # Defaults to mini_app_origin + /telegram/webhook when enabled.
+  webhook_url: ""
   token: "123456:fake-placeholder"
   base_url: https://api.telegram.org
   webhook_secret: replace_with_random_secret
