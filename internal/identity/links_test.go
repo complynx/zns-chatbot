@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -27,6 +28,8 @@ type linkFixture struct {
 	malformedReply string
 	omitZeroTotal  bool
 	missingDetails bool
+	reads          int
+	afterFirstRead func(*iamFixture, *linkFixture)
 }
 
 func linkedFixture(t *testing.T) (*linkFixture, *iamFixture, *Client, Account) {
@@ -220,9 +223,17 @@ func (links *linkFixture) serve(w http.ResponseWriter, r *http.Request, f *iamFi
 		}
 		_ = json.NewEncoder(w).
 			Encode(map[string]any{"result": rows, "details": map[string]any{"totalResult": strconv.Itoa(total)}})
+		links.recordRead(f)
 		return
 	}
 	links.write(w, r, f)
+}
+
+func (links *linkFixture) recordRead(iam *iamFixture) {
+	links.reads++
+	if links.reads == 1 && links.afterFirstRead != nil {
+		links.afterFirstRead(iam, links)
+	}
 }
 
 func (links *linkFixture) write(w http.ResponseWriter, r *http.Request, f *iamFixture) {
@@ -336,4 +347,113 @@ func TestTelegramIDPLinkAcceptsOmittedZeroCountFromProtoJSON(t *testing.T) {
 		client.EnsureTelegramIDPLink(context.Background(), account, 456, "provider", "opaque-different-from-456"),
 	)
 	require.Equal(t, 1, links.adds)
+}
+
+func ordinaryLinkedFixture(t *testing.T) (*linkFixture, *iamFixture, *Client, Account) {
+	t.Helper()
+	links, iam, client, account := linkedFixture(t)
+	iam.mu.Lock()
+	iam.users[0].Human.Email.Address = "owner@example.test"
+	iam.mu.Unlock()
+	links.links = []idpLink{
+		{Provider: "provider", Subject: "telegram:123:opaque-different-from-456"},
+		{Provider: "other-provider", Subject: "unrelated-existing-link"},
+	}
+	return links, iam, client, account
+}
+
+func TestTelegramIDPLinkExistingOrdinaryHumanPreservesAccountAndLinksWithoutWrites(t *testing.T) {
+	t.Parallel()
+	links, iam, client, account := ordinaryLinkedFixture(t)
+	var mutations atomic.Int64
+	original := iam.server.Config.Handler
+	iam.server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/v2/users") && r.Method != http.MethodGet &&
+			!strings.HasSuffix(r.URL.Path, "/links/_search") {
+			mutations.Add(1)
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		original.ServeHTTP(w, r)
+	})
+	require.NoError(t, client.EnsureTelegramIDPLink(t.Context(), account, 456, "provider", "opaque-different-from-456"))
+	require.Zero(t, mutations.Load())
+	links.mu.Lock()
+	require.Zero(t, links.adds)
+	require.Equal(t, 2, links.reads)
+	require.Len(t, links.links, 2)
+	links.mu.Unlock()
+	iam.mu.Lock()
+	defer iam.mu.Unlock()
+	require.Equal(t, "owner@example.test", iam.users[0].Human.Email.Address)
+}
+
+func TestTelegramIDPLinkOrdinaryHumanRejectsMissingConflictingOrUntrustedAccount(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{
+		"missing", "conflicting", "duplicate", "foreign organization", "inactive", "nonhuman",
+		"partial listing", "missing link metadata", "unverified synthetic", "foreign synthetic email",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			links, iam, client, account := ordinaryLinkedFixture(t)
+			switch name {
+			case "missing":
+				links.links = links.links[1:]
+			case "conflicting":
+				links.links[0].Subject = "telegram:123:other-opaque"
+			case "duplicate":
+				links.links = append(links.links, links.links[0])
+			case "foreign organization":
+				iam.users[0].Details.Org = "foreign"
+			case "inactive":
+				iam.users[0].State = "USER_STATE_INACTIVE"
+			case "nonhuman":
+				iam.users[0].Human = nil
+			case "partial listing":
+				links.incomplete = true
+			case "missing link metadata":
+				links.missingDetails = true
+			case "unverified synthetic":
+				iam.users[0].Human.Email.Address = account.SyntheticEmail
+				iam.users[0].Human.Email.Verified = false
+			case "foreign synthetic email":
+				iam.users[0].Human.Email.Address = "tg+123+999@telegram.invalid"
+			}
+			require.Error(t, client.EnsureTelegramIDPLink(t.Context(), account, 456, "provider", "opaque-different-from-456"))
+			require.Zero(t, links.adds, "Ordinary-human compatibility must never create a link")
+		})
+	}
+}
+
+func TestTelegramIDPLinkOrdinaryHumanRechecksAccountAndExistingLink(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{
+		"deactivated", "organization changed", "link removed", "link changed", "partial readback",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			links, _, client, account := ordinaryLinkedFixture(t)
+			links.afterFirstRead = func(iam *iamFixture, current *linkFixture) {
+				switch name {
+				case "deactivated":
+					iam.mu.Lock()
+					iam.users[0].State = "USER_STATE_INACTIVE"
+					iam.mu.Unlock()
+				case "organization changed":
+					iam.mu.Lock()
+					iam.users[0].Details.Org = "foreign"
+					iam.mu.Unlock()
+				case "link removed":
+					current.links = nil
+				case "link changed":
+					current.links[0].Subject = "telegram:123:other-opaque"
+				case "partial readback":
+					current.incomplete = true
+				}
+			}
+			require.Error(t, client.EnsureTelegramIDPLink(t.Context(), account, 456, "provider", "opaque-different-from-456"))
+			require.Zero(t, links.adds)
+		})
+	}
 }

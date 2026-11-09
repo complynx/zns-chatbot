@@ -40,11 +40,24 @@ const (
 type ClientCredentials struct{ ID, Secret string }
 type Options struct {
 	Issuer, OrganizationID, LoomAudience, APIAudience, ActorID                        string
+	TelegramProviderIssuer, TelegramProviderID                                        string
 	BotID                                                                             int64
 	ActorClientCredentials, ExchangeClientCredentials, IntrospectionClientCredentials ClientCredentials
 	PositiveCacheTTL                                                                  time.Duration
 }
-type Account struct{ Subject, OrganizationID, SyntheticEmail string }
+type Account struct {
+	Subject, OrganizationID, SyntheticEmail string
+	TelegramLink                            *TelegramProfileLink `json:"-"`
+}
+
+// TelegramProfileLink records a completed, freshly verified prelink. Callers
+// load it from the current canonical binding, never from a browser or agent.
+// Expiry prevents proof replay; completed evidence remains historical linkage.
+type TelegramProfileLink struct {
+	ProviderIssuer, ProviderID, ExternalSubject, Subject, Organization string
+	BotID, TelegramID                                                  int64
+	CompletedAt, ExpiresAt                                             time.Time
+}
 type Credential struct {
 	Token     string
 	ExpiresAt time.Time
@@ -83,6 +96,14 @@ type Client struct {
 // DeploymentScope returns immutable startup identity without credentials.
 func (c *Client) DeploymentScope() (int64, string, string) {
 	return c.options.BotID, c.options.OrganizationID, c.options.Issuer
+}
+
+// TelegramProfileLinkPins returns the startup trust required for completed links.
+func (c *Client) TelegramProfileLinkPins() (string, string) {
+	if c == nil || !prelinkHTTPS(c.options.TelegramProviderIssuer) || !validLinkValue(c.options.TelegramProviderID) {
+		return "", ""
+	}
+	return c.options.TelegramProviderIssuer, c.options.TelegramProviderID
 }
 
 func New(o Options, h *http.Client) (*Client, error) {

@@ -17,8 +17,8 @@ type ProfileName struct {
 	LastName  string `json:"familyName"`
 }
 
-// ReadProfileName reads the exact active, verified synthetic identity. Callers
-// supply a persisted binding and must enforce local ownership and revocation.
+// ReadProfileName reads an active synthetic identity or a human with completed
+// Telegram linkage. Callers enforce canonical ownership and local revocation.
 func (c *Client) ReadProfileName(ctx context.Context, account Account, telegramID int64) (ProfileName, error) {
 	if !c.validProfileAccount(account, telegramID) {
 		return ProfileName{}, ErrDenied
@@ -47,6 +47,14 @@ func (c *Client) SyncProfileName(
 	current, err := c.profileName(ctx, credential, account)
 	if err != nil || current == name {
 		return err
+	}
+	if account.TelegramLink != nil {
+		// Refresh link and account authority immediately before a possible write.
+		// Remote revocation cannot atomically recall an already admitted PATCH.
+		current, err = c.profileName(ctx, credential, account)
+		if err != nil || current == name {
+			return err
+		}
 	}
 	// PATCH preserves omitted profile fields, username, email and provider links.
 	body := struct {
@@ -93,8 +101,9 @@ func (c *Client) profileName(ctx context.Context, credential Credential, account
 	if response.User.ID != account.Subject {
 		return ProfileName{}, ErrConflict
 	}
-	if _, err := c.account(response.User, account.SyntheticEmail); err != nil {
+	user, err := c.authorizeProfileAccount(ctx, credential, response.User, account)
+	if err != nil {
 		return ProfileName{}, err
 	}
-	return response.User.Human.Profile, nil
+	return user.Human.Profile, nil
 }

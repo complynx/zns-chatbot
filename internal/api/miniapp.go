@@ -270,10 +270,11 @@ func (s *Server) miniAppView(ctx context.Context, attempt db.MiniAppAttempt) (mi
 	scope := db.ProfileScope{BotID: s.options.BotID, UserID: attempt.User.ID,
 		Subject: attempt.User.Subject, Organization: s.options.OrganizationID}
 	profile, err := s.store.ImportIAMProfileName(ctx, scope, func(ctx context.Context) (string, string, error) {
-		name, readErr := s.iam.ReadProfileName(ctx, identity.Account{
-			Subject: attempt.User.Subject, OrganizationID: s.options.OrganizationID,
-			SyntheticEmail: fmt.Sprintf("tg+%d+%d@telegram.invalid", s.options.BotID, attempt.User.TelegramUserID),
-		}, attempt.User.TelegramUserID)
+		account, accountErr := s.miniAppIAMProfileAccount(ctx, scope, attempt.User)
+		if accountErr != nil {
+			return "", "", accountErr
+		}
+		name, readErr := s.iam.ReadProfileName(ctx, account, attempt.User.TelegramUserID)
 		return name.FirstName, name.LastName, readErr
 	})
 	if errors.Is(err, identity.ErrUnavailable) {
@@ -288,6 +289,32 @@ func (s *Server) miniAppView(ctx context.Context, attempt db.MiniAppAttempt) (mi
 		FullName:    profile.FullName,
 		BotLanguage: profile.BotLanguage,
 	}, nil
+}
+
+// ImportIAMProfileName invokes this only after releasing its initial DB connection.
+func (s *Server) miniAppIAMProfileAccount(
+	ctx context.Context, scope db.ProfileScope, user db.User,
+) (identity.Account, error) {
+	account := identity.Account{
+		Subject: user.Subject, OrganizationID: scope.Organization,
+		SyntheticEmail: fmt.Sprintf("tg+%d+%d@telegram.invalid", scope.BotID, user.TelegramUserID),
+	}
+	providerIssuer, providerID := s.iam.TelegramProfileLinkPins()
+	if providerIssuer == "" && providerID == "" {
+		return account, nil
+	}
+	link, err := s.store.CompletedTelegramProfileLink(ctx, scope, providerIssuer, providerID)
+	if err != nil {
+		return identity.Account{}, err
+	}
+	if link != nil {
+		account.TelegramLink = &identity.TelegramProfileLink{
+			ProviderIssuer: link.ProviderIssuer, ProviderID: link.ProviderID,
+			ExternalSubject: link.ExternalSubject, Subject: link.Subject, Organization: link.Organization,
+			BotID: link.BotID, TelegramID: link.TGID, CompletedAt: link.CompletedAt, ExpiresAt: link.ExpiresAt,
+		}
+	}
+	return account, nil
 }
 
 func miniAppBearer(r *http.Request) ([sha256.Size]byte, error) {

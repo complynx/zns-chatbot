@@ -22,3 +22,30 @@ func (c *Client) CheckModels(ctx context.Context, token string) error {
 	}
 	return nil
 }
+
+// CheckReady reads public readiness without authenticating the marker-only actor.
+// The configured HTTP timeout and bounded response decoder also apply to this probe.
+func (c *Client) CheckReady(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/readyz", nil)
+	if err != nil {
+		return &Error{Outcome: NotStarted}
+	}
+	response, err := c.http.Do(req)
+	if err != nil {
+		return &Error{Outcome: Rejected}
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return &Error{Outcome: Rejected, StatusCode: response.StatusCode}
+	}
+	var reply struct {
+		Status string `json:"status"`
+	}
+	if err = decodeResponse(response, &reply, false, false); err != nil {
+		return err
+	}
+	if reply.Status != "ready" {
+		return errors.New("loom is not ready")
+	}
+	return nil
+}

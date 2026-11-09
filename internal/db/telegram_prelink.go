@@ -45,6 +45,97 @@ type TelegramPrelinkAttempt struct {
 	ExpiresAt      time.Time
 }
 
+// TelegramProfileLinkEvidence records a completed link for the current local
+// canonical owner. It is not a fresh assertion or permission to replay one.
+type TelegramProfileLinkEvidence struct {
+	UserID                                                             uuid.UUID
+	BotID, TGID                                                        int64
+	Subject, Organization, ProviderIssuer, ProviderID, ExternalSubject string
+	CompletedAt, ExpiresAt                                             time.Time
+}
+
+// CompletedTelegramProfileLink reads the current owner and matching completed
+// receipts from one read-only snapshot. Historical expiry is allowed: callers
+// must still verify the current IAM account and exact live provider link.
+// Missing current evidence preserves the strict synthetic identity path.
+func (s *Store) CompletedTelegramProfileLink(ctx context.Context, scope ProfileScope,
+	providerIssuer, providerID string,
+) (*TelegramProfileLinkEvidence, error) {
+	if scope.UserID == uuid.Nil || scope.BotID <= 0 || scope.BotID >= 1<<52 ||
+		!prelinkText(scope.Subject, prelinkFieldLimit) || !prelinkText(scope.Organization, prelinkFieldLimit) ||
+		!prelinkText(providerIssuer, prelinkIssuerLimit) || !prelinkText(providerID, prelinkFieldLimit) {
+		return nil, ErrTelegramPrelinkDenied
+	}
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return nil, err
+	}
+	defer rollbackLegacyArchive(ctx, tx)
+	var bot, telegram int64
+	var subject, organization string
+	var revoked, banned bool
+	var observed time.Time
+	err = tx.QueryRow(ctx, `SELECT u.bot_id,u.tg_user_id,u.zitadel_subject,u.zitadel_org,u.revoked,
+EXISTS(SELECT 1 FROM shuttle_user_bans b WHERE b.user_id=u.id),clock_timestamp()
+FROM shuttle_users u WHERE u.id=$1`, scope.UserID).
+		Scan(&bot, &telegram, &subject, &organization, &revoked, &banned, &observed)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrTelegramPrelinkDenied
+	}
+	if err != nil {
+		return nil, err
+	}
+	if bot != scope.BotID || telegram <= 0 || telegram >= 1<<52 || subject != scope.Subject ||
+		organization != scope.Organization || revoked || banned {
+		return nil, ErrTelegramPrelinkDenied
+	}
+	rows, err := tx.Query(ctx, `SELECT p.external_subject,p.completed_at,p.expires_at
+FROM shuttle_telegram_prelinks p JOIN shuttle_users u ON u.id=p.user_id
+WHERE p.user_id=$1 AND p.bot_id=$2 AND u.tg_user_id=$3 AND p.subject=$4 AND p.organization=$5
+AND p.provider_issuer=$6 AND p.provider_id=$7 AND p.state='completed'
+ORDER BY p.completed_at DESC,p.expires_at DESC,p.id`,
+		scope.UserID, scope.BotID, telegram, scope.Subject, scope.Organization, providerIssuer, providerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var evidence *TelegramProfileLinkEvidence
+	for rows.Next() {
+		var opaque string
+		var completed, expires pgtype.Timestamptz
+		if err = rows.Scan(&opaque, &completed, &expires); err != nil {
+			return nil, err
+		}
+		if !validCompletedProfileLink(opaque, completed, expires, observed) {
+			return nil, ErrConflict
+		}
+		if evidence != nil {
+			if evidence.ExternalSubject != opaque {
+				return nil, ErrConflict
+			}
+			continue
+		}
+		evidence = &TelegramProfileLinkEvidence{UserID: scope.UserID, BotID: scope.BotID, TGID: telegram,
+			Subject: scope.Subject, Organization: scope.Organization, ProviderIssuer: providerIssuer,
+			ProviderID: providerID, ExternalSubject: opaque, CompletedAt: completed.Time.UTC(), ExpiresAt: expires.Time.UTC()}
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return evidence, nil
+}
+
+func validCompletedProfileLink(opaque string, completed, expires pgtype.Timestamptz, observed time.Time) bool {
+	return prelinkText(opaque, prelinkFieldLimit) && completed.Valid && expires.Valid &&
+		completed.InfinityModifier == pgtype.Finite && expires.InfinityModifier == pgtype.Finite &&
+		!completed.Time.IsZero() && !expires.Time.IsZero() && !completed.Time.After(expires.Time) &&
+		!completed.Time.After(observed)
+}
+
 func (claim TelegramPrelinkClaim) valid() bool {
 	return claim.BotID > 0 && claim.BotID < 1<<52 && claim.TelegramUserID > 0 && claim.TelegramUserID < 1<<52 &&
 		prelinkText(claim.Organization, prelinkFieldLimit) && prelinkText(claim.ProviderIssuer, prelinkIssuerLimit) &&

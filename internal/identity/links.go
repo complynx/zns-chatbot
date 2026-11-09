@@ -25,6 +25,7 @@ type idpLink struct {
 // persist the intended tuple before calling; this is not an agent/browser API.
 // A successful write or conflict is insufficient without exact link read-back.
 // The caller must still recheck local revocation before completing its receipt.
+// A nonsynthetic human must already have the exact link; this path never adds one.
 func (c *Client) EnsureTelegramIDPLink(
 	ctx context.Context, account Account, telegramID int64, providerID, opaqueSubject string,
 ) error {
@@ -42,7 +43,8 @@ func (c *Client) EnsureTelegramIDPLink(
 	if err != nil {
 		return err
 	}
-	if _, err = c.getAccount(ctx, credential, account.Subject, email); err != nil {
+	synthetic, err := c.telegramLinkAccount(ctx, credential, account.Subject, email)
+	if err != nil {
 		return err
 	}
 	expected := idpLink{Provider: providerID, Subject: prefix + opaqueSubject, Name: email}
@@ -51,15 +53,62 @@ func (c *Client) EnsureTelegramIDPLink(
 		return err
 	}
 	if !found {
+		if !synthetic {
+			return ErrConflict
+		}
 		if err = c.addTelegramLink(ctx, credential, account.Subject, expected); err != nil {
 			return err
 		}
+	}
+	if !synthetic {
+		return c.recheckExistingTelegramLink(ctx, credential, account.Subject, email, expected)
 	}
 
 	// Link projection may lag an acknowledged write; account status must also be
 	// fresh. Neither this read nor the remote write is atomic with local revocation.
 	_, err = c.getAccount(ctx, credential, account.Subject, email)
 	return err
+}
+
+func (c *Client) telegramLinkAccount(ctx context.Context, credential Credential, subject, email string) (bool, error) {
+	var response struct {
+		User iamUser `json:"user"`
+	}
+	if err := c.jsonRequest(ctx, http.MethodGet, "/v2/users/"+url.PathEscape(subject),
+		nil, credential, &response); err != nil {
+		return false, err
+	}
+	u := response.User
+	if u.ID != subject || u.Details.Org != c.options.OrganizationID || u.Human == nil || u.Human.Email.Address == "" {
+		return false, ErrConflict
+	}
+	if u.Human.Email.Address == email {
+		_, err := c.account(u, email)
+		return true, err
+	}
+	if strings.HasSuffix(strings.ToLower(u.Human.Email.Address), "@telegram.invalid") {
+		return false, ErrConflict
+	}
+	if u.State != "USER_STATE_ACTIVE" {
+		return false, ErrDenied
+	}
+	return false, nil
+}
+
+func (c *Client) recheckExistingTelegramLink(
+	ctx context.Context, credential Credential, subject, email string, expected idpLink,
+) error {
+	if _, err := c.telegramLinkAccount(ctx, credential, subject, email); err != nil {
+		return err
+	}
+	found, err := c.telegramLink(ctx, credential, subject, expected)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return ErrConflict
+	}
+	return nil
 }
 
 func validLinkValue(value string) bool {
