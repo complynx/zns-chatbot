@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -45,6 +46,11 @@ func TestMenuChangesOnlyAfterAvailabilityChangesAndClearsAccess(t *testing.T) {
 	fail = true
 	require.Error(t, apply(db.TelegramMenuAvailability{Register: true}))
 	fail = false
+	require.NoError(t, apply(db.TelegramMenuAvailability{Register: true}))
+	require.Len(t, calls, 4, "failed application waits before retry")
+	retry := s.menuRetry[42]
+	retry.until = time.Now().Add(-time.Second)
+	s.menuRetry[42] = retry
 	require.NoError(t, apply(db.TelegramMenuAvailability{Register: true}))
 	require.Len(t, calls, 7, "failed application must retry")
 	require.NoError(t, s.applyMenu(context.Background(), 42, nil, nil))

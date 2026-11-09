@@ -46,6 +46,24 @@ Readiness requires PostgreSQL; IAM or Loom downtime can leave accepted work wait
 An operator can apply a [local Telegram ban](shuttle-user-bans.md) before onboarding.
 The same binary records a required actor and reason without starting workers.
 
+## Telegram menu recovery
+
+Only complete menu updates enter the success cache. A partial update invalidates
+that cache so a later scan can repair every command scope and the menu button.
+Unchanged successful menus make no Telegram calls.
+
+A failed recipient update waits 30 seconds before retrying the same content.
+Telegram 400/403 rejections wait one hour. A fresh user interaction can retry that
+recipient sooner. Changed menu content can also retry sooner. Telegram 429 pauses
+all menu synchronization for at least `retry_after` (minimum 30 seconds), including
+fallback-menu clearing; user interactions cannot bypass this pause. Other bot work
+continues. These deadlines and caches are in memory and reset on restart.
+
+The scanner retains its cursor if the page deadline expires during an update.
+Later pages therefore do not lose recipients to a slow or cancelled attempt.
+Menu warnings include the failed operation, status, outcome, fixed reason class,
+and retry delay when available. They exclude recipient IDs and raw provider errors.
+
 ## Tests and builds
 
 Set ZNS_CHATBOT_TEST_DATABASE_URL to a disposable PostgreSQL database owned by the runner. Tests create isolated schemas. Use a focused test selection while changing a contract; required CI checks cover the complete supported packages. Race checks need CGO and a C compiler; the release binary uses CGO disabled.
