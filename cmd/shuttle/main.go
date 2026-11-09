@@ -104,9 +104,9 @@ func runArgs(output io.Writer, args []string) error {
 		return runBanTelegramUser(startup, store, c.Telegram.BotID,
 			*banTelegram, *banActor, *banReason, *banPublicReason, output)
 	}
-	settings, err := store.Settings(startup)
+	settings, err := loadRuntimeSettings(startup, store)
 	if err != nil {
-		return errors.New("load runtime settings; run -migrate first")
+		return err
 	}
 	engine, handlers, obs, err := compose(startup, c, store, settings, logger)
 	if err != nil {
@@ -117,7 +117,7 @@ func runArgs(output io.Writer, args []string) error {
 		defer stop()
 		_ = obs.Shutdown(cleanup)
 	}()
-	worker, err := embeddedDescriptor(c, store, obs)
+	worker, err := embeddedDescriptor(startup, c, store, obs)
 	if err != nil {
 		return err
 	}
@@ -171,6 +171,10 @@ func compose(
 		return nil, nil, nil, err
 	}
 	miniAppURL := c.MiniAppURL()
+	if err = checkStartupDependencies(ctx, c.Telegram.BotID, iam, tg, lc); err != nil {
+		_ = obs.Shutdown(ctx)
+		return nil, nil, nil, err
+	}
 	renderer, err := avatar.NewExecutable(c.AvatarExecutable)
 	if err != nil {
 		_ = obs.Shutdown(ctx)

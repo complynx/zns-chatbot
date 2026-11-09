@@ -14,7 +14,7 @@ import (
 
 func TestDisabledDescriptorAllocatesNoDependencies(t *testing.T) {
 	t.Parallel()
-	worker, err := embeddedDescriptor(config.Config{}, nil, nil)
+	worker, err := embeddedDescriptor(t.Context(), config.Config{}, nil, nil)
 	require.NoError(t, err)
 	require.Nil(t, worker)
 }

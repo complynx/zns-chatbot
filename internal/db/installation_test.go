@@ -18,6 +18,13 @@ import (
 // Installation changes database-wide grants, so these tests use separate databases.
 func installationStore(t *testing.T) *db.Store {
 	t.Helper()
+	s := installationDatabase(t)
+	require.NoError(t, s.Migrate(t.Context()))
+	return s
+}
+
+func installationDatabase(t *testing.T) *db.Store {
+	t.Helper()
 	dsn := os.Getenv("ZNS_CHATBOT_TEST_DATABASE_URL")
 	if dsn == "" {
 		dsn = os.Getenv("ZNS_CHATBOT_TEST_DATABASE_DSN")
@@ -41,7 +48,6 @@ func installationStore(t *testing.T) *db.Store {
 	s, err := db.Open(t.Context(), u.String())
 	require.NoError(t, err)
 	t.Cleanup(s.Close)
-	require.NoError(t, s.Migrate(t.Context()))
 	return s
 }
 
@@ -111,7 +117,7 @@ has_database_privilege($1,current_database(),'CONNECT'),has_table_privilege($1,'
 	require.Equal(t, 1, audits)
 }
 
-func TestInstallationPreservesUsedDefaultsAndRejectsUnsafeRoles(t *testing.T) {
+func TestInstallationPreservesUsedDefaultsAndAllowsExtraRights(t *testing.T) {
 	t.Parallel()
 	s := installationStore(t)
 	role := installationRole(t, s)
@@ -127,8 +133,10 @@ func TestInstallationPreservesUsedDefaultsAndRejectsUnsafeRoles(t *testing.T) {
 	require.Equal(t, before, after)
 	_, err = s.Pool().Exec(t.Context(), "ALTER ROLE "+pgx.Identifier{role}.Sanitize()+" CREATEDB")
 	require.NoError(t, err)
+	_, err = s.Pool().Exec(t.Context(), "GRANT CREATE ON SCHEMA public TO "+pgx.Identifier{role}.Sanitize())
+	require.NoError(t, err)
 	_, err = s.InstallRuntime(t.Context(), o)
-	require.ErrorContains(t, err, "unprivileged login")
+	require.NoError(t, err)
 	o.RuntimeRole = "missing_installation_role"
 	_, err = s.InstallRuntime(t.Context(), o)
 	require.ErrorContains(t, err, "must already exist")
