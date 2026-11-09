@@ -123,8 +123,10 @@ func (c *Client) initialLoomGrant(ctx context.Context, credential Credential, su
 		return false, nil
 	}
 	grant := response.Result[0]
+	// projectGrantId identifies a shared project grant, not the user's organization.
+	// Both direct and granted projects must match the exact user/project and owner org.
 	if grant.ID == "" || grant.UserID != subject || grant.ProjectID != c.options.LoomAudience ||
-		grant.ProjectGrantID != "" || grant.OrgID != c.options.OrganizationID ||
+		grant.OrgID != c.options.OrganizationID ||
 		grant.Details.Org != c.options.OrganizationID {
 		return false, ErrConflict
 	}

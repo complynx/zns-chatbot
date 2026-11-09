@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/telegram"
@@ -197,7 +199,9 @@ func TestInitialLoomGrantPreservesOtherRolesAndFailsClosedForRepair(t *testing.T
 			t.Parallel()
 			f, c := fixture(t)
 			f.users = []iamUser{testUser("existing")}
-			f.grants.values = map[string]loomUserGrant{"existing": fixtureLoomGrant("existing", roles...)}
+			g := fixtureLoomGrant("existing", roles...)
+			g.ProjectGrantID = "329904973280182276"
+			f.grants.values = map[string]loomUserGrant{"existing": g}
 			a, err := bootstrapFixtureUser(t.Context(), c)
 			if len(roles) == 1 {
 				require.ErrorIs(t, err, ErrInitialGrantRepair)
@@ -212,16 +216,55 @@ func TestInitialLoomGrantPreservesOtherRolesAndFailsClosedForRepair(t *testing.T
 	}
 }
 
+func TestInitialLoomGrantAcceptsSameOrganizationGrantedProject(t *testing.T) {
+	t.Parallel()
+	const org, project, subject = "329725211047952388", "329873099606458372", "synthetic-user"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "/management/v1/users/grants/_search", r.URL.Path)
+		assert.Equal(t, org, r.Header.Get("X-Zitadel-Orgid"))
+		var body struct {
+			Queries []map[string]map[string]string `json:"queries"`
+		}
+		if !assert.NoError(t, json.NewDecoder(r.Body).Decode(&body)) {
+			return
+		}
+		assert.Equal(t, []map[string]map[string]string{
+			{"userIdQuery": {"userId": subject}}, {"projectIdQuery": {"projectId": project}},
+		}, body.Queries)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"details": {"totalResult": "1"},
+			"result": [{
+				"id": "synthetic-grant",
+				"userId": "synthetic-user",
+				"projectId": "329873099606458372",
+				"projectGrantId": "329904973280182276",
+				"orgId": "329725211047952388",
+				"details": {"resourceOwner": "329725211047952388"},
+				"state": "USER_GRANT_STATE_ACTIVE",
+				"roleKeys": ["zinusya-user"]
+			}]
+		}`))
+	}))
+	t.Cleanup(server.Close)
+	c := &Client{options: Options{Issuer: server.URL, OrganizationID: org, LoomAudience: project}, http: server.Client()}
+	found, err := c.initialLoomGrant(t.Context(), Credential{Token: "synthetic-actor"}, subject)
+	require.NoError(t, err)
+	require.True(t, found)
+}
+
 func TestInitialLoomGrantRejectsForeignOrIncompleteReceipts(t *testing.T) {
 	t.Parallel()
 	for _, kind := range []string{
-		"user", "project", "organization", "resource owner", "project grant", "inactive", "partial", "malformed total",
+		"user", "project", "organization", "resource owner", "inactive", "partial", "malformed total",
 	} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
 			f, c := fixture(t)
 			f.users = []iamUser{testUser("existing")}
 			g := fixtureLoomGrant("existing", initialLoomRole)
+			g.ProjectGrantID = "329904973280182276"
 			switch kind {
 			case "user":
 				g.UserID = "another"
@@ -231,8 +274,6 @@ func TestInitialLoomGrantRejectsForeignOrIncompleteReceipts(t *testing.T) {
 				g.OrgID = "foreign"
 			case "resource owner":
 				g.Details.Org = "foreign"
-			case "project grant":
-				g.ProjectGrantID = "foreign-grant"
 			case "inactive":
 				g.State = "USER_GRANT_STATE_INACTIVE"
 			case "partial":
