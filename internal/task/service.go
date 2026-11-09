@@ -52,7 +52,7 @@ type Service struct {
 	store                         *db.Store
 	iam                           *identity.Client
 	loom                          *loom.Client
-	tg                            *telegram.Client
+	tg                            taskTelegram
 	observer                      *observability.Telemetry
 	logger                        *slog.Logger
 	options                       Options
@@ -177,7 +177,7 @@ func New(
 		store:    store,
 		iam:      iam,
 		loom:     loomClient,
-		tg:       tg,
+		tg:       &availableTelegram{Client: tg, store: store, botID: o.BotID, logger: logger},
 		observer: observer,
 		logger:   logger,
 		options:  o,

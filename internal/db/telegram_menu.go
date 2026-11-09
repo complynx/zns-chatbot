@@ -78,6 +78,8 @@ func (s *Store) MenuRecipients(ctx context.Context, botID int64, organization st
 u.zitadel_subject,u.zitadel_org,u.revoked
 FROM shuttle_users u
 WHERE u.bot_id=$1 AND u.zitadel_org=$2 AND u.zitadel_subject<>''
+AND NOT EXISTS (SELECT 1 FROM shuttle_telegram_availability a
+WHERE a.bot_id=u.bot_id AND a.telegram_user_id=u.tg_user_id AND a.reason<>'')
 AND u.id>$3
 ORDER BY u.id LIMIT $4`, botID, organization, afterID, limit)
 	if err != nil {

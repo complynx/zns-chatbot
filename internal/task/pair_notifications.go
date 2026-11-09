@@ -95,7 +95,7 @@ func (s *Service) notifyPair(ctx context.Context, args pairNotificationArgs) err
 		return s.store.BlockPairNotification(ctx, n.PairInvitationNotification)
 	}
 	if err != nil {
-		return river.JobSnooze(s.options.PollInterval)
+		return s.notificationRetry(err)
 	}
 	language, err := s.notificationLanguage(ctx, u)
 	if pairNoticeDenied(err) {

@@ -170,6 +170,9 @@ func (s *Store) Intake(
 	); e != nil {
 		return Task{}, false, e
 	}
+	if e = resumeTelegram(ctx, tx, r); e != nil {
+		return Task{}, false, e
+	}
 	if enqueue != nil {
 		if e = enqueue(ctx, tx, t.ID); e != nil {
 			return Task{}, false, e

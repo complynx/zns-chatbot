@@ -23,7 +23,13 @@ func (s *Service) replyToBannedUser(parent context.Context, update telegram.Upda
 		text += "\n\n" + publicReason
 	}
 	// Plain text prevents operator-supplied markup from becoming Telegram entities.
-	if _, err := s.tg.SendMessage(ctx, telegram.SendMessageRequest{ChatID: user.ID, Text: text}); err != nil {
+	client := s.tg
+	if guarded, ok := client.(*availableTelegram); ok {
+		// A real inbound request still gets the mandatory static ban reply.
+		// This does not resume tasks or change transport/ban state.
+		client = guarded.Client
+	}
+	if _, err := client.SendMessage(ctx, telegram.SendMessageRequest{ChatID: user.ID, Text: text}); err != nil {
 		s.record(parent, "ban_reply", "send_failed")
 	}
 }

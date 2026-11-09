@@ -84,7 +84,7 @@ func (s *Service) notifyMassage(ctx context.Context, args massageReminderArgs) e
 		return s.store.BlockMassageReminder(ctx, scope, n.ID, n.Version)
 	}
 	if err != nil {
-		return river.JobSnooze(s.options.PollInterval)
+		return s.notificationRetry(err)
 	}
 	language, err := s.notificationLanguage(ctx, u)
 	if notificationDenied(err) {

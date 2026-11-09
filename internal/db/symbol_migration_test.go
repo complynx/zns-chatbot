@@ -13,7 +13,7 @@ func TestSymbolMigrationPreservesVersion74(t *testing.T) {
 	task := accepted(t, s, 1)
 	// Rewind the fixture's empty post-baseline additions as well as version 76.
 	_, err := s.Pool().Exec(ctx, `DROP TABLE shuttle_symbols,shuttle_symbol_decay,
-shuttle_reaction_cursors,shuttle_telegram_reactions,shuttle_user_bans;
+shuttle_reaction_cursors,shuttle_telegram_reactions,shuttle_user_bans,shuttle_telegram_availability;
 DROP INDEX shuttle_tasks_symbols;
 DROP FUNCTION shuttle_symbol_weight(double precision,double precision,double precision);
 ALTER TABLE shuttle_users DROP COLUMN ban_public_reason;
@@ -39,7 +39,7 @@ DELETE FROM goose_db_version WHERE version_id>=76;
 	require.Equal(t, task, retained)
 	var version int
 	require.NoError(t, s.Pool().QueryRow(ctx, "SELECT max(version_id) FROM goose_db_version").Scan(&version))
-	require.Equal(t, 78, version)
+	require.Equal(t, 79, version)
 }
 
 func TestReactionMigrationPreservesVersion75CatalogAndTasks(t *testing.T) {
@@ -48,7 +48,9 @@ func TestReactionMigrationPreservesVersion75CatalogAndTasks(t *testing.T) {
 	ctx := t.Context()
 	task := accepted(t, s, 3)
 	// The version-75 fixture predates both the baseline and the empty ban audit table.
-	_, err := s.Pool().Exec(ctx, `DROP TABLE shuttle_reaction_cursors,shuttle_telegram_reactions,shuttle_user_bans;
+	_, err := s.Pool().
+		Exec(ctx, `DROP TABLE shuttle_reaction_cursors,shuttle_telegram_reactions,shuttle_user_bans,
+shuttle_telegram_availability;
 ALTER TABLE shuttle_users DROP COLUMN ban_public_reason;
 DELETE FROM goose_db_version WHERE version_id>=76;
 INSERT INTO goose_db_version(version_id,is_applied) VALUES(75,true);
@@ -72,5 +74,5 @@ VALUES(1,'sticker','retained','00000000-0000-0000-0000-000000000001',
 	require.Equal(t, task, retained)
 	var version int
 	require.NoError(t, s.Pool().QueryRow(ctx, "SELECT max(version_id) FROM goose_db_version").Scan(&version))
-	require.Equal(t, 78, version)
+	require.Equal(t, 79, version)
 }

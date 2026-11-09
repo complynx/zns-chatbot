@@ -64,6 +64,32 @@ Later pages therefore do not lose recipients to a slow or cancelled attempt.
 Menu warnings include the failed operation, status, outcome, fixed reason class,
 and retry delay when available. They exclude recipient IDs and raw provider errors.
 
+## Unavailable Telegram recipients
+
+A confirmed private-chat 403 with `user_deactivated` or `bot_blocked` persists a
+transport pause for that bot and recipient. Other errors, including `chat_not_found`,
+429, timeouts and unrelated 403 responses, do not create this state. Bans, IAM access,
+profiles, history, memory and business records stay unchanged.
+
+Paused recipients leave menu and activity scans. Messages, media, reactions and
+other private-chat effects check the same persistent gate. Task attempts and queued
+notifications wait with a one-minute local recheck before doing identity/model work.
+An already-dispatched external operation can finish; the pause does not undo its
+business effects, cancel its run or replay an uncertain delivery. Shared catalog
+maintenance and business consistency work remain independent of Telegram reachability.
+
+A newly accepted private Telegram message or callback clears the pause in the intake
+transaction. Duplicate updates and rolled-back acceptance do not clear it. A revision
+fence prevents an older send failure from reinstating the pause after a fresh reply.
+Pending work resumes on its next local check. A previously rejected or uncertain send
+keeps its existing delivery receipt and is not automatically replayed.
+
+A banned user still receives the required static access-denied reply to an incoming
+request; this exception does not resume tasks or change their ban or transport state.
+The state survives restarts. Apply schema migration 79 before starting this version;
+rollback refuses to drop active transport pauses. Application rollback can retain the
+additive table, but older application code does not enforce these pauses.
+
 ## Tests and builds
 
 Set ZNS_CHATBOT_TEST_DATABASE_URL to a disposable PostgreSQL database owned by the runner. Tests create isolated schemas. Use a focused test selection while changing a contract; required CI checks cover the complete supported packages. Race checks need CGO and a C compiler; the release binary uses CGO disabled.

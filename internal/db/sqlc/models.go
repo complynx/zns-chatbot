@@ -1364,6 +1364,14 @@ type ShuttleTaskResolution struct {
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
+type ShuttleTelegramAvailability struct {
+	BotID          int64              `json:"bot_id"`
+	TelegramUserID int64              `json:"telegram_user_id"`
+	Revision       int64              `json:"revision"`
+	Reason         string             `json:"reason"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type ShuttleTelegramPrelink struct {
 	ID              uuid.UUID          `json:"id"`
 	BotID           int64              `json:"bot_id"`
