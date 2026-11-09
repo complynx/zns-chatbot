@@ -323,10 +323,15 @@ func serve(
 		}
 	}
 	failures := make(chan error, serverCount)
+	handlers.SetAccepting(false)
 	go func() { failures <- public.Serve(publicListener) }()
 	go func() { failures <- private.Serve(privateListener) }()
-	logger.InfoContext(ctx, "application ready")
-	err = waitApplication(ctx, cancel, engine.Failures(), descriptorFailures, failures, logger)
+	err = readyApplication(ctx, c, handlers, logger)
+	if err == nil {
+		err = waitApplication(ctx, cancel, engine.Failures(), descriptorFailures, failures, logger)
+	} else {
+		cancel()
+	}
 	handlers.SetAccepting(false)
 	shutdown, stop := context.WithTimeout(context.WithoutCancel(ctx), c.ShutdownTimeout)
 	defer stop()

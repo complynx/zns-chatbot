@@ -27,7 +27,21 @@ Loom or provider work. Omitting installation flags retains migration-only behavi
 
 Apply migrations explicitly before ordinary startup. After the schema is ready, run the same application command without -migrate. The avatar renderer is a separate trusted executable; its absolute path must be available before processing. Startup validates bot/IAM identity and the database binding. One application instance owns its task schema; the instance lease requires at least two task-pool connections.
 
-Webhook registration is an operator action, never an automatic startup mutation. Readiness requires PostgreSQL; IAM or Loom downtime can leave accepted work waiting. A graceful stop preserves task ownership and uncertain external effects for recovery. See the [architecture](shuttle-architecture.md), [schema baseline](shuttle-schema.md) and [deployment identity invariant](shuttle-deployment-scope.md).
+Webhook management is opt-in through `telegram.webhook_enabled` (default false). When enabled,
+`telegram.webhook_url` defaults to `mini_app_origin + /telegram/webhook`; an explicit HTTPS URL
+with that path overrides it. Environment overrides are `ZNS_CHATBOT_TELEGRAM_WEBHOOK_ENABLED`
+and `ZNS_CHATBOT_TELEGRAM_WEBHOOK_URL`. No request Host header or DNS guess supplies this value.
+Start public routing before enabling this mode.
+
+After listeners and workers start, intake/readiness stay closed while startup calls `setWebhook`
+with the current secret, `message`, `callback_query`, and
+`drop_pending_updates: false`. Each startup reapplies the secret because Telegram does not expose
+it through `getWebhookInfo`. Startup checks URL and update types by readback before opening intake.
+A rejection, lost response, timeout or mismatched readback fails startup and drains the workers
+and listeners. There is one attempt per startup; a process restart reasserts the same desired
+configuration. Shutdown does not delete the webhook. Disabled mode performs no webhook calls.
+
+Readiness requires PostgreSQL; IAM or Loom downtime can leave accepted work waiting. A graceful stop preserves task ownership and uncertain external effects for recovery. See the [architecture](shuttle-architecture.md), [schema baseline](shuttle-schema.md) and [deployment identity invariant](shuttle-deployment-scope.md).
 
 An operator can apply a [local Telegram ban](shuttle-user-bans.md) before onboarding.
 The same binary records a required actor and reason without starting workers.
