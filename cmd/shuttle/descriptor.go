@@ -43,7 +43,9 @@ func waitApplication(ctx context.Context, cancel context.CancelFunc,
 }
 
 //nolint:nilnil // A nil worker intentionally disables this optional background service.
-func embeddedDescriptor(c config.Config, store *db.Store, obs *observability.Telemetry) (*descriptor.Worker, error) {
+func embeddedDescriptor(ctx context.Context, c config.Config, store *db.Store,
+	obs *observability.Telemetry,
+) (*descriptor.Worker, error) {
 	if !c.Descriptor.Enabled {
 		if obs != nil {
 			return nil, obs.ObserveDescriptor(false, nil)
@@ -66,6 +68,9 @@ func embeddedDescriptor(c config.Config, store *db.Store, obs *observability.Tel
 	lc, err := loom.New(c.Loom.BaseURL, &http.Client{Timeout: c.HTTPTimeout,
 		Transport: propagationTransport{base: http.DefaultTransport, propagator: obs.Propagator()}})
 	if err != nil {
+		return nil, err
+	}
+	if err = checkDescriptorAccess(ctx, machine, lc); err != nil {
 		return nil, err
 	}
 	worker, err := descriptor.New(descriptor.Options{Store: store, BotID: c.Telegram.BotID,
