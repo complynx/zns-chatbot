@@ -121,6 +121,7 @@ const (
 )
 
 type Error struct {
+	reasonClass                                   string
 	fileTooLarge, fileInvalidID, fileAccessDenied bool
 	StatusCode                                    int
 	Retryable                                     bool
@@ -280,6 +281,7 @@ func rejection(status, code int, description string, retryAfter int64, mutation 
 		code = status
 	}
 	e := &Error{StatusCode: code, Outcome: Rejected}
+	e.reasonClass = rejectionReasonClass(description)
 	e.fileTooLarge = (status == http.StatusOK || status == http.StatusBadRequest) &&
 		code == http.StatusBadRequest && description == "Bad Request: file is too big"
 	e.fileInvalidID = (status == http.StatusOK || status == http.StatusBadRequest) &&

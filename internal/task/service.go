@@ -68,6 +68,8 @@ type Service struct {
 	menuDone                      chan struct{}
 	menuMu                        sync.Mutex
 	menuApplied                   map[int64]string
+	menuRetry                     map[int64]menuRetryState
+	menuPausedUntil               time.Time
 	failures                      chan error
 	diagnosticMu                  sync.Mutex
 	nextDatabaseDiagnostic        time.Time

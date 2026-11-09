@@ -75,7 +75,7 @@ func (s *Service) refreshStartMenu(ctx context.Context, chatID int64) error {
 		return s.applyMenu(ctx, chatID, nil, nil)
 	}
 	if err != nil {
-		return err
+		return &menuOperationError{operation: "recipient_read", cause: err}
 	}
 	return s.refreshOwnerMenu(ctx, owner)
 }
@@ -92,7 +92,7 @@ func (s *Service) refreshOwnerMenu(ctx context.Context, owner db.User) error {
 		return s.applyMenu(ctx, owner.TelegramUserID, nil, nil)
 	}
 	if err != nil {
-		return err
+		return &menuOperationError{operation: "availability_read", cause: err}
 	}
 	en := startCommands(false, a, s.options.MiniAppURL != "")
 	ru := startCommands(true, a, s.options.MiniAppURL != "")
@@ -101,11 +101,14 @@ func (s *Service) refreshOwnerMenu(ctx context.Context, owner db.User) error {
 
 // Cache only complete successful applications. A partial or unknown outcome retries
 // the same settings, while ordinary scans make no Telegram calls for unchanged menus.
-func (s *Service) applyMenu(ctx context.Context, chatID int64, en, ru []telegram.BotCommand) error {
+func (s *Service) applyMenu(ctx context.Context, chatID int64, en, ru []telegram.BotCommand) (err error) {
 	if !s.menuMu.TryLock() {
 		return nil
 	}
 	defer s.menuMu.Unlock()
+	if s.menuPausedUntil.After(time.Now()) {
+		return nil
+	}
 	var key strings.Builder
 	for _, commands := range [][]telegram.BotCommand{en, ru} {
 		for _, c := range commands {
@@ -119,15 +122,25 @@ func (s *Service) applyMenu(ctx context.Context, chatID int64, en, ru []telegram
 	if previous, ok := s.menuApplied[chatID]; ok && previous == key.String() {
 		return nil
 	}
-	if err := s.tg.SetChatCommands(ctx, chatID, "", en); err != nil {
-		return err
+	desired := key.String()
+	if retry := s.menuRetry[chatID]; retry.key == desired && retry.until.After(time.Now()) {
+		return nil
 	}
-	if err := s.tg.SetChatCommands(ctx, chatID, "ru", ru); err != nil {
-		return err
+	defer func() {
+		if err != nil {
+			s.recordMenuFailure(chatID, desired, err)
+		}
+	}()
+	if callErr := s.tg.SetChatCommands(ctx, chatID, "", en); callErr != nil {
+		return &menuOperationError{operation: "set_commands_default", cause: callErr}
 	}
-	if err := s.tg.SetChatMenuCommands(ctx, chatID); err != nil {
-		return err
+	if callErr := s.tg.SetChatCommands(ctx, chatID, "ru", ru); callErr != nil {
+		return &menuOperationError{operation: "set_commands_ru", cause: callErr}
 	}
+	if callErr := s.tg.SetChatMenuCommands(ctx, chatID); callErr != nil {
+		return &menuOperationError{operation: "set_menu_button", cause: callErr}
+	}
+	delete(s.menuRetry, chatID)
 	if s.menuApplied == nil {
 		s.menuApplied = make(map[int64]string)
 	}
@@ -138,8 +151,9 @@ func (s *Service) applyMenu(ctx context.Context, chatID int64, en, ru []telegram
 func (s *Service) refreshMenuQuietly(ctx context.Context, chatID int64) {
 	ctx, cancel := context.WithTimeout(ctx, menuImmediateTimeout)
 	defer cancel()
-	if err := s.refreshStartMenu(ctx, chatID); err != nil && ctx.Err() == nil {
-		s.logger.WarnContext(ctx, "Telegram menu refresh unavailable", "class", "telegram_menu")
+	s.resetMenuRetry(chatID)
+	if err := s.refreshStartMenu(ctx, chatID); err != nil {
+		s.warnMenuFailure(ctx, err)
 	}
 }
 
@@ -147,7 +161,12 @@ func (s *Service) clearFallbackMenus(ctx context.Context) bool {
 	cleared := true
 	for _, scope := range []string{"default", "all_private_chats"} {
 		for _, language := range []string{"", "ru"} {
+			if ctx.Err() != nil || s.menuPauseDelay() > 0 {
+				return false
+			}
 			if err := s.tg.ClearDefaultCommands(ctx, scope, language); err != nil {
+				s.recordMenuRateLimit(err)
+				s.warnMenuFailure(ctx, &menuOperationError{operation: "clear_fallback_" + scope + "_" + language, cause: err})
 				cleared = false
 			}
 		}
@@ -156,6 +175,9 @@ func (s *Service) clearFallbackMenus(ctx context.Context) bool {
 }
 
 func (s *Service) scanMenuPage(ctx context.Context, after uuid.UUID) uuid.UUID {
+	if ctx.Err() != nil || s.menuPauseDelay() > 0 {
+		return after
+	}
 	bot, org, _ := s.iam.DeploymentScope()
 	owners, err := s.store.MenuRecipients(ctx, bot, org, after, menuPageSize)
 	if err != nil {
@@ -165,8 +187,14 @@ func (s *Service) scanMenuPage(ctx context.Context, after uuid.UUID) uuid.UUID {
 		return after
 	}
 	for _, owner := range owners {
-		if err = s.refreshOwnerMenu(ctx, owner); err != nil && ctx.Err() == nil {
-			s.logger.WarnContext(ctx, "Telegram menu refresh unavailable", "class", "telegram_menu")
+		if ctx.Err() != nil || s.menuPauseDelay() > 0 {
+			return after
+		}
+		if err = s.refreshOwnerMenu(ctx, owner); err != nil {
+			s.warnMenuFailure(ctx, err)
+		}
+		if ctx.Err() != nil {
+			return after
 		}
 		after = owner.ID
 	}
@@ -204,5 +232,6 @@ func (s *Service) watchMenus(ctx context.Context, done chan struct{}) {
 		if after == uuid.Nil {
 			delay = menuRefreshInterval
 		}
+		delay = max(delay, s.menuPauseDelay())
 	}
 }
