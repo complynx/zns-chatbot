@@ -139,7 +139,7 @@ func (s *Service) startDeliveryComplete(ctx context.Context, id uuid.UUID) error
 }
 
 func (s *Service) startClosing(ctx context.Context, i intent) []db.Outbound {
-	return s.result(i, structuredText(s.languageFor(ctx, i) == "ru",
+	return s.result(ctx, i, structuredText(s.languageFor(ctx, i) == "ru",
 		"If you need anything else, just write to me.",
 		"Если понадобится что-то ещё, напиши мне."), "start:continuation:closing")
 }

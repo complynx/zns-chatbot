@@ -26,7 +26,7 @@ func (s *Service) skipForwardedAction(ctx context.Context, t *db.Task, c checkpo
 		"This queued message was forwarded. Please send a separate message saying what you want me to do.",
 		"Это сообщение из очереди было переслано. Напиши отдельно, что ты хочешь сделать.")
 	t.State = stateCompleted
-	if err := s.save(ctx, t, c, s.result(i, text, "forwarded_action_skipped")); err != nil {
+	if err := s.save(ctx, t, c, s.result(ctx, i, text, "forwarded_action_skipped")); err != nil {
 		return s.wait()
 	}
 	return s.deliver(ctx, t, c)

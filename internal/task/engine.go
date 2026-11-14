@@ -405,10 +405,10 @@ func (s *Service) observeRun(ctx context.Context, t *db.Task, c checkpoint, i in
 	}
 }
 func (s *Service) completeRun(ctx context.Context, t *db.Task, c checkpoint, i intent, result string) error {
-	out := s.result(i, result, "result")
+	out := s.result(ctx, i, result, "result")
 	if c.KeyboardPrompt != "" {
 		if len(out) == 0 {
-			out = s.result(i, structuredText(s.languageFor(ctx, i) == "ru", "Done.", "Готово."), "result")
+			out = s.result(ctx, i, structuredText(s.languageFor(ctx, i) == "ru", "Done.", "Готово."), "result")
 		}
 		removeReplyKeyboard(out)
 		c.KeyboardPrompt = ""
@@ -720,7 +720,7 @@ func (s *Service) pendingRunOutput(
 	if run.Question != nil && run.Question.Answer == nil {
 		t.State, t.QuestionID = "awaiting_user", run.Question.ID
 		if run.Question.ExpiresAt.After(time.Now()) {
-			out = append(out, s.question(i, *run.Question)...)
+			out = append(out, s.question(ctx, i, *run.Question)...)
 		}
 	}
 	nextKeyboard := liveKeyboardID(&run)
@@ -738,7 +738,7 @@ func (s *Service) pendingRunOutput(
 	}
 	if nextKeyboard == "" && c.KeyboardPrompt != "" {
 		cleanup := s.result(
-			i,
+			ctx, i,
 			retiredKeyboardText(run, c.KeyboardPrompt, s.languageFor(ctx, i) == "ru"),
 			"keyboard-closed:"+c.KeyboardPrompt+":presentation:"+strconv.FormatInt(c.KeyboardRevision, 10),
 		)

@@ -43,7 +43,7 @@ func (s *Service) nativeAvatarPhoto(ctx context.Context, t *db.Task, c checkpoin
 				"I could not make the framed avatar. Open /avatar to check the photo or upload another original.",
 				"Не смогла сделать аватарку в рамке. Проверь фото или загрузи другой оригинал через /avatar.")
 			t.State = stateFailed
-			if saveErr := s.save(ctx, t, c, s.result(i, text, "avatar_photo_failed")); saveErr != nil {
+			if saveErr := s.save(ctx, t, c, s.result(ctx, i, text, "avatar_photo_failed")); saveErr != nil {
 				return s.wait()
 			}
 			return s.deliver(ctx, t, c)

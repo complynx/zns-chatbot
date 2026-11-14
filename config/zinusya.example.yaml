@@ -1,4 +1,5 @@
 log_level: info # debug, info, warn or error; ZNS_CHATBOT_LOG_LEVEL overrides this.
+debug_approval_json: false # Append action JSON to Telegram confirmations for debugging.
 # Supply credentials using ZNS_CHATBOT_DATABASE_URL, ZNS_CHATBOT_TELEGRAM_TOKEN,
 # ZNS_CHATBOT_TELEGRAM_WEBHOOK_SECRET and ZNS_CHATBOT_IDENTITY_* environment variables.
 # Env overrides YAML; runtime events, deadlines and business rules belong in DB.

@@ -95,20 +95,33 @@ func fullPairAssignmentApproval(
 		title, leader, follower, terms = "Назначить оба пасса?", "Лидер (текущее отображаемое имя)",
 			"Фолловер (текущее отображаемое имя)", "Исходные условия"
 	}
-	var body strings.Builder
+	var participants strings.Builder
 	writeParticipant := func(label string, person db.PairAssignmentParticipant) {
+		name := strings.TrimSpace(person.DisplayName)
+		if name == "" {
+			name = person.UserID.String()
+		}
 		fmt.Fprintf(
-			&body,
-			"%s: %s (Telegram %d; account %s)\n",
+			&participants,
+			"%s: [%s](tg://user?id=%d)\n\n",
 			label,
-			strconv.Quote(person.DisplayName),
+			escapeMarkdownText(name),
 			person.TelegramUserID,
-			person.UserID,
 		)
 	}
 	writeParticipant(leader, *view.Leader)
 	writeParticipant(follower, *view.Follower)
-	fmt.Fprintf(&body, "\n%s:\n%s", terms, view.Preparation.Description)
+	var body strings.Builder
+	// These are service-generated identity references, not publishable article text.
+	// Keep all frozen prices and policies while presenting their account locators as names.
+	var replacements []string
+	for _, person := range []*db.PairAssignmentParticipant{view.Leader, view.Follower} {
+		if strings.TrimSpace(person.DisplayName) != "" {
+			replacements = append(replacements, person.UserID.String(), strconv.Quote(person.DisplayName))
+		}
+	}
+	description := strings.NewReplacer(replacements...).Replace(view.Preparation.Description)
+	fmt.Fprintf(&body, "\n%s:\n%s", terms, description)
 	for n, quote := range view.Preparation.Quotes {
 		label := leader
 		if n == 1 {
@@ -138,7 +151,7 @@ func fullPairAssignmentApproval(
 	for strings.Contains(text, fence) {
 		fence += "`"
 	}
-	return title + "\n\n" + fence + "\n" + text + "\n" + fence, nil
+	return title + "\n\n" + participants.String() + fence + "\n" + text + "\n" + fence, nil
 }
 
 // Configured minimum amount/share and final top-up deadline supplement the

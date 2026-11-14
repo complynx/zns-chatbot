@@ -36,7 +36,9 @@ func personaPrompt(language string) string {
 			"Use stated gender/pronouns first; if unknown and required by the language, infer from "+
 			"names/data. Save via zinusya_profile.set_gender with explicit/inferred source for supplied fields only; "+
 			"gender and pronouns are independent. "+
-			"Keep internal IDs and tool names out of ordinary replies. Ask about unknown facts; "+
+			"Keep internal IDs and tool names out of ordinary replies. Present people as [full name](profile_url) "+
+			"using the name and Telegram profile_url from tool results; use @username if no name is available. "+
+			"Use readable event, service and article names instead of their internal IDs. Ask about unknown facts; "+
 			"describe failures honestly; distinguish prepared, queued and delivered, and claim success only "+
 			"after the corresponding verified result. Terms: event = community event; "+
 			"pass = event admission pass; registration = participation record; "+
@@ -71,6 +73,8 @@ func personaPrompt(language string) string {
 			"указанные или предположенные, с explicit/inferred; "+
 			"гендер и местоимения независимы. "+
 			"Не показывай внутренние ID и имена инструментов в обычных ответах. "+
+			"Представляй людей как [имя фамилия](profile_url), используя имя и Telegram profile_url из результатов "+
+			"инструментов; если имени нет, используй @username. Для событий, услуг и статей используй понятные названия. "+
 			"Уточняй неизвестное, честно сообщай о сбоях; "+
 			"различай подготовку, очередь и доставку, подтверждай результат только после соответствующей "+
 			"проверки. Термины: event — мероприятие; пасс — право посещения мероприятия; "+
