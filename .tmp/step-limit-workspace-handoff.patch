@@ -1,0 +1,672 @@
+diff --git a/docs/shuttle-run.md b/docs/shuttle-run.md
+index 181bdbcdb32d32b44cd16a7ef60fa7303da4f22c..88122b053a87191ff35f5009a0b4190ff8694532 100644
+--- a/docs/shuttle-run.md
++++ b/docs/shuttle-run.md
+@@ -75,6 +75,27 @@ Readiness requires PostgreSQL; IAM or Loom downtime can leave accepted work wait
+ An operator can apply a [local Telegram ban](shuttle-user-bans.md) before onboarding.
+ The same binary records a required actor and reason without starting workers.
+ 
++## Loom step-limit pauses
++
++A Loom run paused with `step_limit` remains attached to its conversation. ZiNuSya
++sends one notice per observed pause through the durable outbox with Continue and Stop reply
++buttons instead of presenting a retained question or approval. Repeated polls and bot
++restarts do not resend that notice. A later message accepted into the same paused
++run receives its own notice unless the input receipt says Loom has left the pause.
++If an input already committed a notice for the observed version, the parent
++adopts that presentation instead of sending another copy.
++The notice asks whether to continue or stop and explains that prior actions are
++not undone. Both buttons send ordinary conversation text, like a typed reply;
++Loom owns processing that choice and renewing the step budget. The buttons do not
++claim that the queued message was processed or that the run has already resumed.
++Delivery compares the active run with newer input receipts from the same run.
++Unrelated menus preserve the pause choices; delayed notices cannot restore them
++after the run has moved on. Completion also retires choices delivered by an input
++task before the parent worker observed the pause.
++
++ZiNuSya does not resume or replace this run, reset its budget, or replay its actions.
++Polling continues so Loom can resume the original run and deliver its eventual result.
++
+ ## Telegram menu recovery
+ 
+ Only complete menu updates enter the success cache. A partial update invalidates
+diff --git a/integration/vertical_test.go b/integration/vertical_test.go
+index b79fc06d26e533102cf9dd03a7782f1be0f50591..66901a823f93733178ca51c0b43c2c87de2cd022 100644
+--- a/integration/vertical_test.go
++++ b/integration/vertical_test.go
+@@ -94,6 +94,7 @@ type peers struct {
+ 	createAttempts                          []string
+ 	pauseAfterLostCreate                    bool
+ 	steering                                bool
++	wakePausedInput                         bool
+ 	result                                  string
+ 	firstInputEntered                       chan struct{}
+ 	firstInputRelease                       chan struct{}
+@@ -1585,6 +1586,7 @@ func (p *peers) applyInput(w http.ResponseWriter, r *http.Request) {
+ 		receipt := loom.ControlReceipt{
+ 			ID:      run.ID,
+ 			Status:  run.Status,
++			Reason:  run.Reason,
+ 			Version: run.Version,
+ 			InputID: "input-" + key,
+ 			Context: &loom.InputContext{Revision: int64(len(p.inputs)), SourceActor: "fixture"},
+@@ -1722,6 +1724,9 @@ func (p *peers) rejectAgentRequest(w http.ResponseWriter, r *http.Request) bool
+ 
+ // Keep the accepted prompt in subsequent reads, as the real Loom API does.
+ func (p *peers) updateInputPrompt(run *loom.Run, input loom.InputRequest) {
++	if p.wakePausedInput && run.Status == "paused" {
++		run.Status, run.Reason = "queued", ""
++	}
+ 	if !p.retainResolvedPrompts {
+ 		run.Question = nil
+ 		return
+diff --git a/internal/db/keyboard.go b/internal/db/keyboard.go
+index 3d60617227564c44aa1b6c951dea20d36547a0d1..e2985d2b8846b049da4da4cc68e578d403bfece5 100644
+--- a/internal/db/keyboard.go
++++ b/internal/db/keyboard.go
+@@ -17,6 +17,7 @@ type KeyboardState struct {
+ 	ActiveTaskID        uuid.UUID
+ 	Run                 json.RawMessage
+ 	KeyboardOwnerTaskID uuid.UUID
++	LatestInputReceipt  json.RawMessage
+ }
+ 
+ func (s *Store) KeyboardState(ctx context.Context, taskID uuid.UUID) (KeyboardState, error) {
+@@ -29,13 +30,35 @@ func (s *Store) KeyboardState(ctx context.Context, taskID uuid.UUID) (KeyboardSt
+  AND coalesce(o.receipt->>'reply_keyboard_sent_at','')<>''
+  AND o.payload#>'{reply_markup,keyboard}' IS NOT NULL
+  ORDER BY (o.receipt->>'reply_keyboard_sent_at')::timestamptz DESC,o.id DESC LIMIT 1),
+- '00000000-0000-0000-0000-000000000000'::uuid)
++ '00000000-0000-0000-0000-000000000000'::uuid),coalesce((
++ SELECT input.snapshot->'input_receipt' FROM shuttle_tasks input
++ WHERE input.conversation_id=t.conversation_id AND input.target_task_id=c.active_task_id
++ AND input.run_id=a.run_id AND input.snapshot#>>'{input_receipt,run_id}'=a.run_id
++ ORDER BY (input.snapshot#>>'{input_receipt,version}')::bigint DESC NULLS LAST,input.seq DESC LIMIT 1),'null'::jsonb)
+  FROM shuttle_tasks t JOIN shuttle_conversations c ON c.id=t.conversation_id
+  LEFT JOIN shuttle_tasks a ON a.id=c.active_task_id WHERE t.id=$1`, taskID).
+-		Scan(&state.ActiveTaskID, &state.Run, &state.KeyboardOwnerTaskID)
++		Scan(&state.ActiveTaskID, &state.Run, &state.KeyboardOwnerTaskID, &state.LatestInputReceipt)
+ 	return state, err
+ }
+ 
++// HasInputStepLimitNotice checks whether an input already committed a notice for this pause version.
++func (s *Store) HasInputStepLimitNotice(
++	ctx context.Context, parentID uuid.UUID, runID string, version int64,
++) (bool, error) {
++	var exists bool
++	err := s.pool.QueryRow(ctx, `SELECT EXISTS(
++ SELECT 1 FROM shuttle_tasks input JOIN shuttle_tasks parent ON parent.id=input.target_task_id
++ JOIN shuttle_outbox notice ON notice.task_id=input.id
++ WHERE parent.id=$1 AND input.conversation_id=parent.conversation_id AND input.run_id=$2
++ AND input.snapshot#>>'{input_receipt,run_id}'=$2
++ AND input.snapshot#>>'{input_receipt,status}'='paused'
++ AND input.snapshot#>>'{input_receipt,reason}'='step_limit'
++ AND (input.snapshot#>>'{input_receipt,version}')::bigint >= $3
++ AND notice.dedup_key LIKE input.id::text||':step-limit:'||$2||':%'
++ AND notice.state NOT IN ('delivery_failed','delivery_blocked'))`, parentID, runID, version).Scan(&exists)
++	return exists, err
++}
++
+ // DeliveredPromptContext returns only metadata from an actually delivered message
+ // in the input task's own conversation. Unknown replies retain their opaque reference.
+ func (s *Store) DeliveredPromptContext(
+diff --git a/internal/task/conversation_keyboard.go b/internal/task/conversation_keyboard.go
+index dee51bbfe5c7db1c5e6f48abdeb19adc58662448..12fa306b0f60d53c735c5e7112ce2a3071e5bff2 100644
+--- a/internal/task/conversation_keyboard.go
++++ b/internal/task/conversation_keyboard.go
+@@ -116,6 +116,9 @@ func liveKeyboardID(run *loom.Run) string {
+ 	if run == nil {
+ 		return ""
+ 	}
++	if stepLimitPaused(*run) {
++		return stepLimitPromptPrefix + run.ID
++	}
+ 	if q := run.Question; q != nil && q.Answer == nil && q.ExpiresAt.After(time.Now()) {
+ 		if len(q.Choices) > 0 {
+ 			return "question:dialog-v1:" + keyboardPromptKey(*q)
+@@ -131,6 +134,12 @@ func liveKeyboardID(run *loom.Run) string {
+ 
+ // A resolved answer is acknowledged; an expired unanswered prompt still warns.
+ func retiredKeyboardText(run loom.Run, prompt string, ru bool) string {
++	if strings.HasPrefix(prompt, stepLimitPromptPrefix) {
++		return structuredText(ru,
++			"The task is no longer paused at the step limit.",
++			"Задача больше не приостановлена из-за лимита шагов.",
++		)
++	}
+ 	answered := strings.HasPrefix(prompt, "question:dialog-v1:") && run.Question != nil && run.Question.Answer != nil
+ 	decided := strings.HasPrefix(prompt, "approval:dialog-v1:") && run.Approval != nil && run.Approval.Decision != ""
+ 	if answered || decided {
+diff --git a/internal/task/delivery.go b/internal/task/delivery.go
+index 6cc9a804f4434578844b77a902c37f54377077e2..0797fb872be81c3662825fc8137c9107fcf105cc 100644
+--- a/internal/task/delivery.go
++++ b/internal/task/delivery.go
+@@ -162,6 +162,10 @@ func approvalHasArguments(a loom.Approval) bool {
+ 	return len(arguments) > 0 && !bytes.Equal(arguments, []byte("null"))
+ }
+ func (s *Service) finish(ctx context.Context, t *db.Task, c checkpoint, i intent, state, key string) error {
++	if err := s.restoreStepLimitKeyboard(ctx, *t, &c); err != nil {
++		s.reportDatabaseFailure(ctx, t.ID, "step_limit_keyboard", err)
++		return s.wait()
++	}
+ 	t.State = state
+ 	out := s.result(i, s.localized(ctx, i, key), key)
+ 	if c.KeyboardPrompt != "" {
+diff --git a/internal/task/engine.go b/internal/task/engine.go
+index 4791c52e6a1a722bf1396126f48b78377cf94e97..7c187c2353c164ba5f9833c97920ff522d31df5b 100644
+--- a/internal/task/engine.go
++++ b/internal/task/engine.go
+@@ -349,7 +349,7 @@ func (s *Service) advanceRun(ctx context.Context, t *db.Task, c checkpoint, i in
+ 	if err = s.registerRunReactions(ctx, t, &c, run); err != nil {
+ 		return s.wait()
+ 	}
+-	if run.Status == "paused" && run.Reason == "shutdown" {
++	if run.Status == runPaused && run.Reason == "shutdown" {
+ 		return s.resumeShutdown(ctx, t, c, i, auth, run)
+ 	}
+ 	if run.Status == "waiting_auth" {
+@@ -384,7 +384,7 @@ func (s *Service) observeRun(ctx context.Context, t *db.Task, c checkpoint, i in
+ 		return s.finish(ctx, t, c, i, stateCancelled, stateCancelled)
+ 	default:
+ 		t.State = "running"
+-		if run.Status == "paused" || run.Status == "reconciling" {
++		if run.Status == runPaused || run.Status == "reconciling" {
+ 			t.State = stateAwaitingService
+ 		}
+ 		out, err := s.pendingRunOutput(ctx, t, &c, i, run)
+@@ -405,6 +405,10 @@ func (s *Service) observeRun(ctx context.Context, t *db.Task, c checkpoint, i in
+ 	}
+ }
+ func (s *Service) completeRun(ctx context.Context, t *db.Task, c checkpoint, i intent, result string) error {
++	if err := s.restoreStepLimitKeyboard(ctx, *t, &c); err != nil {
++		s.reportDatabaseFailure(ctx, t.ID, "step_limit_keyboard", err)
++		return s.wait()
++	}
+ 	out := s.result(i, result, "result")
+ 	if c.KeyboardPrompt != "" {
+ 		if len(out) == 0 {
+@@ -501,7 +505,8 @@ func (s *Service) control(ctx context.Context, t *db.Task, c checkpoint, i inten
+ 	t.AuthSessionID = target.AuthSessionID
+ 	t.State = stateCompleted
+ 	c.Run = &run
+-	if err = s.save(ctx, t, c, nil); err != nil {
++	out := s.stepLimitControlOutput(ctx, i, *c.InputReceipt)
++	if err = s.save(ctx, t, c, out); err != nil {
+ 		return s.wait()
+ 	}
+ 	return s.deliverAndContinueStart(ctx, t, c, i)
+@@ -713,6 +718,9 @@ func (s *Service) pendingRunOutput(
+ 	run loom.Run,
+ ) ([]db.Outbound, error) {
+ 	t.QuestionID = ""
++	if stepLimitPaused(run) {
++		return s.pendingStepLimitOutput(ctx, t, c, i, run)
++	}
+ 	out, err := s.pendingApprovalMessages(ctx, t, i, run.Approval)
+ 	if err != nil {
+ 		return nil, err
+diff --git a/internal/task/keyboard_delivery.go b/internal/task/keyboard_delivery.go
+index 2bfb3dc9f806bda7b5e85942825106d421b2a39a..ff1eef5c9b634f33a0442a8b2e0c3c1fd26693a2 100644
+--- a/internal/task/keyboard_delivery.go
++++ b/internal/task/keyboard_delivery.go
+@@ -34,6 +34,10 @@ func (s *Service) sendKeyboardText(ctx context.Context, row db.Delivery) (telegr
+ 	if json.Unmarshal(state.Run, &current) != nil {
+ 		return telegram.Receipt{}, "", &telegram.Error{Outcome: telegram.NotStarted, Retryable: true}
+ 	}
++	current, err = keyboardRunObservation(state, current)
++	if err != nil {
++		return telegram.Receipt{}, "", &telegram.Error{Outcome: telegram.NotStarted, Retryable: true}
++	}
+ 	pending := liveKeyboardID(current)
+ 	switch payload.ReplyMarkup.(type) {
+ 	case *telegram.ReplyKeyboardRemove:
+@@ -43,16 +47,7 @@ func (s *Service) sendKeyboardText(ctx context.Context, row db.Delivery) (telegr
+ 			payload.ReplyMarkup = nil
+ 		}
+ 	case *telegram.ReplyKeyboardMarkup:
+-		prefix := row.TaskID.String() + ":"
+-		agent := strings.HasPrefix(row.DedupKey, prefix+"question:dialog-v1:") ||
+-			strings.HasPrefix(row.DedupKey, prefix+"approval:dialog-v1:")
+-		if agent {
+-			if state.ActiveTaskID != row.TaskID || pending == "" ||
+-				!strings.HasPrefix(row.DedupKey, prefix+pending+":") {
+-				payload.ReplyMarkup = nil
+-			}
+-		} else if pending != "" {
+-			// Menu reads leave the unresolved agent choices available in the chat.
++		if !replyKeyboardAllowed(row, state, current) {
+ 			payload.ReplyMarkup = nil
+ 		}
+ 	}
+@@ -65,6 +60,22 @@ func (s *Service) sendKeyboardText(ctx context.Context, row db.Delivery) (telegr
+ 	return receipt, replyMarkupHash(payload.ReplyMarkup), err
+ }
+ 
++func replyKeyboardAllowed(row db.Delivery, state db.KeyboardState, current *loom.Run) bool {
++	prefix := row.TaskID.String() + ":"
++	if strings.HasPrefix(row.DedupKey, prefix+stepLimitPromptPrefix) {
++		return stepLimitKeyboardCurrent(row, current)
++	}
++	pending := liveKeyboardID(current)
++	agent := strings.HasPrefix(row.DedupKey, prefix+"question:dialog-v1:") ||
++		strings.HasPrefix(row.DedupKey, prefix+"approval:dialog-v1:")
++	if agent {
++		return state.ActiveTaskID == row.TaskID && pending != "" &&
++			strings.HasPrefix(row.DedupKey, prefix+pending+":")
++	}
++	// Menu reads leave the unresolved agent choices available in the chat.
++	return pending == ""
++}
++
+ // Hold through FinishDelivery so the next sender sees the actual prior wire order.
+ func (s *Service) lockKeyboardDelivery(ctx context.Context, row db.Delivery) (func(), error) {
+ 	var payload telegram.SendMessageRequest
+diff --git a/internal/task/step_limit.go b/internal/task/step_limit.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..41ce03447af533f20b5c7d2d1a8d917f3d916cd7
+--- /dev/null
++++ b/internal/task/step_limit.go
+@@ -0,0 +1,130 @@
++package task
++
++import (
++	"context"
++	"encoding/json"
++	"strconv"
++	"strings"
++
++	"github.com/google/uuid"
++
++	"github.com/complynx/zns-chatbot/internal/db"
++	"github.com/complynx/zns-chatbot/internal/loom"
++	"github.com/complynx/zns-chatbot/internal/telegram"
++)
++
++const (
++	runPaused             = "paused"
++	stepLimitReason       = "step_limit"
++	stepLimitPromptPrefix = "step-limit:"
++)
++
++func stepLimitPaused(run loom.Run) bool {
++	return run.Status == runPaused && run.Reason == stepLimitReason
++}
++
++func (s *Service) pendingStepLimitOutput(
++	ctx context.Context, t *db.Task, c *checkpoint, i intent, run loom.Run,
++) ([]db.Outbound, error) {
++	prompt := stepLimitPromptPrefix + run.ID
++	if c.KeyboardPrompt == prompt {
++		return nil, nil
++	}
++	adopted, err := s.store.HasInputStepLimitNotice(ctx, t.ID, run.ID, run.Version)
++	if err != nil {
++		return nil, err
++	}
++	c.KeyboardRevision++
++	c.KeyboardPrompt = prompt
++	if adopted {
++		return nil, nil
++	}
++	key := prompt + ":presentation:" + strconv.FormatInt(c.KeyboardRevision, 10)
++	return s.stepLimitOutput(ctx, i, key), nil
++}
++
++func (s *Service) stepLimitControlOutput(
++	ctx context.Context, i intent, receipt loom.ControlReceipt,
++) []db.Outbound {
++	if receipt.Status == runPaused && receipt.Reason == stepLimitReason {
++		return s.stepLimitOutput(ctx, i, stepLimitPromptPrefix+receipt.ID)
++	}
++	return nil
++}
++
++func stepLimitKeyboardCurrent(row db.Delivery, run *loom.Run) bool {
++	if run == nil {
++		return false
++	}
++	prefix := row.TaskID.String() + ":" + stepLimitPromptPrefix + run.ID + ":"
++	return stepLimitPaused(*run) && strings.HasPrefix(row.DedupKey, prefix)
++}
++
++// Include receipts without output: a later input may already have woken the run.
++func keyboardRunObservation(state db.KeyboardState, current *loom.Run) (*loom.Run, error) {
++	if current == nil {
++		return current, nil
++	}
++	var receipt *loom.ControlReceipt
++	if err := json.Unmarshal(state.LatestInputReceipt, &receipt); err != nil {
++		return nil, err
++	}
++	run := *current
++	if receipt != nil && receipt.ID == run.ID && receipt.Version > run.Version {
++		run.Status, run.Reason, run.Version = receipt.Status, receipt.Reason, receipt.Version
++		// Receipts do not describe current prompts. Wait for the parent's fresh run read.
++		run.Question, run.Approval = nil, nil
++	}
++	return &run, nil
++}
++
++// A control task may have shown the keyboard before the parent observed the pause.
++func (s *Service) restoreStepLimitKeyboard(ctx context.Context, t db.Task, c *checkpoint) error {
++	if c.KeyboardPrompt != "" || t.TargetTaskID != uuid.Nil || t.RunID == "" {
++		return nil
++	}
++	state, err := s.store.KeyboardState(ctx, t.ID)
++	if err != nil {
++		return err
++	}
++	if state.KeyboardOwnerTaskID == t.ID || state.KeyboardOwnerTaskID == uuid.Nil {
++		return nil
++	}
++	owner, err := s.store.GetTask(ctx, state.KeyboardOwnerTaskID)
++	if err != nil {
++		return err
++	}
++	if owner.TargetTaskID != t.ID || owner.RunID != t.RunID {
++		return nil
++	}
++	var source checkpoint
++	if err = json.Unmarshal(owner.Snapshot, &source); err != nil {
++		return err
++	}
++	if receipt := source.InputReceipt; receipt != nil && receipt.Status == runPaused && receipt.Reason == stepLimitReason {
++		c.KeyboardPrompt = stepLimitPromptPrefix + t.RunID
++	}
++	return nil
++}
++
++// The caller checkpoints each pause presentation; Loom keeps the run and queued inputs.
++func (s *Service) stepLimitOutput(ctx context.Context, i intent, key string) []db.Outbound {
++	ru := s.languageFor(ctx, i) == "ru"
++	text := structuredText(ru,
++		"I reached the step limit and the task is paused. Would you like to continue or stop? "+
++			"Choose Continue or Stop below, or write your answer. "+
++			"Some actions may already have completed; stopping will not undo them.",
++		"Я достигла лимита шагов, и задача приостановлена. Продолжить работу или прекратить? "+
++			"Выбери «Продолжить» или «Прекратить» ниже либо напиши ответ. "+
++			"Часть действий могла уже выполниться; остановка их не отменит.",
++	)
++	out := s.result(i, text, key)
++	setReplyMarkup(out, &telegram.ReplyKeyboardMarkup{
++		Keyboard: [][]telegram.KeyboardButton{{
++			{Text: structuredText(ru, "Continue", "Продолжить")},
++			{Text: structuredText(ru, "Stop", "Прекратить")},
++		}},
++		ResizeKeyboard: true, OneTimeKeyboard: true,
++	})
++	return out
++}
+diff --git a/integration/step_limit_test.go b/integration/step_limit_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..cc688eb9365c9df60243a8991b721102683d6f24
+--- /dev/null
++++ b/integration/step_limit_test.go
+@@ -0,0 +1,267 @@
++package integration_test
++
++import (
++	"context"
++	"encoding/json"
++	"testing"
++	"time"
++
++	"github.com/google/uuid"
++	"github.com/stretchr/testify/require"
++
++	"github.com/complynx/zns-chatbot/internal/db"
++	"github.com/complynx/zns-chatbot/internal/loom"
++	"github.com/complynx/zns-chatbot/internal/telegram"
++)
++
++// Resolve actual wire payloads through this task's receipts, independent of other senders.
++func stepLimitTaskMessages(t *testing.T, h *harness, id uuid.UUID) []telegram.SendMessageRequest {
++	t.Helper()
++	var rows []db.Delivery
++	require.Eventually(t, func() bool {
++		var err error
++		rows, err = h.store.ListOutbox(t.Context(), id)
++		if err != nil || len(rows) == 0 {
++			return false
++		}
++		for _, row := range rows {
++			if row.State != "delivered" {
++				return false
++			}
++		}
++		return true
++	}, 10*time.Second, 20*time.Millisecond)
++	h.peers.mu.Lock()
++	defer h.peers.mu.Unlock()
++	messages := make([]telegram.SendMessageRequest, 0, len(rows))
++	for _, row := range rows {
++		var receipt struct {
++			MessageID int `json:"message_id"`
++		}
++		require.NoError(t, json.Unmarshal(row.Receipt, &receipt))
++		require.Positive(t, receipt.MessageID)
++		require.LessOrEqual(t, receipt.MessageID, len(h.peers.sent))
++		messages = append(messages, h.peers.sent[receipt.MessageID-1])
++	}
++	return messages
++}
++
++func TestStepLimitNotifiesOnceAndAcknowledgesLaterMessages(t *testing.T) {
++	t.Parallel()
++	p := newPeers(t)
++	p.steering = true
++	h := setup(t, p)
++	id := h.submit(t, 201)
++	awaitLoomRun(t, h, id)
++	h.stop(t)
++	pauseMockRun(t, h, id, "step_limit")
++	// Loom can retain an unanswered prompt after reaching the limit.
++	p.mu.Lock()
++	for key, run := range p.runs {
++		run.Question = &loom.Question{ID: "old-question", Text: "Old prompt",
++			Choices: []loom.Choice{{ID: "old", Label: "Old choice"}}, ExpiresAt: time.Now().Add(time.Hour)}
++		p.runs[key] = run
++	}
++	p.mu.Unlock()
++	h.start(t)
++	h.awaitReplies(t, 1)
++	h.await(t, id, "awaiting_service")
++	original, err := h.store.GetTask(context.Background(), id)
++	require.NoError(t, err)
++	require.Empty(t, original.QuestionID)
++
++	h.stop(t)
++	h.start(t)
++	for n, text := range []string{"Continue", "Stop"} {
++		messageID := int64(202 + n)
++		followup := h.submitText(t, messageID, text)
++		h.await(t, followup, "completed")
++		h.awaitReplies(t, n+2)
++		current, getErr := h.store.GetTask(context.Background(), followup)
++		require.NoError(t, getErr)
++		require.Equal(t, original.RunID, current.RunID)
++	}
++	completeMockRun(p)
++	h.await(t, id, "completed")
++	h.awaitReplies(t, 4)
++	h.stop(t)
++	p.mu.Lock()
++	defer p.mu.Unlock()
++	require.Len(t, p.runs, 1)
++	require.Empty(t, p.resumeKeys)
++	require.Len(t, p.inputs, 2)
++	require.Equal(t, "Continue", promptUserText(p.inputs[0].Text))
++	require.Equal(t, "Stop", promptUserText(p.inputs[1].Text))
++	for _, message := range p.sent[:3] {
++		require.Contains(t, message.Text, "step limit")
++		require.Contains(t, message.Text, "continue or stop")
++		require.NotContains(t, message.Text, "Old prompt")
++		require.IsType(t, &telegram.ReplyKeyboardMarkup{}, message.ReplyMarkup)
++		keyboard := message.ReplyMarkup.(*telegram.ReplyKeyboardMarkup)
++		require.True(t, keyboard.OneTimeKeyboard)
++		require.Equal(t, [][]telegram.KeyboardButton{{{Text: "Continue"}, {Text: "Stop"}}}, keyboard.Keyboard)
++	}
++	require.Equal(t, "Recovered original run", p.sent[3].Text)
++	require.IsType(t, &telegram.ReplyKeyboardRemove{}, p.sent[3].ReplyMarkup)
++}
++
++func TestStepLimitDoesNotReportPauseWhenInputWakesLoom(t *testing.T) {
++	t.Parallel()
++	p := newPeers(t)
++	p.steering, p.wakePausedInput = true, true
++	h := setup(t, p)
++	id := h.submit(t, 211)
++	awaitLoomRun(t, h, id)
++	pauseMockRun(t, h, id, "step_limit")
++	h.awaitReplies(t, 1)
++	p.mu.Lock()
++	choice := p.sent[0].ReplyMarkup.(*telegram.ReplyKeyboardMarkup).Keyboard[0][0].Text
++	p.mu.Unlock()
++	followup := h.submitText(t, 212, choice)
++	h.await(t, followup, "completed")
++	completeMockRun(p)
++	h.await(t, id, "completed")
++	require.Eventually(t, func() bool {
++		p.mu.Lock()
++		defer p.mu.Unlock()
++		return len(p.sent) > 1 && p.sent[len(p.sent)-1].Text == "Recovered original run"
++	}, 5*time.Second, 20*time.Millisecond)
++	h.stop(t)
++	p.mu.Lock()
++	defer p.mu.Unlock()
++	for _, message := range p.sent[1:] {
++		require.NotContains(t, message.Text, "continue or stop")
++		_, choices := message.ReplyMarkup.(*telegram.ReplyKeyboardMarkup)
++		require.False(t, choices)
++	}
++	require.Equal(t, choice, promptUserText(p.inputs[0].Text))
++	require.Len(t, p.runs, 1)
++	require.Empty(t, p.resumeKeys)
++}
++
++func TestStepLimitNotifiesAgainAfterObservedContinuation(t *testing.T) {
++	t.Parallel()
++	p := newPeers(t)
++	p.steering = true
++	h := setup(t, p)
++	id := h.submit(t, 221)
++	awaitLoomRun(t, h, id)
++	pauseMockRun(t, h, id, "step_limit")
++	h.awaitReplies(t, 1)
++	p.mu.Lock()
++	for key, run := range p.runs {
++		run.Status, run.Reason = "running", ""
++		p.runs[key] = run
++	}
++	p.mu.Unlock()
++	// Keyboard retirement proves ZiNuSya observed the intervening running state.
++	h.awaitReplies(t, 2)
++	p.mu.Lock()
++	require.Equal(t, "The task is no longer paused at the step limit.", p.sent[1].Text)
++	p.mu.Unlock()
++	pauseMockRun(t, h, id, "step_limit")
++	h.awaitReplies(t, 3)
++	completeMockRun(p)
++	h.await(t, id, "completed")
++	h.awaitReplies(t, 4)
++	h.stop(t)
++	p.mu.Lock()
++	defer p.mu.Unlock()
++	require.Contains(t, p.sent[0].Text, "step limit")
++	require.Contains(t, p.sent[2].Text, "step limit")
++	require.Len(t, p.runs, 1)
++	require.Empty(t, p.resumeKeys)
++}
++
++func TestStepLimitKeyboardUsesFreshReceiptAndRetiresDelayedDelivery(t *testing.T) {
++	t.Parallel()
++	for _, test := range []struct {
++		name     string
++		question bool
++		terminal string
++	}{{"cancelled running parent", false, "cancelled"}, {"completed parent with choices", true, "completed"}} {
++		t.Run(test.name, func(t *testing.T) {
++			t.Parallel()
++			p := newPeers(t)
++			p.steering, p.question = true, test.question
++			p.questionChoices = []loom.Choice{{ID: "old", Label: "Old choice"}}
++			p.miniAppOrigin = appTestOrigin
++			h := setup(t, p)
++			seedNamedTelegramUser(t, h)
++			id := h.submit(t, 231)
++			if test.question {
++				h.await(t, id, "awaiting_user")
++				h.awaitReplies(t, 1)
++			} else {
++				awaitLoomRun(t, h, id)
++			}
++			h.stop(t)
++			// Freeze only the parent's observation; input tasks still use the real worker path.
++			const holdTask = `UPDATE shuttle_tasks
++ SET lease_owner='paused-test-task',lease_until=clock_timestamp()+interval '1 hour' WHERE id=$1`
++			const releaseTask = "UPDATE shuttle_tasks SET lease_owner='',lease_until=NULL WHERE id=$1"
++			_, err := h.store.Pool().Exec(t.Context(), holdTask, id)
++			require.NoError(t, err)
++			pauseMockRun(t, h, id, "step_limit")
++			h.start(t)
++			fresh := h.submitText(t, 232, "Continue")
++			h.await(t, fresh, "completed")
++			require.Equal(t, "Continue", replyChoice(t, p, h, fresh))
++			if test.question {
++				_, err = h.store.Pool().Exec(t.Context(), releaseTask, id)
++				require.NoError(t, err)
++				h.await(t, id, "awaiting_service")
++				rows, readErr := h.store.ListOutbox(t.Context(), id)
++				require.NoError(t, readErr)
++				require.Len(t, rows, 1, "The parent adopts the input notice instead of sending another")
++				h.stop(t)
++				_, err = h.store.Pool().Exec(t.Context(), holdTask, id)
++				require.NoError(t, err)
++				h.start(t)
++			}
++			menu := h.submitText(t, 233, "/menu")
++			h.await(t, menu, "completed")
++			menuMessages := stepLimitTaskMessages(t, h, menu)
++			require.Nil(t, menuMessages[0].ReplyMarkup, "The menu must preserve the fresh pause choices")
++			p.mu.Lock()
++			p.rejectSendOnce = true
++			p.mu.Unlock()
++			delayed := h.submitText(t, 234, "Stop")
++			require.Eventually(t, func() bool {
++				rows, readErr := h.store.ListOutbox(t.Context(), delayed)
++				return readErr == nil && len(rows) == 1 && rows[0].State == "retryable"
++			}, 5*time.Second, 20*time.Millisecond)
++			h.stop(t)
++			_, err = h.store.Pool().Exec(t.Context(), holdTask, delayed)
++			require.NoError(t, err)
++			p.mu.Lock()
++			p.wakePausedInput = true
++			p.mu.Unlock()
++			h.start(t)
++			wake := h.submitText(t, 235, "Continue")
++			h.await(t, wake, "completed")
++			menu = h.submitText(t, 236, "/menu")
++			h.await(t, menu, "completed")
++			menuMessages = stepLimitTaskMessages(t, h, menu)
++			require.IsType(t, &telegram.ReplyKeyboardRemove{}, menuMessages[0].ReplyMarkup,
++				"An outputless wake receipt must allow the menu to retire pause choices")
++			_, err = h.store.Pool().Exec(t.Context(), releaseTask, delayed)
++			require.NoError(t, err)
++			delayedMessages := stepLimitTaskMessages(t, h, delayed)
++			require.Nil(t, delayedMessages[0].ReplyMarkup, "The delayed notice must not reinstall retired buttons")
++			p.mu.Lock()
++			for key, run := range p.runs {
++				run.Status, run.Result = test.terminal, "Recovered original run"
++				run.Version++
++				p.runs[key] = run
++			}
++			p.mu.Unlock()
++			_, err = h.store.Pool().Exec(t.Context(), releaseTask, id)
++			require.NoError(t, err)
++			h.await(t, id, test.terminal)
++			terminalMessages := stepLimitTaskMessages(t, h, id)
++			require.IsType(t, &telegram.ReplyKeyboardRemove{}, terminalMessages[len(terminalMessages)-1].ReplyMarkup)
++			h.stop(t)
++		})
++	}
++}

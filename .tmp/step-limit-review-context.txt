@@ -1,0 +1,2647 @@
+﻿SOURCE: internal/task/engine.go
+package task
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/riverqueue/river"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/complynx/zns-chatbot/internal/db"
+	"github.com/complynx/zns-chatbot/internal/identity"
+	"github.com/complynx/zns-chatbot/internal/loom"
+)
+
+var errControlTargetFinished = errors.New("control target finished without applying input")
+
+type checkpoint struct {
+	ReactionChatID         string                 `json:"reaction_chat_id,omitempty"`
+	WelcomeAfterOnboarding bool                   `json:"welcome_after_onboarding,omitempty"`
+	NativeAvatar           *db.AvatarDraftReceipt `json:"native_avatar,omitempty"`
+	KeyboardRevision       int64                  `json:"keyboard_revision,omitempty"`
+	InputReceipt           *loom.ControlReceipt   `json:"input_receipt,omitempty"`
+	KeyboardPrompt         string                 `json:"keyboard_prompt,omitempty"`
+	RegistrationEntry      *db.RegistrationEntry  `json:"registration_entry,omitempty"`
+	RegistrationChange     *db.RegistrationChange `json:"registration_change,omitempty"`
+	RegistrationActor      string                 `json:"registration_actor,omitempty"`
+	RegistrationOperation  string                 `json:"registration_operation,omitempty"`
+	ProfileChange          *db.ProfileMutation    `json:"profile_change,omitempty"`
+	ResumeKey              string                 `json:"resume_key,omitempty"`
+	LoomAuthRetryUntil     *time.Time             `json:"loom_auth_retry_until,omitempty"`
+	Session                loom.Session           `json:"session"`
+	BootstrapAttempts      int                    `json:"bootstrap_attempts,omitempty"`
+	Reauthorizing          bool                   `json:"reauthorizing,omitempty"`
+	Create                 *loom.CreateRunRequest `json:"create,omitempty"`
+	Run                    *loom.Run              `json:"run,omitempty"`
+	Control                *loom.InputRequest     `json:"control,omitempty"`
+	ControlUnapplied       bool                   `json:"control_unapplied,omitempty"`
+	ReplyModeMismatch      bool                   `json:"reply_mode_mismatch,omitempty"`
+}
+
+func (s *Service) save(ctx context.Context, t *db.Task, c checkpoint, out []db.Outbound) error {
+	out = s.appendStartClosing(ctx, *t, out)
+	// Outbox keys are global, and all messages of a task share one delivery order.
+	if len(out) > 0 {
+		existing, err := s.store.ListOutbox(ctx, t.ID)
+		if err != nil {
+			s.reportDatabaseFailure(ctx, t.ID, "outbox_read", err)
+			return err
+		}
+		keys := make(map[string]bool, len(existing))
+		var next int32
+		for _, row := range existing {
+			keys[row.DedupKey] = true
+			if row.ChunkSeq >= next {
+				next = row.ChunkSeq + 1
+			}
+		}
+		fresh := make([]db.Outbound, 0, len(out))
+		for _, item := range out {
+			item.DedupKey = t.ID.String() + ":" + item.DedupKey
+			if keys[item.DedupKey] {
+				continue
+			}
+			item.ID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(item.DedupKey))
+			item.ChunkSeq = next
+			next++
+			fresh = append(fresh, item)
+		}
+		out = fresh
+	}
+	b, err := json.Marshal(c)
+	if err != nil {
+		return err
+	}
+	t.Snapshot = b
+	saved, err := s.store.Save(ctx, *t, s.owner, t.Fence, out)
+	if err == nil {
+		*t = saved
+	} else {
+		s.reportDatabaseFailure(ctx, t.ID, "checkpoint_save", err)
+	}
+	return err
+}
+func terminal(state string) bool {
+	return state == stateCompleted || state == stateFailed || state == stateCancelled ||
+		state == stateDeliveryUnknown ||
+		state == stateDeliveryFailed || state == stateClosed
+}
+func finishedRun(status string) bool {
+	return terminal(status) || status == "succeeded" || status == "canceled"
+}
+func (s *Service) wait() error { return river.JobSnooze(s.options.PollInterval) }
+func (s *Service) work(parent context.Context, id uuid.UUID) error {
+	ctx, cancel := context.WithTimeout(parent, s.options.AttemptTimeout)
+	defer cancel()
+	if err := s.taskTelegramAvailable(ctx, id); err != nil {
+		return err
+	}
+	t, err := s.store.Route(ctx, id)
+	if err != nil {
+		s.reportDatabaseFailure(ctx, id, "route", err)
+		return s.wait()
+	}
+	t, err = s.store.Claim(ctx, id, s.owner, s.options.LeaseDuration)
+	if err != nil {
+		s.reportDatabaseFailure(ctx, id, "claim", err)
+		return s.wait()
+	}
+	defer s.releaseTask(ctx, &t)
+	if t.State == stateClosed {
+		return nil
+	}
+	var i intent
+	var c checkpoint
+	if json.Unmarshal(t.Request, &i) != nil || json.Unmarshal(t.Snapshot, &c) != nil {
+		return errors.New("invalid task checkpoint")
+	}
+	ctx, end := s.traceAttempt(ctx, i)
+	defer end()
+	if terminal(t.State) || t.State == stateAuthUnknown {
+		return s.deliverAndContinueStart(ctx, &t, c, i)
+	}
+	if c.Reauthorizing {
+		return s.finish(ctx, &t, c, i, stateAuthUnknown, stateAuthUnknown)
+	}
+	if i.Kind == kindUnsupported {
+		return s.finish(ctx, &t, c, i, stateFailed, kindUnsupported)
+	}
+	if t.Route == "no_active" {
+		return s.finish(ctx, &t, c, i, stateCompleted, "no_active")
+	}
+	if t.Route == kindStructured {
+		return s.dispatchStructured(ctx, &t, c, i)
+	}
+	if t.TargetTaskID != uuid.Nil {
+		ready, gateErr := s.store.ControlReady(ctx, t.ID)
+		if gateErr != nil {
+			s.reportDatabaseFailure(ctx, t.ID, "control_gate", gateErr)
+			return s.wait()
+		}
+		if !ready {
+			return s.wait()
+		}
+	}
+	user, service, err := s.authorize(ctx, t, i)
+	if err != nil {
+		return s.identityError(ctx, &t, c, i, err)
+	}
+	return s.authorizedTask(ctx, &t, c, i, user, service.Token)
+}
+
+func (s *Service) authorizedTask(
+	ctx context.Context, t *db.Task, c checkpoint, i intent, user db.User, service string,
+) error {
+	if t.Route != "new_run" {
+		return s.control(ctx, t, c, i, user, service)
+	}
+	return s.runTask(ctx, t, c, i, user, service)
+}
+func (s *Service) runTask(ctx context.Context, t *db.Task, c checkpoint, i intent, user db.User, service string) error {
+	ready, err := s.ensureSession(ctx, t, &c, i, user, service)
+	if !ready {
+		return err
+	}
+	return s.advanceRun(ctx, t, c, i, loom.Auth{ServiceToken: service, SessionID: t.AuthSessionID})
+}
+func (s *Service) releaseTask(parent context.Context, t *db.Task) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), time.Second)
+	defer cancel()
+	if err := s.store.Release(ctx, t.ID, s.owner, t.Fence); err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "lease_release", err)
+	}
+}
+func (s *Service) traceAttempt(ctx context.Context, i intent) (context.Context, func()) {
+	if s.observer == nil {
+		return ctx, func() {}
+	}
+	accepted := s.observer.Propagator().
+		Extract(ctx, propagation.MapCarrier{"traceparent": i.TraceParent, "tracestate": i.TraceState})
+	var options []trace.SpanStartOption
+	if linked := trace.SpanContextFromContext(accepted); linked.IsValid() {
+		options = append(options, trace.WithLinks(trace.Link{SpanContext: linked}))
+	}
+	ctx, span := s.observer.Tracer().Start(ctx, "task.process", options...)
+	return ctx, func() { span.End() }
+}
+func (s *Service) authorize(ctx context.Context, t db.Task, i intent) (db.User, identity.Credential, error) {
+	user, err := s.store.GetUser(ctx, t.UserID)
+	if err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "user_read", err)
+		return user, identity.Credential{}, err
+	}
+	if user.Revoked {
+		s.iam.Invalidate(user.Subject)
+		return user, identity.Credential{}, identity.ErrDenied
+	}
+	if user.Subject == "" {
+		bot, organization, _ := s.iam.DeploymentScope()
+		account, ensureErr := s.iam.EnsureUser(
+			ctx,
+			i.User,
+			t.UserID.String(),
+			func(ctx context.Context, technical bool) error {
+				return s.store.RecordIAMNameOrigin(ctx, t.UserID, bot, organization, technical)
+			},
+		)
+		if ensureErr != nil {
+			return user, identity.Credential{}, ensureErr
+		}
+		user, err = s.store.BindSubject(ctx, t.UserID, account.Subject, account.OrganizationID)
+		if err != nil {
+			s.reportDatabaseFailure(ctx, t.ID, "subject_bind", err)
+			return user, identity.Credential{}, err
+		}
+	}
+	service, err := s.iam.ServiceToken(ctx)
+	if err != nil {
+		return user, service, err
+	}
+	latest, err := s.store.GetUser(ctx, t.UserID)
+	if err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "user_recheck", err)
+		return user, service, err
+	}
+	if latest.Revoked {
+		s.iam.Invalidate(user.Subject)
+		return user, service, identity.ErrDenied
+	}
+	return user, service, nil
+}
+
+func (s *Service) ensureSession(
+	ctx context.Context,
+	t *db.Task,
+	c *checkpoint,
+	i intent,
+	user db.User,
+	service string,
+) (bool, error) {
+	recovering := c.Run != nil && c.Run.Status == "waiting_auth" && c.Run.Reason == "authorization_required"
+	if t.AuthSessionID != "" && c.Session.ExpiresAt.After(time.Now().Add(sessionRenewSkew)) && !recovering {
+		return true, nil
+	}
+	if recovering {
+		if !mayHaveRun(*t, *c) && !c.ReplyModeMismatch && c.LoomAuthRetryUntil != nil &&
+			!time.Now().Before(*c.LoomAuthRetryUntil) {
+			return false, s.finish(ctx, t, *c, i, stateFailed, "denied")
+		}
+		s.iam.Invalidate(user.Subject)
+	}
+	if t.AuthSessionID == "" && c.BootstrapAttempts >= maxBootstrapAttempts {
+		return false, s.finish(ctx, t, *c, i, stateAuthUnknown, stateAuthUnknown)
+	}
+	credential, err := s.iam.UserToken(ctx, user.Subject)
+	if err != nil {
+		return false, s.identityError(ctx, t, *c, i, err)
+	}
+	// A valid cached fallback may not extend the session. Avoid an unnecessary mutation
+	// until a fresher credential is available or the existing authorization expires.
+	if t.AuthSessionID != "" && !recovering && c.Session.ExpiresAt.After(time.Now()) &&
+		!credential.ExpiresAt.After(c.Session.ExpiresAt) {
+		return true, nil
+	}
+	auth := loom.Auth{ServiceToken: service, SubjectToken: credential.Token}
+	session, err := s.renewSession(ctx, t, c, auth)
+	if err != nil {
+		return false, s.sessionError(ctx, t, c, i, err)
+	}
+	c.Session = session
+	c.Reauthorizing = false
+	if recovering {
+		// The receipt is durable before a fresh run read; do not renew twice after restart.
+		c.Run = nil
+	}
+	t.AuthSessionID = session.ID
+	t.State = "running"
+	// Persist this receipt before creating a run.
+	if err = s.save(ctx, t, *c, nil); err != nil {
+		return false, s.wait()
+	}
+	return true, nil
+}
+func (s *Service) renewSession(ctx context.Context, t *db.Task, c *checkpoint, auth loom.Auth) (loom.Session, error) {
+	if t.AuthSessionID == "" {
+		c.BootstrapAttempts++
+		t.State = stateAwaitingAuth
+	} else {
+		// Reauthorize has no idempotency contract; persist uncertainty before I/O.
+		c.Reauthorizing = true
+		t.State = "auth_reauthorizing"
+	}
+	if err := s.save(ctx, t, *c, nil); err != nil {
+		return loom.Session{}, err
+	}
+	if t.AuthSessionID == "" {
+		return s.loom.Bootstrap(ctx, auth)
+	}
+	return s.loom.Reauthorize(ctx, auth, t.AuthSessionID, c.Session.Version)
+}
+func (s *Service) sessionError(ctx context.Context, t *db.Task, c *checkpoint, i intent, err error) error {
+	var upstream *loom.Error
+	known := errors.As(err, &upstream)
+	if known && upstream.Outcome == loom.Unknown && c.Reauthorizing {
+		return s.finish(ctx, t, *c, i, stateAuthUnknown, stateAuthUnknown)
+	}
+	c.Reauthorizing = false
+	if t.AuthSessionID == "" && known && upstream.Outcome != loom.Unknown {
+		c.BootstrapAttempts--
+	}
+	if known && upstream.StatusCode == http.StatusUnauthorized && upstream.Outcome == loom.Rejected {
+		return s.waitForLoomAuthorization(ctx, t, *c, i)
+	}
+	if known && !upstream.Retryable && upstream.Outcome == loom.Rejected {
+		if c.ReplyModeMismatch {
+			return s.waitForLoomAuthorization(ctx, t, *c, i)
+		}
+		return s.finish(ctx, t, *c, i, stateFailed, "denied")
+	}
+	c.LoomAuthRetryUntil = nil
+	t.State = stateAwaitingAuth
+	_ = s.save(ctx, t, *c, nil)
+	return s.wait()
+}
+func (s *Service) advanceRun(ctx context.Context, t *db.Task, c checkpoint, i intent, auth loom.Auth) error {
+	if c.ReplyModeMismatch {
+		return s.reconcileIncompatibleRun(ctx, t, c, i, auth)
+	}
+	var run loom.Run
+	var err error
+	if t.RunID == "" {
+		run, err = s.createLoomRun(ctx, t, &c, i, auth)
+	} else {
+		run, err = s.loom.GetRun(ctx, auth, t.RunID)
+	}
+	if err != nil {
+		return s.runRequestError(ctx, t, c, i, run, err)
+	}
+	if run.AuthSessionID != "" && run.AuthSessionID != t.AuthSessionID {
+		return s.finish(ctx, t, c, i, stateFailed, "denied")
+	}
+	if err = s.registerRunReactions(ctx, t, &c, run); err != nil {
+		return s.wait()
+	}
+	if run.Status == runPaused && run.Reason == "shutdown" {
+		return s.resumeShutdown(ctx, t, c, i, auth, run)
+	}
+	if run.Status == "waiting_auth" {
+		t.RunID = run.ID
+		c.Run = &run
+		if run.Reason == "permission_revoked" {
+			return s.finish(ctx, t, c, i, stateFailed, "denied")
+		}
+		if run.Reason == "authorization_required" {
+			return s.waitForLoomAuthorization(ctx, t, c, i)
+		}
+		t.State = stateAwaitingAuth
+		if err = s.save(ctx, t, c, nil); err != nil {
+			return s.wait()
+		}
+		return s.wait()
+	}
+	c.ResumeKey = ""
+	c.LoomAuthRetryUntil = nil
+	return s.observeRun(ctx, t, c, i, run)
+}
+func (s *Service) observeRun(ctx context.Context, t *db.Task, c checkpoint, i intent, run loom.Run) error {
+	t.RunID = run.ID
+	c.Run = &run
+	t.QuestionID = ""
+	switch run.Status {
+	case stateCompleted, "succeeded":
+		return s.completeRun(ctx, t, c, i, run.Result)
+	case stateFailed:
+		return s.finish(ctx, t, c, i, stateFailed, stateFailed)
+	case stateCancelled, "canceled":
+		return s.finish(ctx, t, c, i, stateCancelled, stateCancelled)
+	default:
+		t.State = "running"
+		if run.Status == runPaused || run.Status == "reconciling" {
+			t.State = stateAwaitingService
+		}
+		out, err := s.pendingRunOutput(ctx, t, &c, i, run)
+		if err != nil {
+			s.reportDatabaseFailure(ctx, t.ID, "approval_presentation", err)
+			return s.wait()
+		}
+		if err = s.save(ctx, t, c, out); err != nil {
+			return s.wait()
+		}
+		if err = s.deliver(ctx, t, c); err != nil {
+			return err
+		}
+		if terminal(t.State) {
+			return nil
+		}
+		return s.wait()
+	}
+}
+func (s *Service) completeRun(ctx context.Context, t *db.Task, c checkpoint, i intent, result string) error {
+	if err := s.restoreStepLimitKeyboard(ctx, *t, &c); err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "step_limit_keyboard", err)
+		return s.wait()
+	}
+	out := s.result(i, result, "result")
+	if c.KeyboardPrompt != "" {
+		if len(out) == 0 {
+			out = s.result(i, structuredText(s.languageFor(ctx, i) == "ru", "Done.", "Готово."), "result")
+		}
+		removeReplyKeyboard(out)
+		c.KeyboardPrompt = ""
+	}
+	welcome, err := s.completedStartWelcome(ctx, t, c, i)
+	if err != nil {
+		return s.wait()
+	}
+	out = append(out, welcome...)
+	t.State = stateCompleted
+	if err = s.save(ctx, t, c, out); err != nil {
+		return s.wait()
+	}
+	return s.deliverAndContinueStart(ctx, t, c, i)
+}
+
+func (s *Service) identityError(ctx context.Context, t *db.Task, c checkpoint, i intent, err error) error {
+	if errors.Is(err, identity.ErrDenied) || errors.Is(err, identity.ErrConflict) {
+		if c.ReplyModeMismatch {
+			return s.waitForLoomAuthorization(ctx, t, c, i)
+		}
+		return s.finish(ctx, t, c, i, stateFailed, "denied")
+	}
+	c.LoomAuthRetryUntil = nil
+	t.State = stateAwaitingAuth
+	_ = s.save(ctx, t, c, nil)
+	return s.wait()
+}
+func (s *Service) loomError(ctx context.Context, t *db.Task, c checkpoint, i intent, err error) error {
+	var upstream *loom.Error
+	if errors.As(err, &upstream) && upstream.Outcome == loom.Rejected &&
+		upstream.StatusCode == http.StatusUnauthorized {
+		return s.waitForLoomAuthorization(ctx, t, c, i)
+	}
+	if upstream != nil && upstream.Outcome == loom.Rejected && !upstream.Retryable {
+		return s.finish(ctx, t, c, i, stateFailed, stateFailed)
+	}
+	c.LoomAuthRetryUntil = nil
+	t.State = stateAwaitingService
+	_ = s.save(ctx, t, c, nil)
+	return s.wait()
+}
+func (s *Service) control(ctx context.Context, t *db.Task, c checkpoint, i intent, user db.User, service string) error {
+	target, err := s.store.GetTask(ctx, t.TargetTaskID)
+	if err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "control_target", err)
+		return s.wait()
+	}
+	if target.UserID != t.UserID || target.ConversationID != t.ConversationID {
+		return s.finish(ctx, t, c, i, stateFailed, "denied")
+	}
+	if terminal(target.State) || target.State == stateAuthUnknown {
+		return s.finishedTarget(ctx, t, c, i, user, service, target)
+	}
+	if target.RunID == "" {
+		return s.wait()
+	}
+	var tc checkpoint
+	if json.Unmarshal(target.Snapshot, &tc) != nil {
+		return s.finish(ctx, t, c, i, stateFailed, stateFailed)
+	}
+	if tc.ReplyModeMismatch {
+		return s.wait()
+	}
+	if tc.Reauthorizing || !tc.Session.ExpiresAt.After(time.Now().Add(controlSessionSkew)) {
+		return s.wait()
+	}
+	auth := loom.Auth{ServiceToken: service, SessionID: target.AuthSessionID}
+	run, err := s.loom.GetRun(ctx, auth, target.RunID)
+	if err != nil {
+		return s.loomError(ctx, t, c, i, err)
+	}
+	if run.AuthSessionID != "" && run.AuthSessionID != target.AuthSessionID {
+		return s.finish(ctx, t, c, i, stateFailed, "denied")
+	}
+	if finishedRun(run.Status) {
+		return s.finishedTarget(ctx, t, c, i, user, service, target)
+	}
+	if i.CallbackTaskID != uuid.Nil && i.CallbackTaskID != target.ID {
+		return s.finish(ctx, t, c, i, stateFailed, "stale")
+	}
+	applied, err := s.sendControl(ctx, t, &c, i, auth, target.RunID, run)
+	if !applied {
+		if errors.Is(err, errControlTargetFinished) {
+			return s.finishedTarget(ctx, t, c, i, user, service, target)
+		}
+		return err
+	}
+	t.RunID = target.RunID
+	t.AuthSessionID = target.AuthSessionID
+	t.State = stateCompleted
+	c.Run = &run
+	out := s.stepLimitControlOutput(ctx, i, *c.InputReceipt)
+	if err = s.save(ctx, t, c, out); err != nil {
+		return s.wait()
+	}
+	return s.deliverAndContinueStart(ctx, t, c, i)
+}
+
+func (s *Service) finishedTarget(
+	ctx context.Context,
+	t *db.Task,
+	c checkpoint,
+	i intent,
+	user db.User,
+	service string,
+	target db.Task,
+) error {
+	if c.Control != nil && !c.ControlUnapplied {
+		handled, err := s.reconcileFinishedInput(ctx, t, c, i, user, service, target)
+		if handled {
+			return err
+		}
+	}
+	if i.Kind != kindMessage {
+		return s.finish(ctx, t, c, i, stateCompleted, "no_active")
+	}
+	promoted, err := s.store.PromoteMessage(ctx, t.ID, s.owner, t.Fence)
+	if err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "message_promote", err)
+		return s.wait()
+	}
+	// Promotion retains the immutable accepted task ID and request, with a fresh run checkpoint.
+	*t = promoted
+	return s.runTask(ctx, t, checkpoint{}, i, user, service)
+}
+
+// A prepared Input is uncertain until the same key returns a receipt or run_terminal.
+// Fresh delegation also works after the terminal parent's session has expired.
+func (s *Service) reconcileFinishedInput(
+	ctx context.Context, t *db.Task, c checkpoint, i intent,
+	user db.User, service string, target db.Task,
+) (bool, error) {
+	if target.RunID == "" {
+		return true, s.wait()
+	}
+	credential, err := s.iam.UserToken(ctx, user.Subject)
+	if err != nil {
+		return true, s.identityError(ctx, t, c, i, err)
+	}
+	auth := loom.Auth{ServiceToken: service, SubjectToken: credential.Token}
+	receipt, err := s.loom.Input(ctx, auth, target.RunID, t.ID.String(), *c.Control)
+	if err != nil {
+		var upstream *loom.Error
+		if errors.As(err, &upstream) && upstream.Outcome == loom.Rejected &&
+			upstream.StatusCode == http.StatusConflict && upstream.Code == loom.CodeRunTerminal {
+			// Loom checks the retained idempotency record before this terminal rejection.
+			// PromoteMessage atomically clears the now-proven-unapplied checkpoint.
+			return false, nil
+		}
+		// A generic rejection cannot disprove an earlier acceptance with a lost receipt.
+		t.State = stateAwaitingService
+		if saveErr := s.save(ctx, t, c, nil); saveErr != nil {
+			return true, s.wait()
+		}
+		return true, s.wait()
+	}
+	c.InputReceipt = &receipt
+	t.RunID = target.RunID
+	t.AuthSessionID = target.AuthSessionID
+	t.State = stateCompleted
+	if err = s.save(ctx, t, c, nil); err != nil {
+		return true, s.wait()
+	}
+	return true, s.deliver(ctx, t, c)
+}
+
+func (s *Service) sendControl(
+	ctx context.Context,
+	t *db.Task,
+	c *checkpoint,
+	i intent,
+	auth loom.Auth,
+	runID string,
+	run loom.Run,
+) (bool, error) {
+	unapplied := c.Control == nil || c.ControlUnapplied
+	if err := s.prepareControl(ctx, t, c, i, run); err != nil {
+		if errors.Is(err, ErrUnsupportedUpdate) {
+			return false, s.finish(ctx, t, *c, i, stateFailed, "stale")
+		}
+		return false, s.wait()
+	}
+	if c.ControlUnapplied {
+		// Persist uncertainty before another attempt; a crash can hide its receipt.
+		c.ControlUnapplied = false
+		if err := s.save(ctx, t, *c, nil); err != nil {
+			return false, s.wait()
+		}
+	}
+	receipt, err := s.loom.Input(ctx, auth, runID, t.ID.String(), *c.Control)
+	if err != nil {
+		return false, s.controlError(ctx, t, c, i, auth, runID, unapplied, err)
+	}
+	c.InputReceipt = &receipt
+	return true, nil
+}
+
+func (s *Service) controlError(
+	ctx context.Context, t *db.Task, c *checkpoint, i intent,
+	auth loom.Auth, runID string, unapplied bool, err error,
+) error {
+	var upstream *loom.Error
+	known := errors.As(err, &upstream)
+	terminalRejection := known && upstream.Outcome == loom.Rejected &&
+		upstream.StatusCode == http.StatusConflict && upstream.Code == loom.CodeRunTerminal
+	if terminalRejection || unapplied && known &&
+		(upstream.Outcome == loom.NotStarted || upstream.Outcome == loom.Rejected) {
+		// A later rejection cannot disprove an earlier unknown effect.
+		c.ControlUnapplied = true
+	}
+	if c.ControlUnapplied && i.Kind == kindMessage && (c.Control.Kind == "steering" || terminalRejection) &&
+		upstream != nil && upstream.StatusCode == http.StatusConflict {
+		return s.reconcileControlConflict(ctx, t, c, i, auth, runID, err)
+	}
+	if !c.ControlUnapplied && !unapplied {
+		// An earlier unknown effect survives a later unrelated rejection.
+		t.State = stateAwaitingService
+		_ = s.save(ctx, t, *c, nil)
+		return s.wait()
+	}
+	return s.loomError(ctx, t, *c, i, err)
+}
+
+func (s *Service) reconcileControlConflict(
+	ctx context.Context, t *db.Task, c *checkpoint, i intent,
+	auth loom.Auth, runID string, conflict error,
+) error {
+	// Completion may race the preceding read. Other conflicts remain errors.
+	latest, err := s.loom.GetRun(ctx, auth, runID)
+	if err != nil {
+		return s.loomError(ctx, t, *c, i, err)
+	}
+	if latest.AuthSessionID != "" && latest.AuthSessionID != auth.SessionID {
+		return s.finish(ctx, t, *c, i, stateFailed, "denied")
+	}
+	if !finishedRun(latest.Status) {
+		return s.loomError(ctx, t, *c, i, conflict)
+	}
+	// The parent task may not yet have saved its terminal state in PostgreSQL.
+	t.State = stateAwaitingService
+	if err = s.save(ctx, t, *c, nil); err != nil {
+		return s.wait()
+	}
+	return errControlTargetFinished
+}
+func controlInput(_ db.Task, i intent, run loom.Run) (loom.InputRequest, error) {
+	if i.Kind == kindApproval {
+		a := run.Approval
+		if a == nil || a.ReplyMode != loom.ReplyModeProtocol || a.Decision != "" ||
+			i.PromptKey != approvalPromptKey(*a) ||
+			!a.ExpiresAt.After(time.Now()) {
+			return loom.InputRequest{}, ErrUnsupportedUpdate
+		}
+		return loom.InputRequest{Kind: kindApproval, ApprovalID: a.ID, Decision: i.Decision}, nil
+	}
+	if i.CallbackTaskID != uuid.Nil {
+		return loom.InputRequest{}, ErrUnsupportedUpdate
+	}
+	input := loom.InputRequest{Kind: "steering", Text: messagePrompt(i, i.Text, i.PreferredLanguage)}
+	if i.ReplyToMessageID > 0 {
+		input.Presentation = &loom.InputPresentation{
+			ReplyTo: fmt.Sprintf("telegram:%d:%d", i.ChatID, i.ReplyToMessageID),
+		}
+	}
+	return input, nil
+}
+
+// A valid caller can disappear from Loom discovery during restart. Keep the
+// immutable operation/session while discovery catches up. Expiry-driven renewal
+// and its unknown-outcome gate remain unchanged.
+func (s *Service) waitForLoomAuthorization(ctx context.Context, t *db.Task, c checkpoint, i intent) error {
+	if c.ReplyModeMismatch {
+		// A discovery timeout cannot prove an already created run has stopped.
+		c.LoomAuthRetryUntil = nil
+	} else {
+		if c.LoomAuthRetryUntil == nil {
+			deadline := time.Now().Add(loomAuthorizationRetryWindow)
+			c.LoomAuthRetryUntil = &deadline
+		}
+		if !time.Now().Before(*c.LoomAuthRetryUntil) && !mayHaveRun(*t, c) {
+			return s.finish(ctx, t, c, i, stateFailed, "denied")
+		}
+	}
+	t.State = stateAwaitingAuth
+	if err := s.save(ctx, t, c, nil); err != nil {
+		return s.wait()
+	}
+	return s.wait()
+}
+
+// A prepared create may have succeeded despite a lost response. Authorization
+// failure alone does not prove that its run stopped or release its conversation.
+func mayHaveRun(t db.Task, c checkpoint) bool {
+	return t.Route == "new_run" && (t.RunID != "" || c.Create != nil)
+}
+
+func (s *Service) pendingRunOutput(
+	ctx context.Context,
+	t *db.Task,
+	c *checkpoint,
+	i intent,
+	run loom.Run,
+) ([]db.Outbound, error) {
+	t.QuestionID = ""
+	if stepLimitPaused(run) {
+		return s.pendingStepLimitOutput(ctx, t, c, i, run)
+	}
+	out, err := s.pendingApprovalMessages(ctx, t, i, run.Approval)
+	if err != nil {
+		return nil, err
+	}
+	if run.Question != nil && run.Question.Answer == nil {
+		t.State, t.QuestionID = "awaiting_user", run.Question.ID
+		if run.Question.ExpiresAt.After(time.Now()) {
+			out = append(out, s.question(i, *run.Question)...)
+		}
+	}
+	nextKeyboard := liveKeyboardID(&run)
+	if nextKeyboard != c.KeyboardPrompt {
+		c.KeyboardRevision++
+	}
+	if nextKeyboard != "" {
+		// Presentation ownership can return to the same blocked action after a question.
+		// Its stable operation identity must not suppress this new keyboard delivery.
+		for n := range out {
+			if strings.HasPrefix(out[n].DedupKey, nextKeyboard+":") {
+				out[n].DedupKey += ":presentation:" + strconv.FormatInt(c.KeyboardRevision, 10)
+			}
+		}
+	}
+	if nextKeyboard == "" && c.KeyboardPrompt != "" {
+		cleanup := s.result(
+			i,
+			retiredKeyboardText(run, c.KeyboardPrompt, s.languageFor(ctx, i) == "ru"),
+			"keyboard-closed:"+c.KeyboardPrompt+":presentation:"+strconv.FormatInt(c.KeyboardRevision, 10),
+		)
+		removeReplyKeyboard(cleanup)
+		out = append(out, cleanup...)
+	}
+	c.KeyboardPrompt = nextKeyboard
+	return out, nil
+}
+SOURCE: internal/task/delivery.go
+package task
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/riverqueue/river"
+
+	"github.com/complynx/zns-chatbot/internal/db"
+	"github.com/complynx/zns-chatbot/internal/identity"
+	"github.com/complynx/zns-chatbot/internal/loom"
+	"github.com/complynx/zns-chatbot/internal/render"
+	"github.com/complynx/zns-chatbot/internal/telegram"
+)
+
+func languageChoice(code, fallback string) string {
+	if strings.TrimSpace(code) == "" {
+		code = fallback
+	}
+	base := strings.ToLower(strings.Split(strings.ReplaceAll(strings.TrimSpace(code), "_", "-"), "-")[0])
+	switch base {
+	case "ru", "be", "uk":
+		return "ru"
+	default:
+		return "en"
+	}
+}
+func (s *Service) languageFor(ctx context.Context, i intent) string {
+	bot, organization, _ := s.iam.DeploymentScope()
+	preference, err := s.store.ProfileLanguageByTelegram(ctx, bot, organization, i.User.ID)
+	if err == nil && (preference == "en" || preference == "ru") {
+		return preference
+	}
+	if err != nil && (i.PreferredLanguage == "en" || i.PreferredLanguage == "ru") {
+		return i.PreferredLanguage
+	}
+	fallback := "en"
+	if strings.TrimSpace(i.User.LanguageCode) == "" {
+		if settings, settingsErr := s.store.Settings(ctx); settingsErr == nil {
+			fallback = settings.Document.DefaultLanguage
+		}
+	}
+	return languageChoice(i.User.LanguageCode, fallback)
+}
+func (s *Service) localized(ctx context.Context, i intent, key string) string {
+	ru := s.languageFor(ctx, i) == "ru"
+	texts := map[string][2]string{
+		kindUnsupported: {
+			"Пока не умею читать такие сообщения. Пришли текст, пожалуйста.",
+			"I can’t read this message type yet. Please send text.",
+		},
+		"denied": {
+			"Сейчас у тебя нет доступа. Обратись к администратору.",
+			"You don’t have access right now. Please contact the administrator.",
+		},
+		stateFailed: {
+			"Не смогла завершить задачу. Действия могли уже выполниться. Проверь их статус перед повтором.",
+			"I couldn’t finish the task. Actions may already have completed. Check their status before retrying.",
+		},
+		stateCancelled: {
+			"Отменила задачу. Уже выполненные действия могут сохраниться.",
+			"I cancelled the task. Actions already completed may remain.",
+		},
+		"no_active": {"Нет активной задачи.", "There is no active task."},
+		"stale": {
+			"Этот вопрос уже не актуален. Используй моё последнее сообщение.",
+			"This prompt is no longer current. Use my latest message.",
+		},
+		stateAuthUnknown: {
+			"Результат обновления авторизации неизвестен. Задача приостановлена для проверки администратором.",
+			"The authorization outcome is unknown. The task is paused for administrator review.",
+		},
+	}
+	value := texts[key]
+	if ru {
+		return value[0]
+	}
+	return value[1]
+}
+func (s *Service) result(i intent, text, key string) []db.Outbound {
+	var out []db.Outbound
+	for n, chunk := range render.Render(text, map[int64]telegram.User{i.User.ID: i.User}) {
+		payload, _ := json.Marshal(
+			telegram.SendMessageRequest{ChatID: i.ChatID, Text: chunk.Text, Entities: chunk.Entities},
+		)
+		out = append(out, db.Outbound{DedupKey: key + ":" + strconv.Itoa(n), ChunkSeq: int32(n), Payload: payload})
+	}
+	return out
+}
+func (s *Service) question(i intent, q loom.Question) []db.Outbound {
+	out := s.result(i, q.Text, "question:dialog-v1:"+keyboardPromptKey(q))
+	if len(q.Choices) > 0 {
+		setReplyMarkup(out, questionKeyboard(q))
+	} else {
+		removeReplyKeyboard(out)
+	}
+	recordPromptContext(out, loom.InputPresentation{QuestionID: q.ID})
+	return out
+}
+func (s *Service) approval(ctx context.Context, i intent, id uuid.UUID, a loom.Approval) []db.Outbound {
+	text := a.Text
+	// Loom binds these complete service-generated human terms to the exact action.
+	completeServiceQuote := strings.TrimSpace(a.Text) != "" &&
+		(a.Method == "zinusya_massage.book" || a.Method == "zinusya_massage.cancel" ||
+			a.Method == "zinusya_massage_staff.instant" ||
+			a.Method == "zinusya_administration.set_massage_specialist_binding")
+	if approvalHasArguments(a) && !completeServiceQuote {
+		var arguments bytes.Buffer
+		if err := json.Indent(&arguments, a.Arguments, "", "  "); err != nil {
+			s.logger.WarnContext(ctx, "approval arguments invalid", "class", "approval_arguments")
+			return nil
+		}
+		// Complete parameters precede the buttons, using the same durable chunk order.
+		text += "\n\n```json\n" + arguments.String() + "\n```"
+	}
+	return s.approvalContent(ctx, i, id, a, text)
+}
+
+// Presentation can change without changing the pending action's identity.
+func (s *Service) approvalContent(
+	ctx context.Context,
+	i intent,
+	id uuid.UUID,
+	a loom.Approval,
+	text string,
+) []db.Outbound {
+	key := "approval:dialog-v1:" + keyboardPromptKey(a)
+	out := s.result(i, text, key)
+	if len(out) == 0 {
+		return nil
+	}
+	var payload telegram.SendMessageRequest
+	_ = json.Unmarshal(out[len(out)-1].Payload, &payload)
+	yes, no := "Approve", "Reject"
+	if s.languageFor(ctx, i) == "ru" {
+		yes, no = "Подтвердить", "Отклонить"
+	}
+	switch a.ReplyMode {
+	case loom.ReplyModeAgent:
+		payload.ReplyMarkup = approvalKeyboard(yes, no)
+	case loom.ReplyModeProtocol:
+		payload.ReplyMarkup = &telegram.InlineKeyboardMarkup{InlineKeyboard: [][]telegram.InlineKeyboardButton{{
+			{Text: yes, CallbackData: "a:" + id.String() + ":" + approvalPromptKey(a) + ":approve"},
+			{Text: no, CallbackData: "a:" + id.String() + ":" + approvalPromptKey(a) + ":reject"},
+		}}}
+	default:
+		return nil
+	}
+	out[len(out)-1].Payload, _ = json.Marshal(payload)
+	recordPromptContext(out, loom.InputPresentation{ApprovalID: a.ID})
+	return out
+}
+
+func approvalHasArguments(a loom.Approval) bool {
+	arguments := bytes.TrimSpace(a.Arguments)
+	return len(arguments) > 0 && !bytes.Equal(arguments, []byte("null"))
+}
+func (s *Service) finish(ctx context.Context, t *db.Task, c checkpoint, i intent, state, key string) error {
+	if err := s.restoreStepLimitKeyboard(ctx, *t, &c); err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "step_limit_keyboard", err)
+		return s.wait()
+	}
+	t.State = state
+	out := s.result(i, s.localized(ctx, i, key), key)
+	if c.KeyboardPrompt != "" {
+		removeReplyKeyboard(out)
+		c.KeyboardPrompt = ""
+	}
+	if e := s.save(ctx, t, c, out); e != nil {
+		return s.wait()
+	}
+	return s.deliver(ctx, t, c)
+}
+func (s *Service) deliver(ctx context.Context, t *db.Task, c checkpoint) error {
+	rows, err := s.store.ListOutbox(ctx, t.ID)
+	if err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "delivery_read", err)
+		return s.wait()
+	}
+	blocked := false
+	for _, row := range rows {
+		switch row.State {
+		case deliveryDelivered:
+			continue
+		case deliverySending:
+			// A new fenced task attempt owns recovery; a former sender can only win this CAS first.
+			receipt, finishErr := s.store.FinishDelivery(ctx, row.ID, row.AttemptID, stateDeliveryUnknown, nil)
+			err = finishErr
+			if err != nil {
+				s.reportDatabaseFailure(ctx, t.ID, "delivery_reconcile", err)
+				return s.wait()
+			}
+			row = receipt.Delivery
+			return s.gateDelivery(ctx, t, c, row)
+		case stateDeliveryUnknown, stateDeliveryFailed:
+			return s.gateDelivery(ctx, t, c, row)
+		case "delivery_blocked":
+			blocked = true
+			continue
+		case deliveryPending, deliveryRetryable:
+		default:
+			return s.wait()
+		}
+		allowed, accessErr := s.deliveryAllowed(ctx, t, row)
+		if accessErr != nil {
+			return s.wait()
+		}
+		if !allowed {
+			blocked = true
+			continue
+		}
+		more, sendErr := s.deliverPending(ctx, t, c, row)
+		if !more {
+			return sendErr
+		}
+	}
+	if blocked && t.State == stateCompleted {
+		return s.recordDeliveryState(ctx, t, c, stateDeliveryFailed)
+	}
+	return nil
+}
+
+func (s *Service) deliverPending(ctx context.Context, t *db.Task, c checkpoint, row db.Delivery) (bool, error) {
+	reserved, err := s.store.ReserveDelivery(ctx, row.ID)
+	if err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "delivery_reserve", err)
+		return false, s.wait()
+	}
+	outcome, delay, err := s.sendDelivery(ctx, reserved)
+	if err != nil {
+		return false, s.wait()
+	}
+	if outcome == deliveryRetryable {
+		if delay <= 0 {
+			delay = s.options.PollInterval
+		}
+		return false, river.JobSnooze(delay)
+	}
+	if outcome == stateDeliveryUnknown || outcome == stateDeliveryFailed {
+		reserved.State = outcome
+		return false, s.gateDelivery(ctx, t, c, reserved)
+	}
+	return true, nil
+}
+
+func (s *Service) deliveryAllowed(ctx context.Context, t *db.Task, row db.Delivery) (bool, error) {
+	// Access-denied notifications contain no run output and remain deliverable.
+	if strings.HasPrefix(row.DedupKey, t.ID.String()+":denied:") {
+		return true, nil
+	}
+	u, err := s.store.GetUser(ctx, t.UserID)
+	if err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "delivery_user_read", err)
+		return false, err
+	}
+	if u.Revoked {
+		return s.blockUnauthorizedDelivery(ctx, t, row, u.Subject)
+	}
+	err = s.verifyDeliveryAuthorization(ctx, u, row)
+	if errors.Is(err, identity.ErrDenied) || errors.Is(err, identity.ErrConflict) {
+		return s.blockUnauthorizedDelivery(ctx, t, row, u.Subject)
+	}
+	if err != nil {
+		return false, err
+	}
+	u, err = s.store.GetUser(ctx, t.UserID)
+	if err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "delivery_user_recheck", err)
+		return false, err
+	}
+	if u.Revoked {
+		return s.blockUnauthorizedDelivery(ctx, t, row, u.Subject)
+	}
+	return true, nil
+}
+
+func (s *Service) blockUnauthorizedDelivery(
+	ctx context.Context, t *db.Task, row db.Delivery, subject string,
+) (bool, error) {
+	s.iam.Invalidate(subject)
+	err := s.store.BlockPendingDelivery(ctx, row.ID)
+	if err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "delivery_revoke", err)
+	}
+	return false, err
+}
+
+func (s *Service) verifyDeliveryAuthorization(ctx context.Context, u db.User, row db.Delivery) error {
+	prefix := row.TaskID.String() + ":"
+	if !strings.HasPrefix(row.DedupKey, prefix+"result:") &&
+		!strings.HasPrefix(row.DedupKey, prefix+"question:") &&
+		!strings.HasPrefix(row.DedupKey, prefix+"approval:") &&
+		!strings.HasPrefix(row.DedupKey, prefix+"avatar:") {
+		return nil
+	}
+	credential, err := s.iam.UserToken(ctx, u.Subject)
+	if err != nil {
+		return err
+	}
+	_, err = s.iam.Verify(ctx, credential.Token)
+	return err
+}
+func (s *Service) gateDelivery(ctx context.Context, t *db.Task, c checkpoint, row db.Delivery) error {
+	if err := s.store.BlockDeliverySuffix(ctx, t.ID, row.ChunkSeq); err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "delivery_block", err)
+		return s.wait()
+	}
+	return s.recordDeliveryState(ctx, t, c, row.State)
+}
+func (s *Service) recordDeliveryState(ctx context.Context, t *db.Task, c checkpoint, state string) error {
+	if state != stateDeliveryUnknown && state != stateDeliveryFailed {
+		return nil
+	}
+	if state == stateDeliveryUnknown {
+		s.logger.WarnContext(ctx, "outbound delivery needs reconciliation", "class", stateDeliveryUnknown)
+	}
+	// Keep active run execution and cancellation independent of delivery uncertainty.
+	if terminal(t.State) && t.State != state {
+		t.State = state
+		if err := s.save(ctx, t, c, nil); err != nil {
+			return s.wait()
+		}
+	}
+	return nil
+}
+func (s *Service) sendDelivery(ctx context.Context, row db.Delivery) (string, time.Duration, error) {
+	unlock, sendErr := s.lockKeyboardDelivery(ctx, row)
+	defer unlock()
+	var receipt telegram.Receipt
+	var keyboardHash string
+	if sendErr == nil {
+		receipt, keyboardHash, sendErr = s.sendOutbound(ctx, row)
+	}
+	sentAt := ""
+	if keyboardHash != "" {
+		sentAt = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	outcome, delay := deliveryOutcome(sendErr)
+	data, _ := json.Marshal(struct {
+		MessageID      int64  `json:"message_id"`
+		ChatID         int64  `json:"chat_id"`
+		KeyboardHash   string `json:"reply_keyboard_hash,omitempty"`
+		KeyboardSentAt string `json:"reply_keyboard_sent_at,omitempty"`
+	}{receipt.MessageID, receipt.ChatID, keyboardHash, sentAt})
+	// Preserve the outcome through cancellation, with a bounded inherited context.
+	finishCtx, finishCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+	defer finishCancel()
+	finished, err := s.store.FinishDelivery(finishCtx, row.ID, row.AttemptID, outcome, data)
+	if err != nil {
+		s.reportDatabaseFailure(finishCtx, row.TaskID, "delivery_receipt", err)
+	}
+	if err == nil && finished.ResponseElapsedSeconds != nil && s.observer != nil {
+		s.observer.RecordResponseLatency(finishCtx, *finished.ResponseElapsedSeconds)
+	}
+	metricOutcome := metricSuccess
+	switch {
+	case err != nil:
+		metricOutcome = metricError
+	case outcome == deliveryRetryable:
+		metricOutcome = metricRetry
+	case outcome != deliveryDelivered:
+		metricOutcome = metricError
+	}
+	s.record(ctx, "deliver", metricOutcome)
+	return outcome, delay, err
+}
+func deliveryOutcome(err error) (string, time.Duration) {
+	if err == nil {
+		return deliveryDelivered, 0
+	}
+	var upstream *telegram.Error
+	if !errors.As(err, &upstream) || upstream.Outcome == telegram.Unknown {
+		return stateDeliveryUnknown, 0
+	}
+	if upstream.Retryable || upstream.Outcome == telegram.NotStarted {
+		return deliveryRetryable, upstream.RetryAfter
+	}
+	return stateDeliveryFailed, 0
+}
+SOURCE: internal/task/resume.go
+package task
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"strconv"
+
+	"github.com/complynx/zns-chatbot/internal/db"
+	"github.com/complynx/zns-chatbot/internal/loom"
+)
+
+// resumeShutdown continues an accepted run after Loom shutdown, never a client pause.
+// The checkpoint pins the key before dispatch so a lost receipt cannot create another run.
+func (s *Service) resumeShutdown(
+	ctx context.Context,
+	t *db.Task,
+	c checkpoint,
+	i intent,
+	auth loom.Auth,
+	run loom.Run,
+) error {
+	t.RunID = run.ID
+	c.Run = &run
+	t.State = stateAwaitingService
+	if run.Version <= 0 {
+		if err := s.save(ctx, t, c, nil); err != nil {
+			return s.wait()
+		}
+		return s.wait()
+	}
+	if c.ResumeKey == "" {
+		c.ResumeKey = t.ID.String() + ":resume:" + strconv.FormatInt(run.Version, 10)
+	}
+	if err := s.save(ctx, t, c, nil); err != nil {
+		return s.wait()
+	}
+	_, err := s.loom.Resume(ctx, auth, run.ID, c.ResumeKey)
+	if err != nil {
+		rejected, known := errors.AsType[*loom.Error](err)
+		if known && rejected.Outcome == loom.Rejected && rejected.StatusCode == http.StatusConflict {
+			// Loom may still be reconciling an uncertain provider attempt. Do not replace it.
+			c.LoomAuthRetryUntil = nil
+			if saveErr := s.save(ctx, t, c, nil); saveErr != nil {
+				return s.wait()
+			}
+			return s.wait()
+		}
+		return s.loomError(ctx, t, c, i, err)
+	}
+	c.ResumeKey = ""
+	c.LoomAuthRetryUntil = nil
+	// Control receipts omit result/question/approval; only a fresh run read may drive delivery.
+	if saveErr := s.save(ctx, t, c, nil); saveErr != nil {
+		return s.wait()
+	}
+	return s.wait()
+}
+SOURCE: internal/task/intent.go
+package task
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"strings"
+
+	"github.com/google/uuid"
+
+	"github.com/complynx/zns-chatbot/internal/files"
+	"github.com/complynx/zns-chatbot/internal/symbols"
+	"github.com/complynx/zns-chatbot/internal/telegram"
+)
+
+var ErrUnsupportedUpdate = errors.New("unsupported Telegram update")
+
+type intent struct {
+	ForwardOrigin        *telegram.MessageOrigin `json:"forward_origin,omitempty"`
+	Symbols              []symbols.Occurrence    `json:"symbols,omitempty"`
+	NativeAvatar         bool                    `json:"native_avatar,omitempty"`
+	RegistrationPromptID uuid.UUID               `json:"registration_prompt_id,omitempty"`
+	RegistrationRole     string                  `json:"registration_role,omitempty"`
+	CallbackMessageID    int64                   `json:"callback_message_id,omitempty"`
+	ReplyToMessageID     int64                   `json:"reply_to_message_id,omitempty"`
+	StructuredCommand    string                  `json:"structured_command,omitempty"`
+	PartnerCode          *uuid.UUID              `json:"partner_code,omitempty"`
+	Attachments          []files.Incoming        `json:"attachments,omitempty"`
+	PreferredLanguage    string                  `json:"preferred_language,omitempty"`
+	TraceParent          string                  `json:"traceparent,omitempty"`
+	TraceState           string                  `json:"tracestate,omitempty"`
+	Kind                 string                  `json:"kind"`
+	User                 telegram.User           `json:"user"`
+	ChatID               int64                   `json:"chat_id"`
+	Text                 string                  `json:"text,omitempty"`
+	StartContinuation    string                  `json:"start_continuation,omitempty"`
+	AfterStartOnboarding bool                    `json:"after_start_onboarding,omitempty"`
+	RawUpdate            json.RawMessage         `json:"raw_update"`
+	CallbackTaskID       uuid.UUID               `json:"callback_task_id,omitempty"`
+	PromptKey            string                  `json:"prompt_key,omitempty"`
+	Decision             string                  `json:"decision,omitempty"`
+}
+
+func normalize(u telegram.Update, raw json.RawMessage) (intent, error) {
+	i := intent{Kind: kindMessage, RawUpdate: raw}
+	if u.ID < 0 || !json.Valid(raw) {
+		return i, ErrUnsupportedUpdate
+	}
+	var err error
+	switch {
+	case u.Message != nil && u.CallbackQuery == nil:
+		i, err = messageIntent(i, u.Message)
+	case u.CallbackQuery != nil && u.Message == nil:
+		i, err = callbackIntent(i, u.CallbackQuery)
+	default:
+		return i, ErrUnsupportedUpdate
+	}
+	if err != nil {
+		return i, err
+	}
+	if i.User.ID <= 0 || i.User.ID > 1<<52-1 || i.User.IsBot || i.ChatID != i.User.ID {
+		return i, ErrUnsupportedUpdate
+	}
+	return i, nil
+}
+func messageIntent(i intent, m *telegram.Message) (intent, error) {
+	if m.From == nil || m.Chat.Type != "private" {
+		return i, ErrUnsupportedUpdate
+	}
+	i.User = *m.From
+	i.ChatID = m.Chat.ID
+	i.Text = m.Text
+	i.ForwardOrigin = m.ForwardOrigin
+	var err error
+	i.Symbols, err = symbols.FromMessage(m)
+	if err != nil {
+		return i, ErrUnsupportedUpdate
+	}
+	i.Attachments, err = files.FromMessage(m)
+	if err != nil {
+		return i, ErrUnsupportedUpdate
+	}
+	if m.Sticker != nil && (len(i.Attachments) > 0 || m.Text != "" || m.Caption != "") {
+		return i, ErrUnsupportedUpdate
+	}
+	if len(i.Attachments) > 0 {
+		i.Text = m.Caption
+	}
+	if len(i.Attachments) == 0 && i.ForwardOrigin == nil {
+		i.PartnerCode = telegram.PartnerStartCode(m.Text)
+	}
+	if (strings.TrimSpace(i.Text) == "" && len(i.Attachments) == 0 && len(i.Symbols) == 0) ||
+		unsupportedMedia(i.RawUpdate, m.Sticker != nil) {
+		i.Kind = kindUnsupported
+		i.Attachments = nil
+		i.Symbols = nil
+	}
+	if i.Kind == kindMessage && m.ReplyToMessage != nil {
+		i.ReplyToMessageID = m.ReplyToMessage.ID
+	}
+	i.NativeAvatar = i.ForwardOrigin == nil && i.Kind == kindMessage && nativeAvatarImage(i.Attachments) &&
+		strings.TrimSpace(i.Text) == "" && i.ReplyToMessageID == 0
+	isStartPayload := startPayload(m.Text) != "" && i.PartnerCode == nil
+	if i.ForwardOrigin == nil && i.Kind == kindMessage && len(i.Attachments) == 0 && len(i.Symbols) == 0 &&
+		(structuredCommand(m.Text) || isStartPayload) {
+		i.Kind = kindStructured
+		i.StructuredCommand = strings.Fields(strings.TrimSpace(m.Text))[0]
+	}
+	return i, nil
+}
+
+func nativeAvatarImage(attachments []files.Incoming) bool {
+	if len(attachments) != 1 {
+		return false
+	}
+	a := attachments[0]
+	return a.Kind == "photo" || a.Kind == "document" && strings.HasPrefix(a.MIMEType, "image/")
+}
+
+func unsupportedMedia(raw json.RawMessage, knownSticker bool) bool {
+	var update map[string]json.RawMessage
+	var message map[string]json.RawMessage
+	_ = json.Unmarshal(raw, &update)
+	_ = json.Unmarshal(update["message"], &message)
+	for _, key := range []string{"sticker", "contact", "location", "poll", "dice", "paid_media", "live_photo",
+		"rich_message"} {
+		if key == "sticker" && knownSticker {
+			continue
+		}
+		if _, ok := message[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+func callbackIntent(i intent, cb *telegram.CallbackQuery) (intent, error) {
+	if cb.Message == nil || cb.Message.Chat.Type != "private" {
+		return i, ErrUnsupportedUpdate
+	}
+	i.User = cb.From
+	i.ChatID = cb.Message.Chat.ID
+	if normalized, matched, err := registrationCallback(i, cb); matched {
+		return normalized, err
+	}
+	if cursor, ok := strings.CutPrefix(cb.Data, registrationPageCallback); ok {
+		after, err := uuid.Parse(cursor)
+		if err != nil || after == uuid.Nil || after.String() != cursor {
+			return i, ErrUnsupportedUpdate
+		}
+		i.Kind, i.StructuredCommand = kindStructured, registrationsCommand
+		i.Text = registrationsCommand + " " + cursor
+		return i, nil
+	}
+	parts := strings.Split(cb.Data, ":")
+	if len(parts) != 4 || len(cb.Data) > 64 {
+		return i, ErrUnsupportedUpdate
+	}
+	id, err := uuid.Parse(parts[1])
+	if err != nil || id == uuid.Nil || len(parts[2]) != 8 {
+		return i, ErrUnsupportedUpdate
+	}
+	if _, err = hex.DecodeString(parts[2]); err != nil {
+		return i, ErrUnsupportedUpdate
+	}
+	i.CallbackTaskID = id
+	i.PromptKey = parts[2]
+	return callbackChoice(i, parts[0], parts[3])
+}
+func callbackChoice(i intent, kind, value string) (intent, error) {
+	switch kind {
+	case "a":
+		i.Kind = kindApproval
+		i.Decision = value
+		if value != "approve" && value != "reject" {
+			return i, ErrUnsupportedUpdate
+		}
+	default:
+		return i, ErrUnsupportedUpdate
+	}
+	return i, nil
+}
+func promptKey(v any) string {
+	b, _ := json.Marshal(v)
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:4])
+}
+SOURCE: internal/task/conversation_keyboard.go
+package task
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"math/big"
+	"strings"
+	"time"
+
+	"github.com/complynx/zns-chatbot/internal/db"
+	"github.com/complynx/zns-chatbot/internal/loom"
+	"github.com/complynx/zns-chatbot/internal/telegram"
+)
+
+const replyTokenBytes = 8
+const decimalRadix = 10
+
+// PostgreSQL JSONB can reorder argument objects. Preserve numbers exactly while
+// canonicalizing object order so a stored presentation keeps the same identity.
+func canonicalPrompt(raw []byte) []byte {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return raw
+	}
+	canonical, _ := json.Marshal(normalizePromptNumbers(value))
+	return canonical
+}
+
+func normalizePromptNumbers(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, item := range typed {
+			typed[key] = normalizePromptNumbers(item)
+		}
+	case []any:
+		for n, item := range typed {
+			typed[n] = normalizePromptNumbers(item)
+		}
+	case json.Number:
+		return canonicalNumber(typed)
+	}
+	return value
+}
+
+// Normalize decimal/exponent spelling without rounding or allocating huge powers.
+func canonicalNumber(value json.Number) json.Number {
+	text := value.String()
+	negative := strings.HasPrefix(text, "-")
+	text = strings.TrimPrefix(text, "-")
+	coefficient, exponent, hasExponent := strings.Cut(strings.ToLower(text), "e")
+	whole, fraction, _ := strings.Cut(coefficient, ".")
+	digits := strings.TrimLeft(whole+fraction, "0")
+	if digits == "" {
+		return json.Number("0")
+	}
+	significant := strings.TrimRight(digits, "0")
+	var power big.Int
+	if hasExponent {
+		_, _ = power.SetString(exponent, decimalRadix)
+	}
+	power.Add(&power, big.NewInt(int64(len(digits)-len(significant)-len(fraction))))
+	sign := ""
+	if negative {
+		sign = "-"
+	}
+	return json.Number(sign + significant + "e" + power.String())
+}
+
+func keyboardPromptKey(prompt any) string {
+	raw, _ := json.Marshal(prompt)
+	sum := sha256.Sum256(canonicalPrompt(raw))
+	return hex.EncodeToString(sum[:replyTokenBytes])
+}
+
+func questionKeyboard(q loom.Question) *telegram.ReplyKeyboardMarkup {
+	keyboard := &telegram.ReplyKeyboardMarkup{ResizeKeyboard: true, OneTimeKeyboard: true}
+	for n, choice := range q.Choices {
+		if n >= maxChoices {
+			break
+		}
+		keyboard.Keyboard = append(
+			keyboard.Keyboard,
+			[]telegram.KeyboardButton{{Text: choice.Label}},
+		)
+	}
+	return keyboard
+}
+
+func approvalKeyboard(yes, no string) *telegram.ReplyKeyboardMarkup {
+	return &telegram.ReplyKeyboardMarkup{
+		ResizeKeyboard:  true,
+		OneTimeKeyboard: true,
+		Keyboard:        [][]telegram.KeyboardButton{{{Text: yes}, {Text: no}}},
+	}
+}
+
+func setReplyMarkup(out []db.Outbound, markup telegram.ReplyMarkup) {
+	if len(out) == 0 {
+		return
+	}
+	var payload telegram.SendMessageRequest
+	_ = json.Unmarshal(out[len(out)-1].Payload, &payload)
+	payload.ReplyMarkup = markup
+	out[len(out)-1].Payload, _ = json.Marshal(payload)
+}
+
+func removeReplyKeyboard(out []db.Outbound) {
+	setReplyMarkup(out, &telegram.ReplyKeyboardRemove{RemoveKeyboard: true})
+}
+
+func liveKeyboardID(run *loom.Run) string {
+	if run == nil {
+		return ""
+	}
+	if stepLimitPaused(*run) {
+		return stepLimitPromptPrefix + run.ID
+	}
+	if q := run.Question; q != nil && q.Answer == nil && q.ExpiresAt.After(time.Now()) {
+		if len(q.Choices) > 0 {
+			return "question:dialog-v1:" + keyboardPromptKey(*q)
+		}
+		return ""
+	}
+	if a := run.Approval; a != nil && a.ReplyMode == loom.ReplyModeAgent && a.Decision == "" &&
+		a.ExpiresAt.After(time.Now()) {
+		return "approval:dialog-v1:" + keyboardPromptKey(*a)
+	}
+	return ""
+}
+
+// A resolved answer is acknowledged; an expired unanswered prompt still warns.
+func retiredKeyboardText(run loom.Run, prompt string, ru bool) string {
+	if strings.HasPrefix(prompt, stepLimitPromptPrefix) {
+		return structuredText(ru,
+			"The task is no longer paused at the step limit.",
+			"Задача больше не приостановлена из-за лимита шагов.",
+		)
+	}
+	answered := strings.HasPrefix(prompt, "question:dialog-v1:") && run.Question != nil && run.Question.Answer != nil
+	decided := strings.HasPrefix(prompt, "approval:dialog-v1:") && run.Approval != nil && run.Approval.Decision != ""
+	if answered || decided {
+		return structuredText(ru, "Response received.", "Ответ получен.")
+	}
+	return structuredText(ru, "This choice is no longer active.", "Этот выбор больше не актуален.")
+}
+
+func replyMarkupHash(markup telegram.ReplyMarkup) string {
+	if markup == nil {
+		return ""
+	}
+	raw, _ := json.Marshal(markup)
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
+}
+
+// This outbox metadata is stripped by the typed Telegram sender. It never enters text.
+func recordPromptContext(out []db.Outbound, presentation loom.InputPresentation) {
+	raw, _ := json.Marshal(presentation)
+	for n := range out {
+		var payload map[string]json.RawMessage
+		_ = json.Unmarshal(out[n].Payload, &payload)
+		payload["_loom_context"] = raw
+		out[n].Payload, _ = json.Marshal(payload)
+	}
+}
+
+func approvalPromptKey(a loom.Approval) string {
+	raw, _ := json.Marshal(a)
+	sum := sha256.Sum256(canonicalPrompt(raw))
+	return hex.EncodeToString(sum[:4])
+}
+SOURCE: internal/task/keyboard_delivery.go
+package task
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+
+	"github.com/google/uuid"
+
+	"github.com/complynx/zns-chatbot/internal/db"
+	"github.com/complynx/zns-chatbot/internal/loom"
+	"github.com/complynx/zns-chatbot/internal/telegram"
+)
+
+// Fixed stripes bound memory; only chat-wide keyboard changes share this gate.
+const keyboardLockCount = 64
+
+func (s *Service) sendKeyboardText(ctx context.Context, row db.Delivery) (telegram.Receipt, string, error) {
+	var payload telegram.SendMessageRequest
+	if json.Unmarshal(row.Payload, &payload) != nil {
+		return telegram.Receipt{}, "", &telegram.Error{Outcome: telegram.Rejected}
+	}
+	switch payload.ReplyMarkup.(type) {
+	case *telegram.ReplyKeyboardMarkup, *telegram.ReplyKeyboardRemove:
+	default:
+		receipt, err := s.sendText(ctx, row.Payload)
+		return receipt, "", err
+	}
+	state, err := s.store.KeyboardState(ctx, row.TaskID)
+	if err != nil {
+		return telegram.Receipt{}, "", &telegram.Error{Outcome: telegram.NotStarted, Retryable: true}
+	}
+	var current *loom.Run
+	if json.Unmarshal(state.Run, &current) != nil {
+		return telegram.Receipt{}, "", &telegram.Error{Outcome: telegram.NotStarted, Retryable: true}
+	}
+	current, err = keyboardRunObservation(state, current)
+	if err != nil {
+		return telegram.Receipt{}, "", &telegram.Error{Outcome: telegram.NotStarted, Retryable: true}
+	}
+	pending := liveKeyboardID(current)
+	switch payload.ReplyMarkup.(type) {
+	case *telegram.ReplyKeyboardRemove:
+		otherActiveOwner := state.KeyboardOwnerTaskID != uuid.Nil && state.KeyboardOwnerTaskID != row.TaskID &&
+			state.KeyboardOwnerTaskID == state.ActiveTaskID
+		if otherActiveOwner || pending != "" {
+			payload.ReplyMarkup = nil
+		}
+	case *telegram.ReplyKeyboardMarkup:
+		if !replyKeyboardAllowed(row, state, current) {
+			payload.ReplyMarkup = nil
+		}
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return telegram.Receipt{}, "", &telegram.Error{Outcome: telegram.Rejected}
+	}
+	receipt, err := s.sendText(ctx, raw)
+	// Record actual wire markup, never claim suppressed choices were presented.
+	return receipt, replyMarkupHash(payload.ReplyMarkup), err
+}
+
+func replyKeyboardAllowed(row db.Delivery, state db.KeyboardState, current *loom.Run) bool {
+	prefix := row.TaskID.String() + ":"
+	if strings.HasPrefix(row.DedupKey, prefix+stepLimitPromptPrefix) {
+		return stepLimitKeyboardCurrent(row, current)
+	}
+	pending := liveKeyboardID(current)
+	agent := strings.HasPrefix(row.DedupKey, prefix+"question:dialog-v1:") ||
+		strings.HasPrefix(row.DedupKey, prefix+"approval:dialog-v1:")
+	if agent {
+		return state.ActiveTaskID == row.TaskID && pending != "" &&
+			strings.HasPrefix(row.DedupKey, prefix+pending+":")
+	}
+	// Menu reads leave the unresolved agent choices available in the chat.
+	return pending == ""
+}
+
+// Hold through FinishDelivery so the next sender sees the actual prior wire order.
+func (s *Service) lockKeyboardDelivery(ctx context.Context, row db.Delivery) (func(), error) {
+	var payload telegram.SendMessageRequest
+	if json.Unmarshal(row.Payload, &payload) != nil {
+		return func() {}, &telegram.Error{Outcome: telegram.Rejected}
+	}
+	switch payload.ReplyMarkup.(type) {
+	case *telegram.ReplyKeyboardMarkup, *telegram.ReplyKeyboardRemove:
+	default:
+		return func() {}, nil
+	}
+	task, err := s.store.GetTask(ctx, row.TaskID)
+	if err != nil {
+		return func() {}, &telegram.Error{Outcome: telegram.NotStarted, Retryable: true}
+	}
+	gate := &s.keyboardSend[int(task.ConversationID[0])%keyboardLockCount]
+	gate.Lock()
+	return gate.Unlock, nil
+}
+SOURCE: internal/loom/client.go
+// Package loom implements Loom's versioned service delegation protocol.
+package loom
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+)
+
+const ReplyModeAgent = "agent"
+const ReplyModeProtocol = "protocol"
+
+const MaxResponseBytes = 1 << 20
+const defaultHTTPTimeout = 10 * time.Second
+
+type Auth struct {
+	ServiceToken string
+	SubjectToken string
+	SessionID    string
+}
+type Session struct {
+	ID        string    `json:"auth_session_id"`
+	Version   int64     `json:"version"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+type Input struct {
+	Text        string   `json:"text"`
+	ArtifactIDs []string `json:"artifact_ids,omitempty"`
+}
+type Interaction struct {
+	Reactions *ReactionPolicy `json:"reactions,omitempty"`
+	ReplyMode string          `json:"reply_mode"`
+	Questions string          `json:"questions"`
+	Approvals bool            `json:"approvals"`
+}
+type Delivery struct {
+	Mode   string `json:"mode"`
+	WaitMS int    `json:"wait_ms"`
+}
+type Budget struct {
+	MaxMicrocredits int64 `json:"max_microcredits"`
+}
+
+type Discovery struct {
+	ExpandServices []string `json:"expand_services,omitempty"`
+}
+
+type OutputPolicy struct {
+	DisallowCustomEmoji bool `json:"disallow_custom_emoji"`
+}
+
+// CreateRunRequest contains semantic arguments; the session is sent in an authorization header.
+type CreateRunRequest struct {
+	ExecutionProfile string        `json:"execution_profile,omitempty"`
+	ChatID           string        `json:"chat_id,omitempty"`
+	PreviousRunID    string        `json:"previous_run_id,omitempty"`
+	Input            Input         `json:"input"`
+	Interaction      Interaction   `json:"interaction"`
+	Discovery        *Discovery    `json:"discovery,omitempty"`
+	OutputPolicy     *OutputPolicy `json:"output_policy,omitempty"`
+	DisconnectPolicy string        `json:"disconnect_policy"`
+	Delivery         Delivery      `json:"delivery"`
+	Budget           Budget        `json:"budget"`
+}
+type Choice struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+type Question struct {
+	Answer    *InputRequest `json:"answer,omitempty"`
+	ID        string        `json:"question_id"`
+	Text      string        `json:"text"`
+	Choices   []Choice      `json:"choices,omitempty"`
+	AllowText bool          `json:"allow_text"`
+	ExpiresAt time.Time     `json:"expires_at"`
+}
+type Approval struct {
+	BackendOperationID string          `json:"backend_operation_id,omitempty"`
+	ReplyMode          string          `json:"reply_mode"`
+	ConfirmationText   string          `json:"confirmation_text,omitempty"`
+	Decision           string          `json:"decision,omitempty"`
+	ID                 string          `json:"approval_id"`
+	Text               string          `json:"text"`
+	OperationID        string          `json:"operation_id"`
+	Method             string          `json:"method"`
+	Arguments          json.RawMessage `json:"arguments"`
+	ArgumentHash       string          `json:"argument_hash"`
+	ConfirmationID     string          `json:"confirmation_id,omitempty"`
+	Precondition       string          `json:"precondition,omitempty"`
+	ExpiresAt          time.Time       `json:"expires_at"`
+}
+type Run struct {
+	Interaction          Interaction `json:"interaction"`
+	ConversationRevision int64       `json:"conversation_revision,omitempty"`
+	ID                   string      `json:"run_id"`
+	ChatID               string      `json:"chat_id"`
+	AuthSessionID        string      `json:"auth_session_id"`
+	Status               string      `json:"status"`
+	Reason               string      `json:"reason,omitempty"`
+	Result               string      `json:"result,omitempty"`
+	Version              int64       `json:"version"`
+	Question             *Question   `json:"question,omitempty"`
+	Approval             *Approval   `json:"approval,omitempty"`
+}
+type InputPresentation struct {
+	ReplyTo    string `json:"reply_to,omitempty"`
+	QuestionID string `json:"question_id,omitempty"`
+	ApprovalID string `json:"approval_id,omitempty"`
+}
+
+type InputContext struct {
+	Revision    int64  `json:"revision"`
+	SourceActor string `json:"source_actor"`
+	QuestionID  string `json:"question_id,omitempty"`
+	ApprovalID  string `json:"approval_id,omitempty"`
+}
+
+type InputRequest struct {
+	Presentation *InputPresentation `json:"presentation,omitempty"`
+	Kind         string             `json:"kind"`
+	Text         string             `json:"text,omitempty"`
+	QuestionID   string             `json:"question_id,omitempty"`
+	ChoiceIDs    []string           `json:"choice_ids,omitempty"`
+	ApprovalID   string             `json:"approval_id,omitempty"`
+	Decision     string             `json:"decision,omitempty"`
+}
+type ControlReceipt struct {
+	InputID string        `json:"input_id,omitempty"`
+	Context *InputContext `json:"context,omitempty"`
+	ID      string        `json:"run_id"`
+	Status  string        `json:"status"`
+	Reason  string        `json:"reason,omitempty"`
+	Version int64         `json:"version"`
+}
+type Outcome string
+
+const (
+	NotStarted Outcome = "not_started"
+	Rejected   Outcome = "rejected"
+	Unknown    Outcome = "unknown"
+)
+
+const (
+	CodeRunTerminal          = "run_terminal"
+	CodeUnsupportedReplyMode = "unsupported_reply_mode"
+)
+
+type Error struct {
+	Code       string
+	StatusCode int
+	Retryable  bool
+	Outcome    Outcome
+}
+
+func (e *Error) Error() string {
+	return "Loom request failed (" + string(e.Outcome) + ", status " + strconv.Itoa(e.StatusCode) + ")"
+}
+
+type Client struct {
+	base string
+	http *http.Client
+}
+
+func New(baseURL string, client *http.Client) (*Client, error) {
+	u, err := url.Parse(baseURL)
+	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.RawQuery != "" ||
+		u.Fragment != "" {
+		return nil, errors.New("invalid Loom base URL")
+	}
+	h := http.Client{Timeout: defaultHTTPTimeout}
+	if client != nil {
+		h = *client
+	}
+	if h.Timeout <= 0 {
+		h.Timeout = defaultHTTPTimeout
+	}
+	h.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return &Client{base: strings.TrimRight(baseURL, "/"), http: &h}, nil
+}
+func (c *Client) Bootstrap(ctx context.Context, auth Auth) (Session, error) {
+	var result Session
+	if auth.SubjectToken == "" || auth.SessionID != "" {
+		return result, &Error{Outcome: NotStarted}
+	}
+	err := c.call(ctx, http.MethodPost, "/auth/sessions", auth, "", struct{}{}, &result, true, false)
+	if err == nil && (result.ID == "" || result.Version <= 0 || result.ExpiresAt.IsZero()) {
+		err = &Error{Outcome: Unknown}
+	}
+	return result, err
+}
+func (c *Client) Reauthorize(ctx context.Context, auth Auth, id string, version int64) (Session, error) {
+	var result Session
+	if auth.SubjectToken == "" || auth.SessionID != "" || version <= 0 {
+		return result, &Error{Outcome: NotStarted}
+	}
+	path, err := resourcePath("auth/sessions", id, "/reauthorize")
+	if err != nil {
+		return result, err
+	}
+	err = c.call(ctx, http.MethodPost, path, auth, "", struct {
+		Version int64 `json:"version"`
+	}{version}, &result, true, false)
+	if err == nil && (result.ID != id || result.Version <= version || result.ExpiresAt.IsZero()) {
+		err = &Error{Outcome: Unknown}
+	}
+	return result, err
+}
+func (c *Client) CreateRun(ctx context.Context, auth Auth, key string, input CreateRunRequest) (Run, error) {
+	var result Run
+	if input.DisconnectPolicy == "" {
+		input.DisconnectPolicy = "continue"
+	}
+	if input.Delivery.Mode == "" {
+		input.Delivery.Mode = "async"
+	}
+	if input.Interaction.Questions == "" {
+		input.Interaction.Questions = "choices_and_text"
+	}
+	err := c.call(ctx, http.MethodPost, "/runs", auth, key, input, &result, true, true)
+	if err == nil && input.Interaction.ReplyMode == "agent" && result.Interaction.ReplyMode != "agent" {
+		return result, &Error{Code: CodeUnsupportedReplyMode, Outcome: Unknown, Retryable: true}
+	}
+	if err == nil && (result.ID == "" || result.Status == "") {
+		err = &Error{Outcome: Unknown, Retryable: true}
+	}
+	return result, err
+}
+func (c *Client) GetRun(ctx context.Context, auth Auth, id string) (Run, error) {
+	var result Run
+	path, err := resourcePath("runs", id, "")
+	if err != nil {
+		return result, err
+	}
+	err = c.call(ctx, http.MethodGet, path, auth, "", nil, &result, false, false)
+	if err == nil && (result.ID != id || result.Status == "") {
+		err = &Error{Outcome: Rejected, Retryable: true}
+	}
+	return result, err
+}
+func (c *Client) Input(ctx context.Context, auth Auth, id, key string, input InputRequest) (ControlReceipt, error) {
+	var result ControlReceipt
+	if input.Kind != "steering" && input.Kind != "answer" && input.Kind != "approval" {
+		return result, &Error{Outcome: NotStarted}
+	}
+	path, err := resourcePath("runs", id, "/input")
+	if err != nil {
+		return result, err
+	}
+	err = c.call(ctx, http.MethodPost, path, auth, key, input, &result, true, true)
+	if err == nil && (result.ID != id || result.Status == "" || result.Version <= 0) {
+		err = &Error{Outcome: Unknown, Retryable: true}
+	}
+	return result, err
+}
+func (c *Client) Cancel(ctx context.Context, auth Auth, id, key string) (ControlReceipt, error) {
+	return c.control(ctx, auth, id, key, "/cancel")
+}
+func (c *Client) Resume(ctx context.Context, auth Auth, id, key string) (ControlReceipt, error) {
+	return c.control(ctx, auth, id, key, "/resume")
+}
+func (c *Client) control(ctx context.Context, auth Auth, id, key, action string) (ControlReceipt, error) {
+	var result ControlReceipt
+	path, err := resourcePath("runs", id, action)
+	if err != nil {
+		return result, err
+	}
+	err = c.call(ctx, http.MethodPost, path, auth, key, struct{}{}, &result, true, true)
+	if err == nil && (result.ID != id || result.Status == "" || result.Version <= 0) {
+		err = &Error{Outcome: Unknown, Retryable: true}
+	}
+	return result, err
+}
+func resourcePath(kind, id, suffix string) (string, error) {
+	if id == "" || len(id) > 128 {
+		return "", &Error{Outcome: NotStarted}
+	}
+	for _, ch := range id {
+		if !strings.ContainsRune("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_", ch) {
+			return "", &Error{Outcome: NotStarted}
+		}
+	}
+	return "/" + kind + "/" + id + suffix, nil
+}
+
+func (c *Client) call(
+	ctx context.Context,
+	method, path string,
+	auth Auth,
+	key string,
+	input, result any,
+	mutation, idempotent bool,
+) error {
+	if ctx.Err() != nil || auth.ServiceToken == "" || auth.SubjectToken != "" && auth.SessionID != "" {
+		return &Error{Outcome: NotStarted}
+	}
+	if idempotent &&
+		(len(key) == 0 || len(key) > 128 || strings.TrimSpace(key) != key || strings.ContainsAny(key, "\r\n")) {
+		return &Error{Outcome: NotStarted}
+	}
+	body, err := json.Marshal(input)
+	if err != nil {
+		return &Error{Outcome: NotStarted}
+	}
+	var reader io.Reader
+	if input != nil {
+		reader = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.base+"/v1"+path, reader)
+	if err != nil {
+		return &Error{Outcome: NotStarted}
+	}
+	if mutation {
+		// The durable worker owns retries. Transport retries can hide an unknown
+		// first effect behind a later rejection of the same idempotency key.
+		req.GetBody = nil
+	}
+	req.Header.Set("Authorization", "Bearer "+auth.ServiceToken)
+	if auth.SubjectToken != "" {
+		req.Header.Set("X-Subject-Token", auth.SubjectToken)
+	}
+	if auth.SessionID != "" {
+		req.Header.Set("X-Auth-Session-Id", auth.SessionID)
+	}
+	if key != "" {
+		req.Header.Set("Idempotency-Key", key)
+	}
+	if input != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	outcome := Rejected
+	if mutation {
+		outcome = Unknown
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		var networkError *net.OpError
+		if errors.As(err, &networkError) && networkError.Op == "dial" {
+			return &Error{Outcome: NotStarted, Retryable: true}
+		}
+		return &Error{Outcome: outcome, Retryable: !mutation || idempotent}
+	}
+	defer resp.Body.Close()
+	return decodeResponse(resp, result, mutation, idempotent)
+}
+
+func decodeResponse(resp *http.Response, result any, mutation bool, idempotent bool) error {
+	outcome := Rejected
+	if mutation {
+		outcome = Unknown
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBytes+1))
+	if err != nil || len(data) > MaxResponseBytes {
+		return &Error{StatusCode: resp.StatusCode, Outcome: outcome, Retryable: !mutation || idempotent}
+	}
+	var code string
+	// Only this typed conflict is safe negative evidence after an idempotent Input replay.
+	if resp.StatusCode == http.StatusConflict {
+		var body struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		if json.Unmarshal(data, &body) == nil && body.Error.Code == CodeRunTerminal {
+			code = CodeRunTerminal
+		}
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		e := &Error{StatusCode: resp.StatusCode, Outcome: Rejected, Code: code}
+		if resp.StatusCode >= http.StatusInternalServerError {
+			e.Outcome = outcome
+			e.Retryable = !mutation || idempotent
+		}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			e.Retryable = true
+		}
+		return e
+	}
+	if err = json.Unmarshal(data, result); err != nil {
+		return &Error{StatusCode: resp.StatusCode, Outcome: outcome, Retryable: !mutation || idempotent}
+	}
+	return nil
+}
+SOURCE: internal/db/store.go
+package db
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
+
+	"github.com/complynx/zns-chatbot/internal/db/sqlc"
+	"github.com/complynx/zns-chatbot/migrations"
+)
+
+const routeNewRun = "new_run"
+const routeStructured = "structured"
+const taskStateCompleted = "completed"
+
+type Store struct {
+	pool *pgxpool.Pool
+	q    *sqlc.Queries
+}
+
+func Open(ctx context.Context, dsn string) (*Store, error) {
+	p, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		return nil, err
+	}
+	if err = p.Ping(ctx); err != nil {
+		p.Close()
+		return nil, err
+	}
+	return &Store{p, sqlc.New(p)}, nil
+}
+func (s *Store) Pool() *pgxpool.Pool { return s.pool }
+func (s *Store) Close()              { s.pool.Close() }
+func (s *Store) Migrate(ctx context.Context) error {
+	d := stdlib.OpenDBFromPool(s.pool)
+	defer d.Close()
+	p, err := goose.NewProvider(goose.DialectPostgres, d, migrations.Files)
+	if err != nil {
+		return err
+	}
+	_, err = p.Up(ctx)
+	return err
+}
+func task(t sqlc.ShuttleTask) Task {
+	return Task{
+		ID:             t.ID,
+		UserID:         t.UserID,
+		ConversationID: t.ConversationID,
+		TargetTaskID:   t.TargetTaskID,
+		Seq:            t.Seq,
+		Request:        t.Request,
+		State:          t.State,
+		Route:          t.Route,
+		TargetRunID:    t.TargetRunID,
+		RunID:          t.RunID,
+		AuthSessionID:  t.AuthSessionID,
+		QuestionID:     t.QuestionID,
+		Snapshot:       t.Snapshot,
+		Version:        t.Version,
+		Fence:          t.Fence,
+		LeaseOwner:     t.LeaseOwner,
+	}
+}
+func user(u sqlc.ShuttleUser) User {
+	return User{u.ID, u.BotID, u.TgUserID, u.Profile, u.ZitadelSubject, u.ZitadelOrg, u.Revoked}
+}
+func (s *Store) GetTask(ctx context.Context, id uuid.UUID) (Task, error) {
+	t, e := s.q.GetTask(ctx, id)
+	return task(t), e
+}
+func (s *Store) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
+	u, e := s.q.GetUser(ctx, id)
+	return user(u), e
+}
+func (s *Store) GetUserBySubject(ctx context.Context, botID int64, organization, subject string) (User, error) {
+	u, e := s.q.GetUserBySubject(ctx, sqlc.GetUserBySubjectParams{
+		BotID: botID, ZitadelOrg: organization, ZitadelSubject: subject,
+	})
+	return user(u), e
+}
+func (s *Store) BindSubject(ctx context.Context, id uuid.UUID, subject, org string) (User, error) {
+	if subject == "" {
+		return User{}, fmt.Errorf("empty subject")
+	}
+	u, e := s.q.BindIdentity(ctx, sqlc.BindIdentityParams{ID: id, ZitadelSubject: subject, ZitadelOrg: org})
+	return user(u), e
+}
+func (s *Store) RevokeUser(ctx context.Context, id uuid.UUID, revoked bool) error {
+	_, e := s.q.RevokeUser(ctx, sqlc.RevokeUserParams{ID: id, Revoked: revoked})
+	return e
+}
+
+// Intake commits the immutable accepted request and its queue job together.
+func (s *Store) Intake(
+	ctx context.Context,
+	r IntakeRequest,
+	enqueue func(context.Context, pgx.Tx, uuid.UUID) error,
+) (Task, bool, error) {
+	if !json.Valid(r.Payload) {
+		return Task{}, false, fmt.Errorf("invalid intake payload")
+	}
+	if len(r.Profile) == 0 {
+		r.Profile = json.RawMessage(`{}`)
+	}
+	tx, e := s.pool.Begin(ctx)
+	if e != nil {
+		return Task{}, false, e
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	// One update key serializes duplicates without holding a conversation for a run.
+	_, e = tx.Exec(
+		ctx,
+		"SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
+		fmt.Sprintf("shuttle:%d:%d", r.BotID, r.UpdateID),
+	)
+	if e != nil {
+		return Task{}, false, e
+	}
+	q := s.q.WithTx(tx)
+	id, e := q.FindInbox(ctx, sqlc.FindInboxParams{BotID: r.BotID, UpdateID: r.UpdateID})
+	if e == nil {
+		return existingActiveTask(ctx, q, id)
+	}
+	if !errors.Is(e, pgx.ErrNoRows) {
+		return Task{}, false, e
+	}
+	u, e := q.UpsertUser(
+		ctx,
+		sqlc.UpsertUserParams{ID: uuid.New(), BotID: r.BotID, TgUserID: r.TelegramUserID, Profile: r.Profile},
+	)
+	if e != nil {
+		return Task{}, false, e
+	}
+	if u.Revoked {
+		return Task{}, false, &UserRevokedError{PublicReason: u.BanPublicReason}
+	}
+	c, e := q.EnsureConversation(ctx, sqlc.EnsureConversationParams{ID: uuid.New(), UserID: u.ID, ChatID: r.ChatID})
+	if e != nil {
+		return Task{}, false, e
+	}
+	seq, e := q.NextSequence(ctx, c.ID)
+	if e != nil {
+		return Task{}, false, e
+	}
+	t, e := q.InsertTask(
+		ctx,
+		sqlc.InsertTaskParams{ID: uuid.New(), UserID: u.ID, ConversationID: c.ID, Seq: seq, Request: r.Payload},
+	)
+	if e != nil {
+		return Task{}, false, e
+	}
+	if e = insertAttachments(ctx, q, u.ID, t.ID, r.Attachments); e != nil {
+		return Task{}, false, e
+	}
+	if e = touchSymbols(ctx, tx, r.BotID, t.ID, r.Symbols); e != nil {
+		return Task{}, false, e
+	}
+	if e = q.InsertInbox(
+		ctx,
+		sqlc.InsertInboxParams{BotID: r.BotID, UpdateID: r.UpdateID, TaskID: t.ID, Payload: r.Payload},
+	); e != nil {
+		return Task{}, false, e
+	}
+	if e = resumeTelegram(ctx, tx, r); e != nil {
+		return Task{}, false, e
+	}
+	if enqueue != nil {
+		if e = enqueue(ctx, tx, t.ID); e != nil {
+			return Task{}, false, e
+		}
+	}
+	if e = tx.Commit(ctx); e != nil {
+		return Task{}, false, e
+	}
+	return task(t), false, nil
+}
+
+// Route only holds the short inbox ordering gate. Active Loom runs hold no lock.
+func (s *Store) Route(ctx context.Context, id uuid.UUID) (Task, error) {
+	tx, e := s.pool.Begin(ctx)
+	if e != nil {
+		return Task{}, e
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+	t, e := q.GetTask(ctx, id)
+	if e != nil {
+		return Task{}, e
+	}
+	c, e := q.LockConversation(ctx, t.ConversationID)
+	if e != nil {
+		return Task{}, e
+	}
+	t, e = q.GetTask(ctx, id)
+	if e != nil {
+		return Task{}, e
+	}
+	if t.Route != "" {
+		return task(t), nil
+	}
+	var envelope struct {
+		NativeAvatar bool   `json:"native_avatar"`
+		Kind         string `json:"kind"`
+		QuestionID   string `json:"question_id"`
+	}
+	if e = json.Unmarshal(t.Request, &envelope); e != nil {
+		return Task{}, e
+	}
+	if envelope.Kind == routeStructured {
+		return saveStructuredRoute(ctx, tx, q, c, t)
+	}
+	if envelope.NativeAvatar {
+		active, err := activeTask(ctx, q, c.ActiveTaskID)
+		if err != nil {
+			return Task{}, err
+		}
+		// A photo answering an active question belongs to that workflow. Other
+		// captionless photos are native side tasks and do not steer a Loom run.
+		if active.ID == uuid.Nil || active.State != "awaiting_user" {
+			return saveStructuredRoute(ctx, tx, q, c, t)
+		}
+	}
+	return routeConversationMessage(ctx, tx, q, c, t, envelope.Kind, envelope.QuestionID)
+}
+
+func routeConversationMessage(
+	ctx context.Context, tx pgx.Tx, q *sqlc.Queries, c sqlc.ShuttleConversation, t sqlc.ShuttleTask,
+	kind, questionID string,
+) (Task, error) {
+	if t.Seq != c.RoutedSeq+1 {
+		return Task{}, ErrRoutingPending
+	}
+	route, target := routeNewRun, uuid.Nil
+	run, question := "", questionID
+	active := c.ActiveTaskID
+	a, lookupErr := routingActiveTask(ctx, q, c, t.Seq)
+	if lookupErr != nil {
+		return Task{}, lookupErr
+	}
+	if a.ID != uuid.Nil {
+		target = a.ID
+		run = a.RunID
+		question = a.QuestionID
+		if questionID != "" {
+			question = questionID
+		}
+		route = "input"
+	} else {
+		active = pgtype.UUID{}
+	}
+	if kind == "cancel" || kind == "approval" || kind == "input" {
+		route = kind
+		if target == uuid.Nil {
+			route = "no_active"
+		}
+	}
+	if route == routeNewRun {
+		active = pgtype.UUID{Bytes: t.ID, Valid: true}
+	}
+	t, e := q.SetRoute(
+		ctx,
+		sqlc.SetRouteParams{ID: t.ID, Route: route, TargetRunID: run, QuestionID: question, TargetTaskID: target},
+	)
+	if e != nil {
+		return Task{}, e
+	}
+	return finishRouting(ctx, tx, q, c, t, active)
+}
+
+func (s *Store) Claim(ctx context.Context, id uuid.UUID, owner string, lease time.Duration) (Task, error) {
+	if owner == "" || lease <= 0 {
+		return Task{}, fmt.Errorf("invalid lease")
+	}
+	t, e := s.q.ClaimTask(ctx, sqlc.ClaimTaskParams{ID: id, LeaseOwner: owner, Column3: lease.Milliseconds()})
+	if errors.Is(e, pgx.ErrNoRows) {
+		e = ErrLeaseLost
+	}
+	return task(t), e
+}
+func (s *Store) Release(ctx context.Context, id uuid.UUID, owner string, fence int64) error {
+	n, e := s.q.ReleaseTask(ctx, sqlc.ReleaseTaskParams{ID: id, LeaseOwner: owner, Fence: fence})
+	if e == nil && n == 0 {
+		return ErrLeaseLost
+	}
+	return e
+}
+func (s *Store) Save(ctx context.Context, t Task, owner string, fence int64, out []Outbound) (Task, error) {
+	if len(t.Snapshot) == 0 {
+		t.Snapshot = json.RawMessage(`{}`)
+	}
+	tx, e := s.pool.Begin(ctx)
+	if e != nil {
+		return Task{}, e
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+	saved, e := q.SaveTask(
+		ctx,
+		sqlc.SaveTaskParams{
+			ID:            t.ID,
+			LeaseOwner:    owner,
+			Fence:         fence,
+			State:         t.State,
+			RunID:         t.RunID,
+			AuthSessionID: t.AuthSessionID,
+			QuestionID:    t.QuestionID,
+			Snapshot:      t.Snapshot,
+		},
+	)
+	if errors.Is(e, pgx.ErrNoRows) {
+		return Task{}, ErrLeaseLost
+	}
+	if e != nil {
+		return Task{}, e
+	}
+	if terminalTask(t.State) {
+		e = q.ClearConversationRun(
+			ctx,
+			sqlc.ClearConversationRunParams{ID: t.ConversationID, ActiveTaskID: pgtype.UUID{Bytes: t.ID, Valid: true}},
+		)
+	} else if saved.Route != routeStructured {
+		e = q.UpdateConversationRun(
+			ctx,
+			sqlc.UpdateConversationRunParams{
+				ID:                 t.ConversationID,
+				ActiveTaskID:       pgtype.UUID{Bytes: t.ID, Valid: true},
+				ActiveRunID:        t.RunID,
+				AwaitingQuestionID: t.QuestionID,
+			},
+		)
+	}
+	if e != nil {
+		return Task{}, e
+	}
+	if e = appendOutbox(ctx, tx, t.ID, out); e != nil {
+		return Task{}, e
+	}
+	if saved.Route == routeNewRun && saved.State == taskStateCompleted && saved.RunID != "" && len(out) > 0 {
+		keys := make([]string, len(out))
+		for n, item := range out {
+			keys[n] = item.DedupKey
+		}
+		if e = q.RegisterFinalResponse(
+			ctx,
+			sqlc.RegisterFinalResponseParams{TaskID: t.ID, OutboxKeys: keys},
+		); e != nil {
+			return Task{}, e
+		}
+	}
+	if e = tx.Commit(ctx); e != nil {
+		return Task{}, e
+	}
+	return task(saved), nil
+}
+
+func terminalTask(state string) bool {
+	switch state {
+	case taskStateCompleted, "failed", "cancelled", deliveryUnknown, deliveryFailed, "closed":
+		return true
+	default:
+		return false
+	}
+}
+func activeTask(ctx context.Context, q *sqlc.Queries, id pgtype.UUID) (sqlc.ShuttleTask, error) {
+	if !id.Valid {
+		return sqlc.ShuttleTask{}, nil
+	}
+	t, err := q.GetTask(ctx, uuid.UUID(id.Bytes))
+	if err != nil {
+		return sqlc.ShuttleTask{}, err
+	}
+	if terminalTask(t.State) {
+		return sqlc.ShuttleTask{}, nil
+	}
+	return t, nil
+}
+
+// ControlReady orders controls for one target run without holding its lifetime lock.
+func (s *Store) ControlReady(ctx context.Context, taskID uuid.UUID) (bool, error) {
+	return s.q.ControlReady(ctx, taskID)
+}
+
+// PromoteMessage preserves accepted text when its routed target has finished.
+// Call only with proof that no external input effect occurred. A rejected input
+// may have a persisted intent; an unknown outcome does not permit promotion.
+func (s *Store) PromoteMessage(ctx context.Context, taskID uuid.UUID, owner string, fence int64) (Task, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return Task{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+	current, err := q.GetTask(ctx, taskID)
+	if err != nil {
+		return Task{}, err
+	}
+	conversation, err := q.LockConversation(ctx, current.ConversationID)
+	if err != nil {
+		return Task{}, err
+	}
+	target, err := q.GetTask(ctx, current.TargetTaskID)
+	if err != nil {
+		return Task{}, err
+	}
+	if !terminalTask(target.State) {
+		return Task{}, ErrRoutingPending
+	}
+	active, err := activeTask(ctx, q, conversation.ActiveTaskID)
+	if err != nil {
+		return Task{}, err
+	}
+	if active.ID != uuid.Nil {
+		return Task{}, ErrRoutingPending
+	}
+	promoted, err := q.PromoteTask(ctx, sqlc.PromoteTaskParams{ID: taskID, LeaseOwner: owner, Fence: fence})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Task{}, ErrLeaseLost
+	}
+	if err != nil {
+		return Task{}, err
+	}
+	if err = q.ActivatePromotedTask(
+		ctx,
+		sqlc.ActivatePromotedTaskParams{
+			ID:           current.ConversationID,
+			ActiveTaskID: pgtype.UUID{Bytes: taskID, Valid: true},
+		},
+	); err != nil {
+		return Task{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return Task{}, err
+	}
+	return task(promoted), nil
+}
+
+func routingActiveTask(
+	ctx context.Context,
+	q *sqlc.Queries,
+	c sqlc.ShuttleConversation,
+	seq int64,
+) (sqlc.ShuttleTask, error) {
+	active, err := activeTask(ctx, q, c.ActiveTaskID)
+	if err != nil || active.ID != uuid.Nil {
+		return active, err
+	}
+	pending, err := q.HasEarlierPromotableMessage(
+		ctx,
+		sqlc.HasEarlierPromotableMessageParams{ConversationID: c.ID, Seq: seq},
+	)
+	if err != nil {
+		return sqlc.ShuttleTask{}, err
+	}
+	if pending {
+		return sqlc.ShuttleTask{}, ErrRoutingPending
+	}
+	return active, nil
+}
+
+func saveStructuredRoute(
+	ctx context.Context,
+	tx pgx.Tx,
+	q *sqlc.Queries,
+	c sqlc.ShuttleConversation,
+	t sqlc.ShuttleTask,
+) (Task, error) {
+	routed, err := q.SetRoute(ctx, sqlc.SetRouteParams{ID: t.ID, Route: routeStructured, TargetTaskID: uuid.Nil})
+	if err != nil {
+		return Task{}, err
+	}
+	return finishRouting(ctx, tx, q, c, routed, c.ActiveTaskID)
+}
+
+func finishRouting(
+	ctx context.Context,
+	tx pgx.Tx,
+	q *sqlc.Queries,
+	c sqlc.ShuttleConversation,
+	t sqlc.ShuttleTask,
+	active pgtype.UUID,
+) (Task, error) {
+	routed, e := q.RoutedSequence(ctx, sqlc.RoutedSequenceParams{
+		ConversationID: c.ID, RoutedSeq: c.RoutedSeq, NextSeq: c.NextSeq,
+	})
+	if e != nil {
+		return Task{}, e
+	}
+	if e = q.AdvanceRouting(
+		ctx,
+		sqlc.AdvanceRoutingParams{ID: c.ID, RoutedSeq: routed, ActiveTaskID: active},
+	); e != nil {
+		return Task{}, e
+	}
+	if e = tx.Commit(ctx); e != nil {
+		return Task{}, e
+	}
+	return task(t), nil
+}
+SOURCE: internal/db/keyboard.go
+package db
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"strconv"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/google/uuid"
+)
+
+// KeyboardState is read under the application's short per-conversation send gate.
+// No database lock is held during Telegram I/O.
+type KeyboardState struct {
+	ActiveTaskID        uuid.UUID
+	Run                 json.RawMessage
+	KeyboardOwnerTaskID uuid.UUID
+	LatestInputReceipt  json.RawMessage
+}
+
+func (s *Store) KeyboardState(ctx context.Context, taskID uuid.UUID) (KeyboardState, error) {
+	var state KeyboardState
+	err := s.pool.QueryRow(ctx, `SELECT coalesce(c.active_task_id,'00000000-0000-0000-0000-000000000000'::uuid),
+ coalesce(a.snapshot->'run','null'::jsonb),coalesce((
+ SELECT o.task_id FROM shuttle_tasks newer JOIN shuttle_outbox o ON o.task_id=newer.id
+ WHERE newer.conversation_id=t.conversation_id
+ AND o.state='delivered' AND coalesce(o.receipt->>'reply_keyboard_hash','')<>''
+ AND coalesce(o.receipt->>'reply_keyboard_sent_at','')<>''
+ AND o.payload#>'{reply_markup,keyboard}' IS NOT NULL
+ ORDER BY (o.receipt->>'reply_keyboard_sent_at')::timestamptz DESC,o.id DESC LIMIT 1),
+ '00000000-0000-0000-0000-000000000000'::uuid),coalesce((
+ SELECT input.snapshot->'input_receipt' FROM shuttle_tasks input
+ WHERE input.conversation_id=t.conversation_id AND input.target_task_id=c.active_task_id
+ AND input.run_id=a.run_id AND input.snapshot#>>'{input_receipt,run_id}'=a.run_id
+ ORDER BY (input.snapshot#>>'{input_receipt,version}')::bigint DESC NULLS LAST,input.seq DESC LIMIT 1),'null'::jsonb)
+ FROM shuttle_tasks t JOIN shuttle_conversations c ON c.id=t.conversation_id
+ LEFT JOIN shuttle_tasks a ON a.id=c.active_task_id WHERE t.id=$1`, taskID).
+		Scan(&state.ActiveTaskID, &state.Run, &state.KeyboardOwnerTaskID, &state.LatestInputReceipt)
+	return state, err
+}
+
+// HasInputStepLimitNotice checks whether an input already committed a notice for this pause version.
+func (s *Store) HasInputStepLimitNotice(
+	ctx context.Context, parentID uuid.UUID, runID string, version int64,
+) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx, `SELECT EXISTS(
+ SELECT 1 FROM shuttle_tasks input JOIN shuttle_tasks parent ON parent.id=input.target_task_id
+ JOIN shuttle_outbox notice ON notice.task_id=input.id
+ WHERE parent.id=$1 AND input.conversation_id=parent.conversation_id AND input.run_id=$2
+ AND input.snapshot#>>'{input_receipt,run_id}'=$2
+ AND input.snapshot#>>'{input_receipt,status}'='paused'
+ AND input.snapshot#>>'{input_receipt,reason}'='step_limit'
+ AND (input.snapshot#>>'{input_receipt,version}')::bigint >= $3
+ AND notice.dedup_key LIKE input.id::text||':step-limit:'||$2||':%'
+ AND notice.state NOT IN ('delivery_failed','delivery_blocked'))`, parentID, runID, version).Scan(&exists)
+	return exists, err
+}
+
+// DeliveredPromptContext returns only metadata from an actually delivered message
+// in the input task's own conversation. Unknown replies retain their opaque reference.
+func (s *Store) DeliveredPromptContext(
+	ctx context.Context,
+	taskID uuid.UUID,
+	messageID int64,
+) (json.RawMessage, error) {
+	var raw json.RawMessage
+	err := s.pool.QueryRow(ctx, "SELECT o.payload->'_loom_context'\n"+
+		" FROM shuttle_tasks input JOIN shuttle_tasks source ON "+
+		"source.conversation_id=input.conversation_id AND source.user_id=input.user_id\n"+
+		" JOIN shuttle_outbox o ON o.task_id=source.id\n"+
+		" WHERE input.id=$1 AND o.state='delivered' AND o.receipt->>'message_id'=$2\n"+
+		" AND o.payload->'_loom_context' IS NOT NULL\n"+
+		" ORDER BY o.id LIMIT 1", taskID, strconv.FormatInt(messageID, 10)).Scan(&raw)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	return raw, err
+}
