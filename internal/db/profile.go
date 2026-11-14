@@ -23,6 +23,7 @@ const (
 	profileSetName        = "set_name"
 	profileCompleteName   = "complete_name"
 	profileSetLanguage    = "set_language"
+	profileSetVisibility  = "set_visibility"
 	profileNameSourceUser = "user"
 )
 
@@ -39,6 +40,11 @@ type NameExpectation struct {
 }
 
 type UserProfile struct {
+	Gender          string           `json:"gender,omitempty"`
+	Pronouns        string           `json:"pronouns,omitempty"`
+	GenderSource    string           `json:"gender_source,omitempty"`
+	PronounsSource  string           `json:"pronouns_source,omitempty"`
+	Visible         bool             `json:"visible"`
 	UserID          uuid.UUID        `json:"user_id"`
 	Version         int64            `json:"version"`
 	FullName        string           `json:"full_name"`
@@ -53,6 +59,10 @@ type UserProfile struct {
 }
 
 type ProfileMutation struct {
+	Gender          *string   `json:"gender,omitempty"`
+	Pronouns        *string   `json:"pronouns,omitempty"`
+	GenderSource    string    `json:"gender_source,omitempty"`
+	Visible         *bool     `json:"visible,omitempty"`
 	OperationID     uuid.UUID `json:"operation_id"`
 	ExpectedVersion int64     `json:"expected_version"`
 	Kind            string    `json:"kind"`
@@ -66,8 +76,9 @@ type ProfileMutation struct {
 }
 
 type ProfileConversationTurn struct {
-	Text  string `json:"text"`
-	Reply string `json:"reply"`
+	Text          string          `json:"text"`
+	Reply         string          `json:"reply"`
+	ForwardOrigin json.RawMessage `json:"forward_origin,omitempty"`
 }
 
 // RecentProfileConversation supplies bounded language evidence from this task's own chat.
@@ -85,7 +96,8 @@ func (s *Store) RecentProfileConversation(
 		return nil, err
 	}
 	rows, err := tx.Query(ctx, `SELECT left(coalesce(prior.request->>'text',''),512),
-left(prior.snapshot#>>'{run,result}',512)
+left(prior.snapshot#>>'{run,result}',512),
+coalesce(prior.request->'forward_origin',prior.request#>'{raw_update,message,forward_origin}')
 FROM shuttle_tasks current_task JOIN shuttle_tasks prior
  ON prior.conversation_id=current_task.conversation_id AND prior.user_id=current_task.user_id
  AND prior.seq<current_task.seq
@@ -101,7 +113,7 @@ ORDER BY prior.seq DESC LIMIT 3`, taskID, scope.UserID)
 	turns := make([]ProfileConversationTurn, 0)
 	for rows.Next() {
 		var turn ProfileConversationTurn
-		if err = rows.Scan(&turn.Text, &turn.Reply); err != nil {
+		if err = rows.Scan(&turn.Text, &turn.Reply, &turn.ForwardOrigin); err != nil {
 			return nil, err
 		}
 		turns = append(turns, turn)
@@ -129,7 +141,7 @@ func readProfile(ctx context.Context, tx pgx.Tx, userID uuid.UUID) (UserProfile,
 	var created, expires pgtype.Timestamptz
 	err := tx.QueryRow(ctx, "SELECT version,full_name,bot_language,expectation_id,expectation_created_at,"+
 		"expectation_expires_at,first_name,last_name,name_source,first_name_latin,"+
-		"last_name_latin FROM shuttle_user_profiles WHERE user_id=$1", userID).
+		"last_name_latin,gender,pronouns,gender_source,pronouns_source FROM shuttle_user_profiles WHERE user_id=$1", userID).
 		Scan(
 			&p.Version,
 			&p.FullName,
@@ -142,11 +154,13 @@ func readProfile(ctx context.Context, tx pgx.Tx, userID uuid.UUID) (UserProfile,
 			&p.NameSource,
 			&p.FirstNameLatin,
 			&p.LastNameLatin,
+			&p.Gender, &p.Pronouns, &p.GenderSource, &p.PronounsSource,
 		)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return p, err
 	}
-	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&p.ObservedAt); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT clock_timestamp(),visible FROM shuttle_users WHERE id=$1`, userID).
+		Scan(&p.ObservedAt, &p.Visible); err != nil {
 		return p, err
 	}
 	p.ObservedAt = p.ObservedAt.UTC()
@@ -177,6 +191,22 @@ func normalizeProfileMutation(m ProfileMutation) (ProfileMutation, error) {
 	if m.OperationID == uuid.Nil || m.ExpectedVersion < 0 {
 		return m, ErrInvalidProfile
 	}
+	if m.Kind == profileSetGender {
+		return normalizeGenderMutation(m)
+	}
+	if m.Gender != nil || m.Pronouns != nil || m.GenderSource != "" {
+		return m, ErrInvalidProfile
+	}
+	if m.Kind == profileSetVisibility {
+		return normalizeVisibilityMutation(m)
+	}
+	if m.Visible != nil {
+		return m, ErrInvalidProfile
+	}
+	return normalizeBaseProfileMutation(m)
+}
+
+func normalizeBaseProfileMutation(m ProfileMutation) (ProfileMutation, error) {
 	switch m.Kind {
 	case profileSetName, profileCompleteName:
 		return normalizeProfileNameMutation(m)
@@ -199,6 +229,14 @@ func normalizeProfileMutation(m ProfileMutation) (ProfileMutation, error) {
 		return m, ErrInvalidProfile
 	}
 	if m.FirstName != "" || m.LastName != "" || m.FirstNameLatin != nil || m.LastNameLatin != nil {
+		return m, ErrInvalidProfile
+	}
+	return m, nil
+}
+
+func normalizeVisibilityMutation(m ProfileMutation) (ProfileMutation, error) {
+	if m.Visible == nil || m.FullName != "" || m.BotLanguage != "" || m.ExpectationID != uuid.Nil ||
+		m.FirstName != "" || m.LastName != "" || m.FirstNameLatin != nil || m.LastNameLatin != nil {
 		return m, ErrInvalidProfile
 	}
 	return m, nil
@@ -284,6 +322,7 @@ func mutateProfile(ctx context.Context, tx pgx.Tx, userID uuid.UUID, mutation Pr
 			return p, err
 		}
 	}
+
 	if err = saveProfileReceipt(ctx, tx, m.OperationID, digest[:], p); err != nil {
 		return p, err
 	}
@@ -315,13 +354,22 @@ func replayProfileOperation(
 	if !bytes.Equal(hash, digest) {
 		return UserProfile{}, ErrConflict
 	}
-	var result UserProfile
+	result := UserProfile{Visible: true}
 	err = json.Unmarshal(receipt, &result)
 	return result, err
 }
 
 func applyProfileMutation(ctx context.Context, tx pgx.Tx, p *UserProfile, m ProfileMutation) (bool, error) {
 	switch m.Kind {
+	case profileSetGender:
+		return applyGenderMutation(p, m)
+	case profileSetVisibility:
+		changed := p.Visible != *m.Visible
+		if _, err := tx.Exec(ctx, `UPDATE shuttle_users SET visible=$2 WHERE id=$1`, p.UserID, *m.Visible); err != nil {
+			return false, err
+		}
+		p.Visible = *m.Visible
+		return changed, nil
 	case profileSetName:
 		latinChanged := applyProfileLatin(p, m)
 		changed := p.FullName != m.FullName || p.NameExpectation != nil ||
@@ -455,7 +503,7 @@ func (s *Store) ProfileOperation(ctx context.Context, scope ProfileScope, operat
 		Scan(&receipt); err != nil {
 		return UserProfile{}, err
 	}
-	var p UserProfile
+	p := UserProfile{Visible: true}
 	err = json.Unmarshal(receipt, &p)
 	return p, err
 }

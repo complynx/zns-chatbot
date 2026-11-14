@@ -94,7 +94,7 @@ func startupMigrationSnapshot(t *testing.T, store *db.Store) string {
 	t.Helper()
 	var snapshot string
 	err := store.Pool().QueryRow(t.Context(), `SELECT jsonb_build_object(
- 'users',(SELECT jsonb_agg(to_jsonb(u) ORDER BY id) FROM shuttle_users u),
+ 'users',(SELECT jsonb_agg(to_jsonb(u)-'visible' ORDER BY id) FROM shuttle_users u),
  'tasks',(SELECT jsonb_agg(to_jsonb(t) ORDER BY id) FROM shuttle_tasks t),
  'outbox',(SELECT jsonb_agg(to_jsonb(o) ORDER BY id) FROM shuttle_outbox o),
  'settings',(SELECT jsonb_agg(to_jsonb(s)) FROM shuttle_settings s))::text`).Scan(&snapshot)
@@ -129,6 +129,12 @@ func TestStartupMigrationsUpgradePreservesDataAndRepairsRuntimeGrants(t *testing
 	require.NoError(t, migrateAtStartup(t.Context(), f.ownerURL, f.runtime, &bytes.Buffer{}))
 	require.NoError(t, f.runtime.CheckRuntimeAccess(t.Context()))
 	require.Equal(t, before, startupMigrationSnapshot(t, f.owner))
+	var visible bool
+	require.NoError(
+		t,
+		f.owner.Pool().QueryRow(t.Context(), `SELECT visible FROM shuttle_users WHERE id=$1`, task.UserID).Scan(&visible),
+	)
+	require.True(t, visible, "Existing accounts default to visible after the directory migration")
 	// A limited runtime restarts without migration credentials once schema/grants are current.
 	require.Error(t, f.runtime.CheckMigrationAccess(t.Context(), f.role))
 	require.NoError(t, migrateAtStartup(t.Context(), "", f.runtime, &bytes.Buffer{}))

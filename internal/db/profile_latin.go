@@ -63,7 +63,18 @@ func saveProfileWithLatin(ctx context.Context, tx pgx.Tx, p UserProfile) error {
 	if err := saveProfile(ctx, tx, p); err != nil {
 		return err
 	}
-	_, err := tx.Exec(ctx, `UPDATE shuttle_user_profiles SET first_name_latin=$2,last_name_latin=$3 WHERE user_id=$1`,
-		p.UserID, p.FirstNameLatin, p.LastNameLatin)
+	_, err := tx.Exec(
+		ctx,
+		`UPDATE shuttle_user_profiles SET first_name_latin=$2,last_name_latin=$3,
+ gender=$4,pronouns=$5,gender_source=$6,pronouns_source=$7
+ WHERE user_id=$1`,
+		p.UserID,
+		p.FirstNameLatin,
+		p.LastNameLatin,
+		p.Gender,
+		p.Pronouns,
+		p.GenderSource,
+		p.PronounsSource,
+	)
 	return err
 }

@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/complynx/zns-chatbot/internal/db"
-	"github.com/complynx/zns-chatbot/internal/files"
 	"github.com/complynx/zns-chatbot/internal/loom"
 	"github.com/complynx/zns-chatbot/internal/telegram"
 )
@@ -199,7 +198,7 @@ func (s *Service) profilePrompt(ctx context.Context, t db.Task, i intent) (strin
 	if err != nil {
 		return "", err
 	}
-	text.WriteString(files.Prompt(input, language, i.Attachments))
+	text.WriteString(messagePrompt(i, input, language))
 	if err = appendStartProfileContext(&text, profile, i, language, s.options.SkillsEnabled); err != nil {
 		return "", err
 	}
@@ -251,6 +250,7 @@ func (s *Service) profilePrompt(ctx context.Context, t db.Task, i intent) (strin
 			"read the profile again if this snapshot is stale. "+
 			"Expiration does not cancel registrations or payments. "+
 			"Reply in the current meaningful message or caption's language; "+
+			"quoted forwarded material does not choose reply language. For forwarded-only input and "+
 			"for language-neutral input, use previous conversation language, otherwise use "+
 			"telegram_language_code when present (even outside ru/en), then interface language ",
 		"\nИспользуй zinusya_profile для явных запросов о профиле. "+
@@ -259,6 +259,7 @@ func (s *Service) profilePrompt(ctx context.Context, t db.Task, i intent) (strin
 			"Завершай ожидание только с актуальными ID и версией профиля; "+
 			"перечитай профиль, если снимок устарел. Истечение срока не отменяет регистрации и оплаты. "+
 			"Отвечай на языке текущего содержательного сообщения или подписи; "+
+			"цитаты из пересылок не определяют язык ответа. Для ввода только из пересылки и "+
 			"при языково-нейтральном вводе используй язык предыдущего диалога, иначе используй "+
 			"telegram_language_code при наличии (включая языки вне ru/en), затем язык интерфейса ",
 	))

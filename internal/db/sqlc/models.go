@@ -1419,6 +1419,7 @@ type ShuttleUser struct {
 	ZitadelOrg      string    `json:"zitadel_org"`
 	Revoked         bool      `json:"revoked"`
 	BanPublicReason string    `json:"ban_public_reason"`
+	Visible         bool      `json:"visible"`
 }
 
 type ShuttleUserBan struct {
@@ -1438,6 +1439,13 @@ type ShuttleUserEventContext struct {
 	Version int64       `json:"version"`
 }
 
+type ShuttleUserName struct {
+	UserID     uuid.UUID `json:"user_id"`
+	Name       string    `json:"name"`
+	SearchKeys []string  `json:"search_keys"`
+	Source     string    `json:"source"`
+}
+
 type ShuttleUserProfile struct {
 	UserID               uuid.UUID          `json:"user_id"`
 	Version              int64              `json:"version"`
@@ -1451,6 +1459,10 @@ type ShuttleUserProfile struct {
 	NameSource           string             `json:"name_source"`
 	FirstNameLatin       string             `json:"first_name_latin"`
 	LastNameLatin        string             `json:"last_name_latin"`
+	Gender               string             `json:"gender"`
+	Pronouns             string             `json:"pronouns"`
+	GenderSource         string             `json:"gender_source"`
+	PronounsSource       string             `json:"pronouns_source"`
 }
 
 type ShuttleUserRevocationProposal struct {

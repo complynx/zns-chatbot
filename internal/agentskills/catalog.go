@@ -25,11 +25,12 @@ type binding struct {
 }
 
 const (
-	methodGet       = "get"
-	methodList      = "list"
-	knowledgeModule = "zinusya_knowledge"
-	profileModule   = "zinusya_profile"
-	contextModule   = "zinusya_context"
+	methodGet         = "get"
+	methodList        = "list"
+	knowledgeModule   = "zinusya_knowledge"
+	profileModule     = "zinusya_profile"
+	contextModule     = "zinusya_context"
+	visibilityDefault = "default"
 )
 
 func bindings() []binding {
@@ -79,8 +80,8 @@ func read(name string) Definition {
 // Visibility keeps account, profile, context, knowledge and file entry points in the overview.
 func Visibility(module string) string {
 	switch module {
-	case "zinusya_account", profileModule, contextModule, knowledgeModule, "zinusya_files":
-		return "default"
+	case "zinusya_account", profileModule, contextModule, knowledgeModule, "zinusya_files", "zinusya_people":
+		return visibilityDefault
 	default:
 		return "list"
 	}
@@ -92,12 +93,12 @@ func Annotate(module string, methods []map[string]any) {
 	for _, method := range methods {
 		id, _ := method["id"].(string)
 		method["visibility"] = methodList
-		if module == "zinusya_account" || module == "zinusya_files" && id == "info" ||
-			module == contextModule && id == methodList || module == profileModule && id == methodGet ||
-			module == knowledgeModule && id == "search" {
-			method["visibility"] = "default"
+		if defaultToolVisibility(module, id) {
+			method["visibility"] = visibilityDefault
 		}
-		if module == profileModule && id != methodGet && id != "set_language" && id != "operation" {
+		if module == profileModule && id != methodGet && id != "set_language" && id != "set_visibility" &&
+			id != "set_gender" &&
+			id != "operation" {
 			method["visibility"] = "hidden"
 		}
 		for _, item := range bindings() {
@@ -105,5 +106,22 @@ func Annotate(module string, methods []map[string]any) {
 				method["skills"] = []Definition{read(item.name)}
 			}
 		}
+	}
+}
+
+func defaultToolVisibility(module, id string) bool {
+	switch module {
+	case "zinusya_account", "zinusya_people":
+		return true
+	case "zinusya_files":
+		return id == "info"
+	case contextModule:
+		return id == methodList
+	case profileModule:
+		return id == methodGet || id == "set_visibility" || id == "set_gender"
+	case knowledgeModule:
+		return id == "search"
+	default:
+		return false
 	}
 }

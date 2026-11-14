@@ -96,6 +96,9 @@ func (s *Server) register(api huma.API) {
 	s.registerTaskClosures(api)
 	s.registerSettingsChanges(api)
 	s.registerUserRevocations(api)
+	registerAgentPost(api, "agent-people-search", peopleSearchPath, internalBodyLimit, s.searchPeople)
+	registerAgentPost(api, "agent-person-info", "/internal/agent/people/info", internalBodyLimit, s.personInfo)
+	registerAgentPost(api, "agent-people-list", "/internal/agent/people/list", internalBodyLimit, s.listPeople)
 	s.registerEventChanges(api)
 	huma.Register(
 		api,

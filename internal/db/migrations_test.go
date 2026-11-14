@@ -63,7 +63,7 @@ func baselineFreshDownUpAndPartialLegacyRefusal(t *testing.T) {
 		var version int64
 		require.NoError(t, s.Pool().QueryRow(t.Context(),
 			"SELECT max(version_id) FROM goose_db_version WHERE is_applied").Scan(&version))
-		require.EqualValues(t, 79, version)
+		require.EqualValues(t, 80, version)
 		_, err := provider.DownTo(t.Context(), 0)
 		require.NoError(t, err)
 		var tables int
@@ -150,6 +150,8 @@ SELECT user_id,1,'Анна Иванова','Анна','Иванова','user' FR
 	const objectQuery = "SELECT array_agg(oid ORDER BY oid)::text FROM pg_class WHERE " +
 		"relnamespace=current_schema()::regnamespace " +
 		"AND NOT starts_with(relname,'shuttle_telegram_availability') " +
+		"AND NOT starts_with(relname,'shuttle_user_names') " +
+		"AND relname<>'shuttle_tasks_user_activity_idx' " +
 		"AND NOT starts_with(relname,'shuttle_reaction') " +
 		"AND NOT starts_with(relname,'shuttle_telegram_reactions') AND relname NOT IN " +
 		"('shuttle_user_bans','shuttle_user_bans_pkey','shuttle_user_bans_user_id_request_hash_key') AND relname NOT IN " +
@@ -169,7 +171,8 @@ SELECT user_id,1,'Анна Иванова','Анна','Иванова','user' FR
 	require.NoError(
 		t,
 		s.Pool().
-			QueryRow(t.Context(), "SELECT (to_jsonb(p)-'first_name_latin'-'last_name_latin')::text FROM "+
+			QueryRow(t.Context(), "SELECT (to_jsonb(p)-'first_name_latin'-'last_name_latin'-'gender'-'pronouns'-"+
+				"'gender_source'-'pronouns_source')::text FROM "+
 				"shuttle_user_profiles p").
 			Scan(&retainedProfile),
 	)

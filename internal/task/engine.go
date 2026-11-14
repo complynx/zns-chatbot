@@ -16,7 +16,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/complynx/zns-chatbot/internal/db"
-	"github.com/complynx/zns-chatbot/internal/files"
 	"github.com/complynx/zns-chatbot/internal/identity"
 	"github.com/complynx/zns-chatbot/internal/loom"
 )
@@ -139,10 +138,7 @@ func (s *Service) work(parent context.Context, id uuid.UUID) error {
 		return s.finish(ctx, &t, c, i, stateCompleted, "no_active")
 	}
 	if t.Route == kindStructured {
-		if i.NativeAvatar {
-			return s.nativeAvatarPhoto(ctx, &t, c, i)
-		}
-		return s.structured(ctx, &t, c, i)
+		return s.dispatchStructured(ctx, &t, c, i)
 	}
 	if t.TargetTaskID != uuid.Nil {
 		ready, gateErr := s.store.ControlReady(ctx, t.ID)
@@ -671,7 +667,7 @@ func controlInput(_ db.Task, i intent, run loom.Run) (loom.InputRequest, error) 
 	if i.CallbackTaskID != uuid.Nil {
 		return loom.InputRequest{}, ErrUnsupportedUpdate
 	}
-	input := loom.InputRequest{Kind: "steering", Text: files.Prompt(i.Text, i.PreferredLanguage, i.Attachments)}
+	input := loom.InputRequest{Kind: "steering", Text: messagePrompt(i, i.Text, i.PreferredLanguage)}
 	if i.ReplyToMessageID > 0 {
 		input.Presentation = &loom.InputPresentation{
 			ReplyTo: fmt.Sprintf("telegram:%d:%d", i.ChatID, i.ReplyToMessageID),
