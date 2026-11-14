@@ -57,7 +57,7 @@ func profileOutputSchemas(t *testing.T, h *harness, token string) map[string]*hu
 			schemas[method.ID] = &schema
 		}
 	}
-	require.Len(t, schemas, 7)
+	require.Len(t, schemas, 9)
 	return schemas
 }
 

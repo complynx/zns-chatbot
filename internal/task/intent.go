@@ -17,28 +17,29 @@ import (
 var ErrUnsupportedUpdate = errors.New("unsupported Telegram update")
 
 type intent struct {
-	Symbols              []symbols.Occurrence `json:"symbols,omitempty"`
-	NativeAvatar         bool                 `json:"native_avatar,omitempty"`
-	RegistrationPromptID uuid.UUID            `json:"registration_prompt_id,omitempty"`
-	RegistrationRole     string               `json:"registration_role,omitempty"`
-	CallbackMessageID    int64                `json:"callback_message_id,omitempty"`
-	ReplyToMessageID     int64                `json:"reply_to_message_id,omitempty"`
-	StructuredCommand    string               `json:"structured_command,omitempty"`
-	PartnerCode          *uuid.UUID           `json:"partner_code,omitempty"`
-	Attachments          []files.Incoming     `json:"attachments,omitempty"`
-	PreferredLanguage    string               `json:"preferred_language,omitempty"`
-	TraceParent          string               `json:"traceparent,omitempty"`
-	TraceState           string               `json:"tracestate,omitempty"`
-	Kind                 string               `json:"kind"`
-	User                 telegram.User        `json:"user"`
-	ChatID               int64                `json:"chat_id"`
-	Text                 string               `json:"text,omitempty"`
-	StartContinuation    string               `json:"start_continuation,omitempty"`
-	AfterStartOnboarding bool                 `json:"after_start_onboarding,omitempty"`
-	RawUpdate            json.RawMessage      `json:"raw_update"`
-	CallbackTaskID       uuid.UUID            `json:"callback_task_id,omitempty"`
-	PromptKey            string               `json:"prompt_key,omitempty"`
-	Decision             string               `json:"decision,omitempty"`
+	ForwardOrigin        *telegram.MessageOrigin `json:"forward_origin,omitempty"`
+	Symbols              []symbols.Occurrence    `json:"symbols,omitempty"`
+	NativeAvatar         bool                    `json:"native_avatar,omitempty"`
+	RegistrationPromptID uuid.UUID               `json:"registration_prompt_id,omitempty"`
+	RegistrationRole     string                  `json:"registration_role,omitempty"`
+	CallbackMessageID    int64                   `json:"callback_message_id,omitempty"`
+	ReplyToMessageID     int64                   `json:"reply_to_message_id,omitempty"`
+	StructuredCommand    string                  `json:"structured_command,omitempty"`
+	PartnerCode          *uuid.UUID              `json:"partner_code,omitempty"`
+	Attachments          []files.Incoming        `json:"attachments,omitempty"`
+	PreferredLanguage    string                  `json:"preferred_language,omitempty"`
+	TraceParent          string                  `json:"traceparent,omitempty"`
+	TraceState           string                  `json:"tracestate,omitempty"`
+	Kind                 string                  `json:"kind"`
+	User                 telegram.User           `json:"user"`
+	ChatID               int64                   `json:"chat_id"`
+	Text                 string                  `json:"text,omitempty"`
+	StartContinuation    string                  `json:"start_continuation,omitempty"`
+	AfterStartOnboarding bool                    `json:"after_start_onboarding,omitempty"`
+	RawUpdate            json.RawMessage         `json:"raw_update"`
+	CallbackTaskID       uuid.UUID               `json:"callback_task_id,omitempty"`
+	PromptKey            string                  `json:"prompt_key,omitempty"`
+	Decision             string                  `json:"decision,omitempty"`
 }
 
 func normalize(u telegram.Update, raw json.RawMessage) (intent, error) {
@@ -70,6 +71,7 @@ func messageIntent(i intent, m *telegram.Message) (intent, error) {
 	i.User = *m.From
 	i.ChatID = m.Chat.ID
 	i.Text = m.Text
+	i.ForwardOrigin = m.ForwardOrigin
 	var err error
 	i.Symbols, err = symbols.FromMessage(m)
 	if err != nil {
@@ -85,7 +87,7 @@ func messageIntent(i intent, m *telegram.Message) (intent, error) {
 	if len(i.Attachments) > 0 {
 		i.Text = m.Caption
 	}
-	if len(i.Attachments) == 0 {
+	if len(i.Attachments) == 0 && i.ForwardOrigin == nil {
 		i.PartnerCode = telegram.PartnerStartCode(m.Text)
 	}
 	if (strings.TrimSpace(i.Text) == "" && len(i.Attachments) == 0 && len(i.Symbols) == 0) ||
@@ -97,10 +99,10 @@ func messageIntent(i intent, m *telegram.Message) (intent, error) {
 	if i.Kind == kindMessage && m.ReplyToMessage != nil {
 		i.ReplyToMessageID = m.ReplyToMessage.ID
 	}
-	i.NativeAvatar = i.Kind == kindMessage && nativeAvatarImage(i.Attachments) &&
+	i.NativeAvatar = i.ForwardOrigin == nil && i.Kind == kindMessage && nativeAvatarImage(i.Attachments) &&
 		strings.TrimSpace(i.Text) == "" && i.ReplyToMessageID == 0
 	isStartPayload := startPayload(m.Text) != "" && i.PartnerCode == nil
-	if i.Kind == kindMessage && len(i.Attachments) == 0 && len(i.Symbols) == 0 &&
+	if i.ForwardOrigin == nil && i.Kind == kindMessage && len(i.Attachments) == 0 && len(i.Symbols) == 0 &&
 		(structuredCommand(m.Text) || isStartPayload) {
 		i.Kind = kindStructured
 		i.StructuredCommand = strings.Fields(strings.TrimSpace(m.Text))[0]

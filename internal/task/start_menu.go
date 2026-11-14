@@ -16,7 +16,8 @@ func (s *Service) completedStartWelcome(
 	c checkpoint,
 	i intent,
 ) ([]db.Outbound, error) {
-	if i.Kind != kindMessage || (!c.WelcomeAfterOnboarding && strings.TrimSpace(i.Text) != startCommand) {
+	if messageOrigin(i) != nil || i.Kind != kindMessage ||
+		(!c.WelcomeAfterOnboarding && strings.TrimSpace(i.Text) != startCommand) {
 		return nil, nil
 	}
 	bot, organization, _ := s.iam.DeploymentScope()

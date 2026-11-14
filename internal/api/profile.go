@@ -13,6 +13,7 @@ import (
 )
 
 const (
+	profileSchemaVisible     = "visible"
 	profilePath              = "/internal/agent/profile/"
 	schemaFullName           = "full_name"
 	schemaFirstName          = "first_name"
@@ -35,6 +36,18 @@ type profileNameArguments struct {
 type profileLanguageArguments struct {
 	ExpectedVersion int64  `json:"expected_version" minimum:"0"`
 	BotLanguage     string `json:"bot_language" enum:"auto,en,ru"`
+}
+
+type profileVisibilityArguments struct {
+	ExpectedVersion int64 `json:"expected_version" minimum:"0"`
+	Visible         bool  `json:"visible"`
+}
+
+type profileGenderArguments struct {
+	ExpectedVersion int64   `json:"expected_version" minimum:"0"`
+	Gender          *string `json:"gender,omitempty" maxLength:"128"`
+	Pronouns        *string `json:"pronouns,omitempty" maxLength:"128"`
+	Source          string  `json:"source" enum:"explicit,inferred"`
 }
 
 type profileRequestNameArguments struct {
@@ -93,6 +106,14 @@ type profileOperationRequest struct {
 }
 
 func (s *Server) registerProfile(api huma.API) {
+	registerProfileMutation(s, api, "set_gender", func(a profileGenderArguments) db.ProfileMutation {
+		return db.ProfileMutation{
+			ExpectedVersion: a.ExpectedVersion,
+			Gender:          a.Gender,
+			Pronouns:        a.Pronouns,
+			GenderSource:    a.Source,
+		}
+	})
 	huma.Register(api, huma.Operation{OperationID: "agent-profile-get", Method: http.MethodPost,
 		Path: profilePath + "get", MaxBodyBytes: internalBodyLimit}, s.agentProfile)
 	huma.Register(api, huma.Operation{OperationID: "agent-profile-operation", Method: http.MethodPost,
@@ -103,6 +124,9 @@ func (s *Server) registerProfile(api huma.API) {
 	})
 	registerProfileMutation(s, api, "set_language", func(a profileLanguageArguments) db.ProfileMutation {
 		return db.ProfileMutation{ExpectedVersion: a.ExpectedVersion, BotLanguage: a.BotLanguage}
+	})
+	registerProfileMutation(s, api, "set_visibility", func(a profileVisibilityArguments) db.ProfileMutation {
+		return db.ProfileMutation{ExpectedVersion: a.ExpectedVersion, Visible: &a.Visible}
 	})
 	registerProfileMutation(s, api, "request_name", func(a profileRequestNameArguments) db.ProfileMutation {
 		return db.ProfileMutation{ExpectedVersion: a.ExpectedVersion}
@@ -287,26 +311,12 @@ func profileModule() map[string]any {
 	latin := map[string]any{manifestType: schemaString, schemaMaxLength: profileNamePartMaxLength}
 	latinHelp := profileLatinNameDescription
 	language := map[string]any{manifestType: schemaString, schemaEnum: []string{"auto", "en", "ru"}}
-	input := func(fields map[string]any, required ...string) map[string]any {
-		if required == nil {
-			required = []string{}
-		}
-		return map[string]any{manifestType: schemaObject, schemaAdditionalProperties: false,
-			schemaProperties: fields, schemaRequired: required}
-	}
+	get := profileGetMethod()
 
-	get := profileMethod(
-		"get",
-		"Read your independent full name, bot language, profile version and pending name request. "+
-			"Telegram metadata never overwrites these fields. Name is not legal identity. "+
-			"Expired name requests do not affect registration or payment state.",
-		input(map[string]any{}),
-		false,
-	)
 	setName := profileMethod(
 		"set_name",
 		profileNameWriteDescription+latinHelp,
-		input(
+		profileInput(
 			map[string]any{
 				schemaExpectedVersion: version,
 				schemaFirstName:       name,
@@ -323,7 +333,7 @@ func profileModule() map[string]any {
 	setLanguage := profileMethod(
 		"set_language",
 		profileLanguageDescription,
-		input(
+		profileInput(
 			map[string]any{schemaExpectedVersion: version, schemaBotLanguage: language},
 			schemaExpectedVersion,
 			schemaBotLanguage,
@@ -335,13 +345,13 @@ func profileModule() map[string]any {
 		"Record a bounded request for the user's full name, then ask conversationally. "+
 			"Existing active request and deadline are preserved. No message is captured automatically; "+
 			"unrelated conversation is allowed.",
-		input(map[string]any{schemaExpectedVersion: version}, schemaExpectedVersion),
+		profileInput(map[string]any{schemaExpectedVersion: version}, schemaExpectedVersion),
 		true,
 	)
 	complete := profileMethod(
 		"complete_name",
 		profileCompleteNameDescription+latinHelp,
-		input(
+		profileInput(
 			map[string]any{
 				schemaExpectedVersion: version,
 				"expectation_id":      uuidField,
@@ -361,7 +371,7 @@ func profileModule() map[string]any {
 		"cancel_name",
 		"Cancel only the matching pending name request after user intent; "+
 			"no business object changes. Requires current profile version and expectation ID.",
-		input(
+		profileInput(
 			map[string]any{schemaExpectedVersion: version, "expectation_id": uuidField},
 			schemaExpectedVersion,
 			"expectation_id",
@@ -371,7 +381,7 @@ func profileModule() map[string]any {
 	operation := profileMethod(
 		"operation",
 		profileOperationDescription,
-		input(map[string]any{"operation_id": uuidField}, "operation_id"),
+		profileInput(map[string]any{"operation_id": uuidField}, "operation_id"),
 		false,
 	)
 	return map[string]any{
@@ -379,7 +389,17 @@ func profileModule() map[string]any {
 		manifestDescription: "Owner profile and bounded durable full-name request",
 		manifestPermissions: []string{},
 		manifestDiscovery:   discoveryStatic,
-		manifestMethods:     []any{get, setName, setLanguage, request, complete, cancel, operation},
+		manifestMethods: []any{
+			get,
+			setName,
+			setLanguage,
+			profileVisibilityMethod(version),
+			profileGenderMethod(version),
+			request,
+			complete,
+			cancel,
+			operation,
+		},
 	}
 }
 
@@ -389,6 +409,18 @@ func profileSchema() map[string]any {
 	return map[string]any{manifestType: schemaObject, schemaAdditionalProperties: false,
 		schemaRequired: []string{schemaUserID, schemaVersion, schemaFullName, schemaBotLanguage, schemaObservedAt},
 		schemaProperties: map[string]any{
+			profileSchemaGender: map[string]any{manifestType: schemaString, schemaMaxLength: profileGenderMaxLength},
+			"pronouns":          map[string]any{manifestType: schemaString, schemaMaxLength: profileGenderMaxLength},
+			"pronouns_source": map[string]any{
+				manifestType: schemaString,
+				schemaEnum:   []string{db.GenderSourceExplicit, db.GenderSourceInferred},
+			},
+			"gender_source": map[string]any{
+				manifestType: schemaString,
+				schemaEnum:   []string{db.GenderSourceExplicit, db.GenderSourceInferred},
+			},
+
+			profileSchemaVisible: map[string]any{manifestType: schemaBoolean},
 			schemaUserID:         uuidField,
 			schemaVersion:        map[string]any{manifestType: schemaInteger, schemaMinimum: 0},
 			schemaFullName:       map[string]any{manifestType: schemaString, schemaMaxLength: profileNameMaxLength},
@@ -403,4 +435,46 @@ func profileSchema() map[string]any {
 				schemaRequired:   []string{"id", schemaCreatedAt, schemaExpiresAt},
 				schemaProperties: map[string]any{"id": uuidField, schemaCreatedAt: instant, schemaExpiresAt: instant}},
 		}}
+}
+
+func profileVisibilityMethod(version map[string]any) map[string]any {
+	return profileMethod(
+		"set_visibility",
+		"Set your own directory visibility after an explicit request. Default true: anyone can search your current "+
+			"basic profile and read its name, username, Telegram link and saved gender/pronouns with their "+
+			"explicit or inferred source. Inferences are public too and always labeled inferred. False hides you "+
+			"from ordinary search and info reads; global administrators, event administrators/ambassadors for registered "+
+			"participants, and massage specialists for their own clients retain their scoped access. "+
+			"Requires the current profile version. Set true to become visible again. Does not change roles or bookings.",
+		map[string]any{
+			manifestType:               schemaObject,
+			schemaAdditionalProperties: false,
+			schemaProperties: map[string]any{
+				schemaExpectedVersion: version,
+				profileSchemaVisible:  map[string]any{manifestType: schemaBoolean},
+			},
+			schemaRequired: []string{schemaExpectedVersion, profileSchemaVisible},
+		},
+		true,
+	)
+}
+
+func profileInput(fields map[string]any, required ...string) map[string]any {
+	if required == nil {
+		required = []string{}
+	}
+	return map[string]any{manifestType: schemaObject, schemaAdditionalProperties: false,
+		schemaProperties: fields, schemaRequired: required}
+}
+
+func profileGetMethod() map[string]any {
+	return profileMethod(
+		"get",
+		"Read your name, gender/pronouns and source, visibility, bot language, profile version "+
+			"and pending name request. "+
+			"Telegram metadata never overwrites these fields. Name is not legal identity. "+
+			"Expired name requests do not affect registration or payment state.",
+		profileInput(map[string]any{}),
+		false,
+	)
 }

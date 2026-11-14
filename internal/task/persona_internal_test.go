@@ -22,7 +22,8 @@ func TestPersonaPromptSelectsOneLocaleAndFallsBackToEnglish(t *testing.T) {
 	for _, text := range []string{ru, en} {
 		require.Contains(t, text, "Zouk Non Stop")
 		require.Contains(t, text, "ЗНС/ZNS")
-		require.LessOrEqual(t, len([]rune(text)), 3000, "Keep identity and four voice examples compact")
+		require.Contains(t, text, "zinusya_profile.set_gender")
+		require.LessOrEqual(t, len([]rune(text)), 3500, "Keep identity and four voice examples compact")
 	}
 }
 

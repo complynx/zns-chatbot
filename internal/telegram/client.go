@@ -28,8 +28,22 @@ type User struct {
 	LanguageCode string `json:"language_code,omitempty"`
 }
 type Chat struct {
-	ID   int64  `json:"id"`
-	Type string `json:"type"`
+	ID       int64  `json:"id"`
+	Type     string `json:"type"`
+	Title    string `json:"title,omitempty"`
+	Username string `json:"username,omitempty"`
+}
+
+// MessageOrigin describes the original author supplied by Telegram, including hidden authors.
+type MessageOrigin struct {
+	Type            string `json:"type"`
+	Date            int64  `json:"date"`
+	SenderUser      *User  `json:"sender_user,omitempty"`
+	SenderUserName  string `json:"sender_user_name,omitempty"`
+	SenderChat      *Chat  `json:"sender_chat,omitempty"`
+	Chat            *Chat  `json:"chat,omitempty"`
+	MessageID       int64  `json:"message_id,omitempty"`
+	AuthorSignature string `json:"author_signature,omitempty"`
 }
 type MessageEntity struct {
 	Type          string `json:"type"`
@@ -50,14 +64,15 @@ type MediaFile struct {
 	Height    int32  `json:"height,omitempty"`
 }
 type Message struct {
-	Sticker   *Sticker    `json:"sticker,omitempty"`
-	Photo     []MediaFile `json:"photo,omitempty"`
-	Document  *MediaFile  `json:"document,omitempty"`
-	Audio     *MediaFile  `json:"audio,omitempty"`
-	Voice     *MediaFile  `json:"voice,omitempty"`
-	Video     *MediaFile  `json:"video,omitempty"`
-	VideoNote *MediaFile  `json:"video_note,omitempty"`
-	Animation *MediaFile  `json:"animation,omitempty"`
+	ForwardOrigin *MessageOrigin `json:"forward_origin,omitempty"`
+	Sticker       *Sticker       `json:"sticker,omitempty"`
+	Photo         []MediaFile    `json:"photo,omitempty"`
+	Document      *MediaFile     `json:"document,omitempty"`
+	Audio         *MediaFile     `json:"audio,omitempty"`
+	Voice         *MediaFile     `json:"voice,omitempty"`
+	Video         *MediaFile     `json:"video,omitempty"`
+	VideoNote     *MediaFile     `json:"video_note,omitempty"`
+	Animation     *MediaFile     `json:"animation,omitempty"`
 
 	ID              int64           `json:"message_id"`
 	From            *User           `json:"from,omitempty"`

@@ -20,6 +20,8 @@ func TestTelegramAvailabilityMigrationPreservesSuspensionOnRollback(t *testing.T
 	require.ErrorIs(t, reopened.CheckTelegramAvailability(t.Context(), 1, 42), db.ErrTelegramUnavailable)
 	_, err = provider.DownTo(t.Context(), 78)
 	require.ErrorContains(t, err, "Telegram suspensions must be preserved")
+	// DownTo may already have removed the newer empty directory migration.
+	require.NoError(t, store.Migrate(t.Context()))
 	require.ErrorIs(t, store.CheckTelegramAvailability(t.Context(), 1, 42), db.ErrTelegramUnavailable)
 	_, _, err = store.Intake(t.Context(), db.IntakeRequest{BotID: 1, UpdateID: 1, TelegramUserID: 42, ChatID: 42,
 		Payload: json.RawMessage(`{}`)}, nil)

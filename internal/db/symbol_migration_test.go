@@ -12,7 +12,17 @@ func TestSymbolMigrationPreservesVersion74(t *testing.T) {
 	ctx := t.Context()
 	task := accepted(t, s, 1)
 	// Rewind the fixture's empty post-baseline additions as well as version 76.
-	_, err := s.Pool().Exec(ctx, `DROP TABLE shuttle_symbols,shuttle_symbol_decay,
+	_, err := s.Pool().Exec(ctx, `DROP TRIGGER shuttle_users_remember_names ON shuttle_users;
+DROP TRIGGER shuttle_profiles_remember_names ON shuttle_user_profiles;
+DROP TABLE shuttle_user_names;
+DROP INDEX shuttle_tasks_user_activity_idx;
+DROP FUNCTION shuttle_name_keys(text,text);
+DROP FUNCTION shuttle_name_tokens(text);
+DROP FUNCTION shuttle_remember_user_names();
+ALTER TABLE shuttle_users DROP COLUMN visible;
+ALTER TABLE shuttle_user_profiles DROP CONSTRAINT shuttle_profile_gender_source,
+DROP COLUMN gender,DROP COLUMN pronouns,DROP COLUMN gender_source, DROP COLUMN pronouns_source;
+DROP TABLE shuttle_symbols,shuttle_symbol_decay,
 shuttle_reaction_cursors,shuttle_telegram_reactions,shuttle_user_bans,shuttle_telegram_availability;
 DROP INDEX shuttle_tasks_symbols;
 DROP FUNCTION shuttle_symbol_weight(double precision,double precision,double precision);
@@ -25,7 +35,8 @@ DELETE FROM goose_db_version WHERE version_id>=76;
  first_name_latin,last_name_latin) VALUES($1,1,'Анна Иванова','Анна','Иванова','user','Anna','Ivanova')`, task.UserID)
 	require.NoError(t, err)
 	var before, after string
-	const query = `SELECT to_jsonb(p)::text FROM shuttle_user_profiles p`
+	const query = `SELECT (to_jsonb(p)-'gender'-'pronouns'-'gender_source'-'pronouns_source')::text
+ FROM shuttle_user_profiles p`
 	require.NoError(t, s.Pool().QueryRow(ctx, query).Scan(&before))
 	var oidBefore, oidAfter uint32
 	require.NoError(t, s.Pool().QueryRow(ctx, "SELECT 'shuttle_tasks'::regclass::oid").Scan(&oidBefore))
@@ -39,7 +50,7 @@ DELETE FROM goose_db_version WHERE version_id>=76;
 	require.Equal(t, task, retained)
 	var version int
 	require.NoError(t, s.Pool().QueryRow(ctx, "SELECT max(version_id) FROM goose_db_version").Scan(&version))
-	require.Equal(t, 79, version)
+	require.Equal(t, 80, version)
 }
 
 func TestReactionMigrationPreservesVersion75CatalogAndTasks(t *testing.T) {
@@ -49,7 +60,17 @@ func TestReactionMigrationPreservesVersion75CatalogAndTasks(t *testing.T) {
 	task := accepted(t, s, 3)
 	// The version-75 fixture predates both the baseline and the empty ban audit table.
 	_, err := s.Pool().
-		Exec(ctx, `DROP TABLE shuttle_reaction_cursors,shuttle_telegram_reactions,shuttle_user_bans,
+		Exec(ctx, `DROP TRIGGER shuttle_users_remember_names ON shuttle_users;
+DROP TRIGGER shuttle_profiles_remember_names ON shuttle_user_profiles;
+DROP TABLE shuttle_user_names;
+DROP INDEX shuttle_tasks_user_activity_idx;
+DROP FUNCTION shuttle_name_keys(text,text);
+DROP FUNCTION shuttle_name_tokens(text);
+DROP FUNCTION shuttle_remember_user_names();
+ALTER TABLE shuttle_users DROP COLUMN visible;
+ALTER TABLE shuttle_user_profiles DROP CONSTRAINT shuttle_profile_gender_source,
+DROP COLUMN gender,DROP COLUMN pronouns,DROP COLUMN gender_source, DROP COLUMN pronouns_source;
+DROP TABLE shuttle_reaction_cursors,shuttle_telegram_reactions,shuttle_user_bans,
 shuttle_telegram_availability;
 ALTER TABLE shuttle_users DROP COLUMN ban_public_reason;
 DELETE FROM goose_db_version WHERE version_id>=76;
@@ -74,5 +95,5 @@ VALUES(1,'sticker','retained','00000000-0000-0000-0000-000000000001',
 	require.Equal(t, task, retained)
 	var version int
 	require.NoError(t, s.Pool().QueryRow(ctx, "SELECT max(version_id) FROM goose_db_version").Scan(&version))
-	require.Equal(t, 79, version)
+	require.Equal(t, 80, version)
 }
