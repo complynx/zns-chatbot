@@ -112,16 +112,7 @@ func fullPairAssignmentApproval(
 	writeParticipant(leader, *view.Leader)
 	writeParticipant(follower, *view.Follower)
 	var body strings.Builder
-	// These are service-generated identity references, not publishable article text.
-	// Keep all frozen prices and policies while presenting their account locators as names.
-	var replacements []string
-	for _, person := range []*db.PairAssignmentParticipant{view.Leader, view.Follower} {
-		if strings.TrimSpace(person.DisplayName) != "" {
-			replacements = append(replacements, person.UserID.String(), strconv.Quote(person.DisplayName))
-		}
-	}
-	description := strings.NewReplacer(replacements...).Replace(view.Preparation.Description)
-	fmt.Fprintf(&body, "\n%s:\n%s", terms, description)
+	fmt.Fprintf(&body, "\n%s:\n%s", terms, pairAssignmentDisplayDescription(view))
 	for n, quote := range view.Preparation.Quotes {
 		label := leader
 		if n == 1 {
@@ -152,6 +143,17 @@ func fullPairAssignmentApproval(
 		fence += "`"
 	}
 	return title + "\n\n" + participants.String() + fence + "\n" + text + "\n" + fence, nil
+}
+
+// Replace service-generated account references without changing frozen prices or policies.
+func pairAssignmentDisplayDescription(view db.PairAssignmentProposalView) string {
+	var replacements []string
+	for _, person := range []*db.PairAssignmentParticipant{view.Leader, view.Follower} {
+		if strings.TrimSpace(person.DisplayName) != "" {
+			replacements = append(replacements, person.UserID.String(), strconv.Quote(person.DisplayName))
+		}
+	}
+	return strings.NewReplacer(replacements...).Replace(view.Preparation.Description)
 }
 
 // Configured minimum amount/share and final top-up deadline supplement the
