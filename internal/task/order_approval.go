@@ -73,7 +73,7 @@ func (s *Service) pendingApprovalMessages(
 	}
 	// Reply-keyboard launches have no initData. Keep the conversational keyboard
 	// on the final quote message and use a separate durable inline WebApp button.
-	form := s.result(i, label, "approval:dialog-v1:"+keyboardPromptKey(*a)+":form")
+	form := s.result(ctx, i, label, "approval:dialog-v1:"+keyboardPromptKey(*a)+":form")
 	var payload telegram.SendMessageRequest
 	if err = json.Unmarshal(form[0].Payload, &payload); err != nil {
 		return nil, err

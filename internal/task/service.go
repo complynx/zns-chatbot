@@ -38,6 +38,7 @@ const (
 )
 
 type Options struct {
+	DebugApprovalJSON                           bool
 	AvatarRenderer                              avatar.Processor
 	RegistrationDetailsEnabled                  bool
 	SkillsEnabled                               bool

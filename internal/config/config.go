@@ -84,6 +84,7 @@ type TelegramPrelink struct {
 }
 
 type Config struct {
+	DebugApprovalJSON      bool            `yaml:"debug_approval_json"`
 	LogLevel               string          `yaml:"log_level"`
 	Descriptor             Descriptor      `yaml:"descriptor"`
 	MiniAppLaunchURL       string          `yaml:"mini_app_launch_url"`

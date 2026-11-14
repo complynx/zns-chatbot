@@ -2,7 +2,7 @@ package integration_test
 
 import (
 	"encoding/json"
-	"strings"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -72,10 +72,16 @@ func TestInstantApprovalShowsHumanQuoteAndRetainsLiteralFallback(t *testing.T) {
 					require.NotContains(t, sent[0].Text, field)
 				}
 			} else {
-				start, end := strings.IndexByte(sent[0].Text, '{'), strings.LastIndexByte(sent[0].Text, '}')
-				require.GreaterOrEqual(t, start, 0)
-				require.Greater(t, end, start)
-				require.JSONEq(t, string(raw), sent[0].Text[start:end+1])
+				for _, value := range []string{
+					args.EventID.String(), args.Selection.WindowID, args.Selection.SpecialistID, args.Selection.ServiceID,
+					fmt.Sprintf(`"expected_event_version": %d`, args.ExpectedEventVersion),
+					fmt.Sprintf(`"expected_schedule_version": %d`, args.ExpectedScheduleVersion),
+				} {
+					require.Contains(t, sent[0].Text, value)
+				}
+				for _, entity := range sent[0].Entities {
+					require.NotEqual(t, "json", entity.Language)
+				}
 			}
 			var count int
 			require.NoError(

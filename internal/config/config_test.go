@@ -21,6 +21,21 @@ func configFile(t *testing.T, suffix string) string {
 	return path
 }
 
+func TestApprovalJSONIsOptIn(t *testing.T) {
+	t.Parallel()
+	path := configFile(t, "")
+	c, err := config.Load(path)
+	require.NoError(t, err)
+	require.False(t, c.DebugApprovalJSON)
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	data = []byte(strings.Replace(string(data), "debug_approval_json: false", "debug_approval_json: true", 1))
+	require.NoError(t, os.WriteFile(path, data, 0600))
+	c, err = config.Load(path)
+	require.NoError(t, err)
+	require.True(t, c.DebugApprovalJSON)
+}
+
 func TestLogLevelConfiguration(t *testing.T) {
 	for _, level := range []string{"debug", "info", "warn", "error", "invalid"} {
 		t.Run(level, func(t *testing.T) {

@@ -4,6 +4,7 @@ package render
 import (
 	"cmp"
 	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -26,6 +27,7 @@ const (
 	strikethrough = "strikethrough"
 	code          = "code"
 	pre           = "pre"
+	textMention   = "text_mention"
 )
 
 // Message is a sendable chunk. Text is also the fallback after a formatting rejection.
@@ -37,6 +39,7 @@ type Message struct {
 type renderer struct {
 	source   []byte
 	mentions map[int64]telegram.User
+	people   map[string]telegram.User
 	output   strings.Builder
 	units    int
 	entities []telegram.MessageEntity
@@ -44,9 +47,14 @@ type renderer struct {
 
 // Render accepts imperfect Markdown and mentions only users verified by the caller.
 func Render(markdown string, mentions map[int64]telegram.User) []Message {
+	return People(markdown, mentions, nil)
+}
+
+// People replaces verified account references with literal names and mentions.
+func People(markdown string, mentions map[int64]telegram.User, people map[string]telegram.User) []Message {
 	source := []byte(strings.ToValidUTF8(markdown, "�"))
 	document := parser.New(parser.WithExtensions(extension.StrikethroughParser)).Parse(source)
-	r := renderer{source: source, mentions: mentions}
+	r := renderer{source: source, mentions: mentions, people: people}
 	r.children(document)
 	slices.SortFunc(r.entities, func(a, b telegram.MessageEntity) int {
 		if order := cmp.Compare(a.Offset, b.Offset); order != 0 {
@@ -62,9 +70,39 @@ func Plain(value string) []Message {
 	return split(strings.ToValidUTF8(value, "�"), nil)
 }
 
+var accountReference = regexp.MustCompile(`(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`)
+
+// AccountReferences returns account-shaped tokens for a scoped identity lookup.
+func AccountReferences(text string) []string {
+	return accountReference.FindAllString(text, -1)
+}
+
 func (r *renderer) write(value string) {
-	r.output.WriteString(value)
-	r.units += unitLen(value)
+	start := 0
+	var locations [][]int
+	if len(r.people) > 0 {
+		locations = accountReference.FindAllStringIndex(value, -1)
+	}
+	for _, loc := range locations {
+		user, ok := r.people[strings.ToLower(value[loc[0]:loc[1]])]
+		if !ok {
+			continue
+		}
+		r.output.WriteString(value[start:loc[0]])
+		r.units += unitLen(value[start:loc[0]])
+		name := strings.TrimSpace(user.FirstName + " " + user.LastName)
+		if name == "" {
+			name = "@" + user.Username
+		}
+		r.entities = append(r.entities, telegram.MessageEntity{
+			Type: textMention, Offset: r.units, Length: unitLen(name), User: &user,
+		})
+		r.output.WriteString(name)
+		r.units += unitLen(name)
+		start = loc[1]
+	}
+	r.output.WriteString(value[start:])
+	r.units += unitLen(value[start:])
 }
 
 func (r *renderer) children(node ast.Node) {
@@ -134,7 +172,13 @@ func (r *renderer) list(list *ast.List) {
 
 func (r *renderer) literal(value string, entity telegram.MessageEntity) {
 	entity.Offset = r.units
-	r.write(value)
+	if entity.Type == code {
+		r.write(value)
+	} else {
+		// Block content and diagnostic JSON retain account-shaped strings verbatim.
+		r.output.WriteString(value)
+		r.units += unitLen(value)
+	}
 	r.add(entity, r.units)
 }
 
@@ -154,6 +198,19 @@ func (r *renderer) wrap(node ast.Node, entity telegram.MessageEntity) {
 }
 
 func (r *renderer) add(entity telegram.MessageEntity, end int) {
+	// Links and code cannot contain mentions. Keep their formatting on either side.
+	if !style(entity.Type) {
+		for _, child := range r.entities {
+			if child.Type == textMention && child.Offset >= entity.Offset && child.Offset < end {
+				if child.Offset > entity.Offset && entity.Type != "" {
+					part := entity
+					part.Length = child.Offset - entity.Offset
+					r.entities = append(r.entities, part)
+				}
+				entity.Offset = child.Offset + child.Length
+			}
+		}
+	}
 	if entity.Type != "" && end > entity.Offset {
 		entity.Length = end - entity.Offset
 		r.entities = append(r.entities, entity)
@@ -169,7 +226,7 @@ func (r *renderer) link(destination string) telegram.MessageEntity {
 		id, parseErr := strconv.ParseInt(parsed.Query().Get("id"), 10, 64)
 		user, found := r.mentions[id]
 		if parseErr == nil && found && id > 0 && user.ID == id {
-			return telegram.MessageEntity{Type: "text_mention", User: &user}
+			return telegram.MessageEntity{Type: textMention, User: &user}
 		}
 		return telegram.MessageEntity{}
 	}

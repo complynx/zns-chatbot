@@ -280,6 +280,11 @@ func TestPeopleVisibilitySearchInfoAndScopedDirectory(t *testing.T) {
 		require.NotEqual(t, member, match.UserID)
 	}
 	personVisible(t, h, outsider, false)
+	mentioned, mentionErr := h.store.MessagePeople(t.Context(), paymentScope(t, h, ambassador, false),
+		[]uuid.UUID{member, outsider}, nil)
+	require.NoError(t, mentionErr)
+	require.Contains(t, mentioned, member.String())
+	require.NotContains(t, mentioned, outsider.String(), "Another event must not grant hidden-profile access")
 	code, raw = peopleRequest(t, h, ambassadorToken, "info", map[string]any{"user_id": outsider, "event_id": event.ID})
 	require.Equal(t, http.StatusNotFound, code, string(raw))
 	code, raw = peopleRequest(t, h, adminToken, "info", map[string]any{"user_id": outsider})
@@ -337,6 +342,10 @@ func TestPeopleVisibilitySearchInfoAndScopedDirectory(t *testing.T) {
 	require.NoError(t, err)
 	_, err = h.store.ListPeople(t.Context(), paymentScope(t, h, ambassador, false), db.PeopleListQuery{EventID: event.ID})
 	require.ErrorIs(t, err, db.ErrPeopleDenied)
+	mentioned, mentionErr = h.store.MessagePeople(t.Context(), paymentScope(t, h, ambassador, false),
+		[]uuid.UUID{member}, nil)
+	require.NoError(t, mentionErr)
+	require.Empty(t, mentioned, "Removing authority must remove hidden-profile mention access")
 	foreign := paymentScope(t, h, admin, true)
 	foreign.Organization = "foreign"
 	_, err = h.store.ListPeople(t.Context(), foreign, db.PeopleListQuery{})
@@ -357,6 +366,10 @@ func TestPeopleMassageClientsAndScopedIndicators(t *testing.T) {
 	args.Selection.SpecialistID = "beth"
 	bookMassage(t, f, other, args)
 	scope := paymentScope(t, f.H, staff.UserID, false)
+	mentioned, mentionErr := f.H.store.MessagePeople(t.Context(), scope, []uuid.UUID{owner.UserID, other.UserID}, nil)
+	require.NoError(t, mentionErr)
+	require.Contains(t, mentioned, owner.UserID.String())
+	require.NotContains(t, mentioned, other.UserID.String(), "Another specialist's client must stay hidden")
 	page, err := f.H.store.SearchPeople(t.Context(), scope, db.PeopleQuery{EventID: f.Event.ID, Query: "Client"})
 	require.NoError(t, err)
 	require.Len(t, page.Matches, 1)
@@ -378,6 +391,9 @@ func TestPeopleMassageClientsAndScopedIndicators(t *testing.T) {
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	binding.Active = false
 	bindingChange(t, f, staff, binding)
+	mentioned, mentionErr = f.H.store.MessagePeople(t.Context(), scope, []uuid.UUID{owner.UserID}, nil)
+	require.NoError(t, mentionErr)
+	require.Empty(t, mentioned, "Inactive bindings must not grant hidden-profile mention access")
 	_, err = f.H.store.ListPeople(t.Context(), scope, db.PeopleListQuery{EventID: f.Event.ID})
 	require.ErrorIs(t, err, db.ErrPeopleDenied)
 	page, err = f.H.store.SearchPeople(t.Context(), scope, db.PeopleQuery{EventID: f.Event.ID, Query: "Client"})

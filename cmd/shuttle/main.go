@@ -189,6 +189,7 @@ func compose(
 		obs,
 		logger,
 		task.Options{
+			DebugApprovalJSON:          c.DebugApprovalJSON,
 			SkillsEnabled:              c.Loom.SkillsEnabled,
 			AvatarRenderer:             renderer,
 			BotID:                      c.Telegram.BotID,

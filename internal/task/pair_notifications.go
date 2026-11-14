@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"unicode/utf16"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -104,11 +105,20 @@ func (s *Service) notifyPair(ctx context.Context, args pairNotificationArgs) err
 	if err != nil {
 		return err
 	}
-	text, err := pairNotificationText(n, language)
+	var inviter telegram.User
+	if n.Kind == pairNoticePending {
+		person, personErr := s.store.GetUser(ctx, n.Context.InviterUserID)
+		if personErr != nil {
+			s.logger.WarnContext(ctx, "pair inviter mention unavailable", "class", "message_people")
+		} else {
+			inviter = pairInviterMention(person, scope, n.Context.InviterName)
+		}
+	}
+	input, err := pairNotificationContent(n, language, inviter)
 	if err != nil {
 		return err
 	}
-	input := telegram.SendMessageRequest{ChatID: u.TelegramUserID, Text: text}
+	input.ChatID = u.TelegramUserID
 	payload, err := json.Marshal(input)
 	if err != nil {
 		return err
@@ -122,6 +132,34 @@ func (s *Service) notifyPair(ctx context.Context, args pairNotificationArgs) err
 		return err
 	}
 	return s.sendPairNotification(ctx, reserved, input)
+}
+
+func pairInviterMention(person db.User, scope db.EventScope, name string) telegram.User {
+	if person.BotID != scope.BotID || person.Organization != scope.Organization || person.Revoked {
+		return telegram.User{}
+	}
+	return telegram.User{ID: person.TelegramUserID, FirstName: name}
+}
+
+func pairNotificationContent(
+	n db.PairInvitationDelivery,
+	language string,
+	inviter telegram.User,
+) (telegram.SendMessageRequest, error) {
+	text, err := pairNotificationText(n, language)
+	if err != nil {
+		return telegram.SendMessageRequest{}, err
+	}
+	input := telegram.SendMessageRequest{Text: text}
+	name := fmt.Sprintf("%.200s", n.Context.InviterName)
+	if n.Kind == pairNoticePending && inviter.ID > 0 && name != "" {
+		if inviter.FirstName == "" {
+			inviter.FirstName = name
+		}
+		input.Entities = []telegram.MessageEntity{{Type: "text_mention", Offset: 0,
+			Length: len(utf16.Encode([]rune(name))), User: &inviter}}
+	}
+	return input, nil
 }
 
 func (s *Service) sendPairNotification(
@@ -159,12 +197,11 @@ func pairNotificationText(n db.PairInvitationDelivery, language string) (string,
 		expires := v.Invitation.ExpiresAt.In(zone).Format(time.RFC3339)
 		if language == "ru" {
 			return fmt.Sprintf(
-				"%.200s (%s) приглашает вас в пару, роль: %s.\n"+
+				"%.200s приглашает вас в пару, роль: %s.\n"+
 					"Срок: %s (%s).\n"+
 					"Чтобы принять, явно подтвердите приглашение боту. Принятие добавляет в очередь пары; "+
 					"пасс ещё не назначен.%s",
 				v.InviterName,
-				v.InviterUserID,
 				v.RequiredRole,
 				expires,
 				v.Timezone,
@@ -172,12 +209,11 @@ func pairNotificationText(n db.PairInvitationDelivery, language string) (string,
 			), nil
 		}
 		return fmt.Sprintf(
-			"%.200s (%s) invites you to pair as %s.\n"+
+			"%.200s invites you to pair as %s.\n"+
 				"Expires: %s (%s).\n"+
 				"To accept, explicitly confirm this invitation to the bot. Acceptance joins the pair waitlist; "+
 				"no pass is assigned yet.%s",
 			v.InviterName,
-			v.InviterUserID,
 			v.RequiredRole,
 			expires,
 			v.Timezone,

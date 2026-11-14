@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -83,9 +84,14 @@ func (s *Service) localized(ctx context.Context, i intent, key string) string {
 	}
 	return value[1]
 }
-func (s *Service) result(i intent, text, key string) []db.Outbound {
+func (s *Service) result(ctx context.Context, i intent, text, key string) []db.Outbound {
 	var out []db.Outbound
-	for n, chunk := range render.Render(text, map[int64]telegram.User{i.User.ID: i.User}) {
+	people := s.messagePeople(ctx, i, text)
+	mentions := map[int64]telegram.User{i.User.ID: i.User}
+	for _, user := range people {
+		mentions[user.ID] = user
+	}
+	for n, chunk := range render.People(text, mentions, people) {
 		payload, _ := json.Marshal(
 			telegram.SendMessageRequest{ChatID: i.ChatID, Text: chunk.Text, Entities: chunk.Entities},
 		)
@@ -93,8 +99,95 @@ func (s *Service) result(i intent, text, key string) []db.Outbound {
 	}
 	return out
 }
-func (s *Service) question(i intent, q loom.Question) []db.Outbound {
-	out := s.result(i, q.Text, "question:dialog-v1:"+keyboardPromptKey(q))
+
+var telegramReference = regexp.MustCompile(`tg://user\?id=([0-9]+)\b`)
+
+const messagePeopleTimeout = 3 * time.Second
+
+func messageReferences(text string) ([]uuid.UUID, []int64) {
+	matches := render.AccountReferences(text)
+	links := telegramReference.FindAllStringSubmatch(text, -1)
+	telegramIDs := make([]int64, 0, len(links))
+	seenTelegram := make(map[int64]bool)
+	for _, link := range links {
+		if id, err := strconv.ParseInt(link[1], 10, 64); err == nil && id > 0 && !seenTelegram[id] {
+			telegramIDs = append(telegramIDs, id)
+			seenTelegram[id] = true
+		}
+	}
+	ids := make([]uuid.UUID, 0, len(matches))
+	seen := make(map[uuid.UUID]bool)
+	for _, match := range matches {
+		id, err := uuid.Parse(match)
+		if err == nil && !seen[id] {
+			ids = append(ids, id)
+			seen[id] = true
+		}
+	}
+	return ids, telegramIDs
+}
+
+func (s *Service) messagePeople(ctx context.Context, i intent, text string) map[string]telegram.User {
+	ids, telegramIDs := messageReferences(text)
+	if len(ids)+len(telegramIDs) == 0 {
+		return nil
+	}
+	bot, organization, _ := s.iam.DeploymentScope()
+	lookup, cancel := context.WithTimeout(ctx, messagePeopleTimeout)
+	defer cancel()
+	actor, err := s.store.MessageRecipient(lookup, bot, organization, i.User.ID)
+	if err != nil {
+		return nil
+	}
+	scope := db.PaymentScope{
+		BotID:        bot,
+		Organization: organization,
+		UserID:       actor.ID,
+		Subject:      actor.Subject,
+	}
+	people, err := s.store.MessagePeople(lookup, scope, ids, telegramIDs)
+	if err != nil {
+		s.logger.WarnContext(ctx, "message people lookup failed", "class", "message_people")
+		return nil
+	}
+	if messagePeopleResolved(people, ids, telegramIDs) {
+		return people
+	}
+	authCtx, authCancel := context.WithTimeout(lookup, time.Second)
+	principal, authErr := s.taskPrincipal(authCtx, actor)
+	authCancel()
+	if authErr != nil {
+		return people
+	}
+	scope = s.taskPaymentScope(actor, principal)
+	if !scope.GlobalAdmin {
+		return people
+	}
+	if privileged, readErr := s.store.MessagePeople(lookup, scope, ids, telegramIDs); readErr == nil {
+		return privileged
+	}
+	return people
+}
+
+func messagePeopleResolved(people map[string]telegram.User, ids []uuid.UUID, telegramIDs []int64) bool {
+	for _, id := range ids {
+		if _, ok := people[id.String()]; !ok {
+			return false
+		}
+	}
+	knownTelegram := make(map[int64]bool, len(people))
+	for _, person := range people {
+		knownTelegram[person.ID] = true
+	}
+	for _, id := range telegramIDs {
+		if !knownTelegram[id] {
+			return false
+		}
+	}
+	return true
+}
+func (s *Service) question(ctx context.Context, i intent, q loom.Question) []db.Outbound {
+	out := s.result(ctx, i, q.Text, "question:dialog-v1:"+keyboardPromptKey(q))
 	if len(q.Choices) > 0 {
 		setReplyMarkup(out, questionKeyboard(q))
 	} else {
@@ -111,13 +204,11 @@ func (s *Service) approval(ctx context.Context, i intent, id uuid.UUID, a loom.A
 			a.Method == "zinusya_massage_staff.instant" ||
 			a.Method == "zinusya_administration.set_massage_specialist_binding")
 	if approvalHasArguments(a) && !completeServiceQuote {
-		var arguments bytes.Buffer
-		if err := json.Indent(&arguments, a.Arguments, "", "  "); err != nil {
+		if !json.Valid(a.Arguments) {
 			s.logger.WarnContext(ctx, "approval arguments invalid", "class", "approval_arguments")
 			return nil
 		}
-		// Complete parameters precede the buttons, using the same durable chunk order.
-		text += "\n\n```json\n" + arguments.String() + "\n```"
+		text += "\n\n" + approvalParameters(a.Arguments, s.languageFor(ctx, i))
 	}
 	return s.approvalContent(ctx, i, id, a, text)
 }
@@ -130,8 +221,20 @@ func (s *Service) approvalContent(
 	a loom.Approval,
 	text string,
 ) []db.Outbound {
+	if s.options.DebugApprovalJSON && approvalHasArguments(a) {
+		var arguments bytes.Buffer
+		if err := json.Indent(&arguments, a.Arguments, "", "  "); err != nil {
+			s.logger.WarnContext(ctx, "approval debug arguments invalid", "class", "approval_arguments")
+		} else {
+			fence := approvalCodeFence
+			for strings.Contains(arguments.String(), fence) {
+				fence += "`"
+			}
+			text += "\n\n" + fence + "json\n" + arguments.String() + "\n" + fence
+		}
+	}
 	key := "approval:dialog-v1:" + keyboardPromptKey(a)
-	out := s.result(i, text, key)
+	out := s.result(ctx, i, text, key)
 	if len(out) == 0 {
 		return nil
 	}
@@ -163,7 +266,7 @@ func approvalHasArguments(a loom.Approval) bool {
 }
 func (s *Service) finish(ctx context.Context, t *db.Task, c checkpoint, i intent, state, key string) error {
 	t.State = state
-	out := s.result(i, s.localized(ctx, i, key), key)
+	out := s.result(ctx, i, s.localized(ctx, i, key), key)
 	if c.KeyboardPrompt != "" {
 		removeReplyKeyboard(out)
 		c.KeyboardPrompt = ""
