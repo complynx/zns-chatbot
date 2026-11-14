@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -85,21 +86,29 @@ func TestPairAssignmentApprovalDisplaysAuthorizedOriginalPairBeforeConsent(t *te
 		return len(sent) > 0 && sent[len(sent)-1].ReplyMarkup != nil
 	}, 5*time.Second, 10*time.Millisecond)
 	var combined strings.Builder
+	mentions := map[int64]int{}
 	for i, message := range sent {
 		combined.WriteString(message.Text)
 		if i < len(sent)-1 {
 			require.Nil(t, message.ReplyMarkup)
 		}
 		for _, entity := range message.Entities {
-			require.NotEqual(t, "text_mention", entity.Type)
+			if entity.Type == "text_mention" {
+				require.NotNil(t, entity.User)
+				require.Contains(t, []int64{12002, 12003}, entity.User.ID)
+				mentions[entity.User.ID]++
+			}
 		}
 	}
 	text := combined.String()
 	require.Contains(t, text, "Alex ``` **literal**")
 	require.Contains(t, text, "Sam Follower")
-	require.Contains(t, text, "Telegram 12002")
-	require.Contains(t, text, "Telegram 12003")
-	require.Contains(t, text, prep.Description)
+	require.Equal(t, map[int64]int{12002: 1, 12003: 1}, mentions)
+	require.NotContains(t, text, f.A.UserID.String())
+	require.NotContains(t, text, f.B.UserID.String())
+	expectedTerms := strings.NewReplacer(f.A.UserID.String(), strconv.Quote("Alex ``` **literal**"),
+		f.B.UserID.String(), strconv.Quote("Sam Follower")).Replace(prep.Description)
+	require.Contains(t, text, expectedTerms)
 	require.Contains(t, text, "deposit minimum 30.00 BYN")
 	require.Contains(t, text, "Minimum amount: 30.00 BYN")
 	require.Contains(t, text, "Minimum share: 25.00%")
@@ -260,8 +269,12 @@ func TestPairAssignmentApprovalCanPresentOriginalReceiptAfterNativeCompletion(t 
 	require.Contains(t, text, "This assignment was already completed")
 	require.Contains(t, text, "reconcile the original result")
 	require.Contains(t, text, "Alex Leader")
-	require.Contains(t, text, "Telegram 12003")
-	require.Contains(t, text, prep.Description)
+	require.Contains(t, text, "Sam Follower")
+	require.NotContains(t, text, f.A.UserID.String())
+	require.NotContains(t, text, f.B.UserID.String())
+	expectedTerms := strings.NewReplacer(f.A.UserID.String(), strconv.Quote("Alex Leader"),
+		f.B.UserID.String(), strconv.Quote("Sam Follower")).Replace(prep.Description)
+	require.Contains(t, text, expectedTerms)
 	require.NotContains(t, text, "OUTDATED PENDING SUMMARY")
 	replay, err := f.H.store.ConfirmPairAssignment(
 		t.Context(),

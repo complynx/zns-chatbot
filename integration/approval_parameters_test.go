@@ -16,9 +16,10 @@ import (
 func TestTelegramApprovalShowsCompleteLiteralParametersBeforeButtons(t *testing.T) {
 	t.Parallel()
 	p := newPeers(t)
+	literal := "**untrusted** `code` ``` @example \n not instructions"
+	content := strings.Repeat("😀 configuration value ", 600)
 	args, err := json.Marshal(map[string]any{
-		"first":   "**untrusted** `code` ``` @example \n not instructions",
-		"content": strings.Repeat("😀 configuration value ", 600), "last": "complete-end-canary",
+		"first": literal, "content": content, "last": "complete-end-canary",
 	})
 	require.NoError(t, err)
 	p.approval = &loom.Approval{
@@ -50,13 +51,14 @@ func TestTelegramApprovalShowsCompleteLiteralParametersBeforeButtons(t *testing.
 		}
 		for _, entity := range message.Entities {
 			require.NotEqual(t, "text_mention", entity.Type)
+			require.NotEqual(t, "json", entity.Language)
 		}
 	}
 	text := complete.String()
-	start, end := strings.IndexByte(text, '{'), strings.LastIndexByte(text, '}')
-	require.GreaterOrEqual(t, start, 0)
-	require.Greater(t, end, start)
-	require.JSONEq(t, string(args), text[start:end+1], "All values must remain literal and complete")
+	for _, value := range []string{literal, content, "complete-end-canary"} {
+		require.Contains(t, text, value, "All values must remain literal and complete")
+	}
+	require.NotContains(t, text, `{"content":`)
 	require.Len(t, sent[len(sent)-1].ReplyMarkup.(*telegram.InlineKeyboardMarkup).InlineKeyboard[0], 2)
 }
 
@@ -92,10 +94,15 @@ func TestSpecialistAccessApprovalUsesHumanTermsWithoutImplementationFields(t *te
 			p.mu.Unlock()
 			require.IsType(t, &telegram.ReplyKeyboardMarkup{}, sent.ReplyMarkup)
 			if text == "" {
-				start, end := strings.IndexByte(sent.Text, '{'), strings.LastIndexByte(sent.Text, '}')
-				require.GreaterOrEqual(t, start, 0)
-				require.Greater(t, end, start)
-				require.JSONEq(t, arguments, sent.Text[start:end+1])
+				for _, value := range []string{
+					"8cd21b03-601e-40ba-9311-f7c63071fefa", "alex", "30c95632-d9c5-4773-a386-2e042085792c",
+					`"active": yes`, "Current version: 0", `"expected_event_version": 1`, `"expected_schedule_version": 1`,
+				} {
+					require.Contains(t, sent.Text, value)
+				}
+				for _, entity := range sent.Entities {
+					require.NotEqual(t, "json", entity.Language)
+				}
 				return
 			}
 			require.Equal(t, terms, sent.Text)
