@@ -66,3 +66,23 @@ func TestProfileLatinValidationAndExplicitClear(t *testing.T) {
 	_, err = normalizeProfileMutation(m)
 	require.ErrorIs(t, err, ErrInvalidProfile)
 }
+
+func TestProfileNameRejectsMarkupAndMentions(t *testing.T) {
+	t.Parallel()
+	for _, char := range profileNameMarkup {
+		for _, mutation := range []ProfileMutation{
+			{OperationID: uuid.New(), Kind: "set_name", FullName: "Анна" + string(char) + " Иванова"},
+			{OperationID: uuid.New(), Kind: "set_name", FirstName: "Анна", LastName: "Иванова" + string(char)},
+			{OperationID: uuid.New(), Kind: "complete_name", ExpectationID: uuid.New(),
+				FirstName: "Анна" + string(char), LastName: "Иванова"},
+		} {
+			_, err := normalizeProfileMutation(mutation)
+			require.ErrorIs(t, err, ErrInvalidProfile, "%q", char)
+			require.ErrorContains(t, err, "Markdown delimiters or @")
+		}
+	}
+	require.False(t, usableImportedIAMName("Анна@", "Иванова"), "An IAM import must not break the name constraint")
+	_, err := normalizeProfileMutation(ProfileMutation{OperationID: uuid.New(), Kind: "set_name",
+		FirstName: "Anne-Marie", LastName: "D’Arcy A."})
+	require.NoError(t, err)
+}

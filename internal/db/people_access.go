@@ -83,8 +83,8 @@ const peopleAccessSQL = `u.bot_id=$1 AND u.zitadel_org=$2 AND ($3<>'public' OR N
  OR ($3='event_registrations' AND EXISTS(SELECT 1 FROM shuttle_registrations r WHERE r.event_id=$4 AND r.user_id=u.id))
  OR ($3='massage_clients' AND EXISTS(` + peopleMassageClientSQL + ` AND b.event_id=$4 AND sb.user_id=$5)))`
 
-// Directory reads and message mentions share relationship eligibility. Each
-// caller supplies its event/deployment and actor constraints.
+// Directory search and cards share relationship eligibility. Exact basic
+// identity reads do not require these grants.
 const peopleAuthorityRolesSQL = `a.role IN ('ambassador','administrator')`
 
 const peopleMassageClientSQL = `SELECT 1 FROM shuttle_massage_bookings b

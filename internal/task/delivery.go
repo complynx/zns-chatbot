@@ -149,26 +149,10 @@ func (s *Service) messagePeople(ctx context.Context, i intent, text string) map[
 		UserID:       actor.ID,
 		Subject:      actor.Subject,
 	}
-	people, needsAdmin, err := s.store.MessagePeople(lookup, scope, ids, telegramIDs)
+	people, err := s.store.MessagePeople(lookup, scope, ids, telegramIDs)
 	if err != nil {
 		s.logger.WarnContext(ctx, "message people lookup failed", "class", "message_people")
 		return nil
-	}
-	if !needsAdmin {
-		return people
-	}
-	authCtx, authCancel := context.WithTimeout(lookup, time.Second)
-	principal, authErr := s.taskPrincipal(authCtx, actor)
-	authCancel()
-	if authErr != nil {
-		return people
-	}
-	scope = s.taskPaymentScope(actor, principal)
-	if !scope.GlobalAdmin {
-		return people
-	}
-	if privileged, _, readErr := s.store.MessagePeople(lookup, scope, ids, telegramIDs); readErr == nil {
-		return privileged
 	}
 	return people
 }

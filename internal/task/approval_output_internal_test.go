@@ -3,11 +3,8 @@ package task
 import (
 	"encoding/json"
 	"log/slog"
-	"net/http"
-	"net/http/httptest"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,22 +18,26 @@ import (
 	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
+func approvalOutputService(t *testing.T) *Service {
+	t.Helper()
+	credentials := identity.ClientCredentials{ID: "fixture", Secret: "fixture"}
+	iam, err := identity.New(identity.Options{Issuer: "https://iam.invalid", OrganizationID: "org",
+		LoomAudience: "loom", APIAudience: "api", ActorID: "service-actor", BotID: 1,
+		ActorClientCredentials: credentials, ExchangeClientCredentials: credentials,
+		IntrospectionClientCredentials: credentials}, nil)
+	require.NoError(t, err)
+	return &Service{store: menuScanStore(t), iam: iam, logger: slog.Default()}
+}
+
 func TestApprovalOutputNamesDebugAndFinalButtons(t *testing.T) {
 	t.Parallel()
-	store := menuScanStore(t)
+	s := approvalOutputService(t)
 	actor, target := uuid.New(), uuid.New()
-	_, err := store.Pool().Exec(t.Context(), `INSERT INTO shuttle_users
+	_, err := s.store.Pool().Exec(t.Context(), `INSERT INTO shuttle_users
  (id,bot_id,tg_user_id,zitadel_subject,zitadel_org,profile)
  VALUES($1,1,7,'actor','org','{"first_name":"Actor"}'),
  ($2,1,8,'target','org','{"first_name":"Даниил","last_name":"Дрижук"}')`, actor, target)
 	require.NoError(t, err)
-	credentials := identity.ClientCredentials{ID: "fixture", Secret: "fixture"}
-	iam, err := identity.New(identity.Options{Issuer: "https://iam.invalid", OrganizationID: "org",
-		LoomAudience: "loom", APIAudience: "api", ActorID: "actor", BotID: 1,
-		ActorClientCredentials: credentials, ExchangeClientCredentials: credentials,
-		IntrospectionClientCredentials: credentials}, nil)
-	require.NoError(t, err)
-	s := &Service{store: store, iam: iam, logger: slog.Default()}
 	i := intent{ChatID: 7, User: telegram.User{ID: 7, FirstName: "Actor", LanguageCode: "ru"}}
 	a := loom.Approval{
 		ID:        "approval",
@@ -121,39 +122,57 @@ func TestPairAssignmentApprovalLinksPeopleAndKeepsTerms(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, unnamed, `account ""`)
 	require.Contains(t, unnamed, follower.String(), "Keep the locator when there is no display name")
+	view.Follower.DisplayName = leader.String()
+	hostile, err := fullPairAssignmentApproval(view, time.Date(2026, 12, 1, 12, 0, 0, 0, time.UTC), "ru")
+	require.NoError(t, err)
+	chunks = render.People(hostile, verified, map[string]telegram.User{leader.String(): verified[7]})
+	targets := map[int64]int{}
+	for _, chunk := range chunks {
+		for _, entity := range chunk.Entities {
+			if entity.Type == "text_mention" {
+				targets[entity.User.ID]++
+			}
+		}
+	}
+	require.Equal(t, map[int64]int{7: 1, 8: 1}, targets, "A UUID-shaped follower name must not impersonate the leader")
+	require.Contains(t, chunks[0].Text, "Telegram 8")
+	view.Follower.DisplayName = "  Name\n\n    injected\tline  "
+	oneLine, err := fullPairAssignmentApproval(view, time.Date(2026, 12, 1, 12, 0, 0, 0, time.UTC), "ru")
+	require.NoError(t, err)
+	require.Contains(t, oneLine, "[Name injected line](tg://user?id=8)")
 }
 
-func TestMessagePeopleSkipsIAMForNonPeopleAndLiteralContent(t *testing.T) {
+func TestMessagePeopleResolvesHiddenBasicIdentity(t *testing.T) {
 	t.Parallel()
-	store := menuScanStore(t)
+	s := approvalOutputService(t)
 	actor, target := uuid.New(), uuid.New()
-	_, err := store.Pool().Exec(t.Context(), `INSERT INTO shuttle_users
+	_, err := s.store.Pool().Exec(t.Context(), `INSERT INTO shuttle_users
  (id,bot_id,tg_user_id,zitadel_subject,zitadel_org,visible,profile)
  VALUES($1,1,7,'actor','org',true,'{"first_name":"Actor"}'),
  ($2,1,8,'target','org',false,'{"first_name":"Hidden"}')`, actor, target)
 	require.NoError(t, err)
-	var calls atomic.Int32
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		calls.Add(1)
-		w.WriteHeader(http.StatusForbidden)
-	}))
-	t.Cleanup(server.Close)
-	credentials := identity.ClientCredentials{ID: "fixture", Secret: "fixture"}
-	iam, err := identity.New(identity.Options{Issuer: server.URL, OrganizationID: "org",
-		LoomAudience: "loom", APIAudience: "api", ActorID: "service-actor", BotID: 1,
-		ActorClientCredentials: credentials, ExchangeClientCredentials: credentials,
-		IntrospectionClientCredentials: credentials}, server.Client())
-	require.NoError(t, err)
-	s := &Service{store: store, iam: iam, logger: slog.Default()}
 	i := intent{ChatID: 7, User: telegram.User{ID: 7}}
-	s.messagePeople(t.Context(), i, "Event "+uuid.NewString())
-	s.messagePeople(t.Context(), i, "```json\n{\"user_id\":\""+target.String()+"\"}\n```\n"+
-		"    "+target.String()+"\n")
 	people := s.messagePeople(t.Context(), i, actor.String()+" [Actor](tg://user?id=7)")
 	require.Contains(t, people, actor.String())
-	require.Zero(t, calls.Load(), "Unreplaceable literals and unrelated IDs do not require IAM")
-	require.Empty(t, s.messagePeople(t.Context(), i, "Person "+target.String()))
-	require.Positive(t, calls.Load(), "Genuine hidden-person references still check IAM")
+	people = s.messagePeople(t.Context(), i, "Person "+target.String())
+	require.Equal(t, "Hidden", people[target.String()].FirstName)
+}
+
+func TestMessageReferencesExcludeLiteralBlocks(t *testing.T) {
+	t.Parallel()
+	id := uuid.New()
+	content := id.String() + " tg://user?id=7"
+	for _, block := range []string{"```\n" + content + "\n```", "```json\n" + content + "\n```", "    " + content + "\n"} {
+		ids, telegramIDs := messageReferences(block)
+		require.Empty(t, ids)
+		require.Empty(t, telegramIDs)
+	}
+	ids, telegramIDs := messageReferences(id.String() + " [Person](tg://user?id=7)")
+	require.Equal(t, []uuid.UUID{id}, ids)
+	require.Equal(t, []int64{7}, telegramIDs)
+	ids, telegramIDs = messageReferences("[" + id.String() + "](tg://user?id=8)")
+	require.Empty(t, ids, "A link label cannot supply a different identity")
+	require.Equal(t, []int64{8}, telegramIDs)
 }
 
 func TestPromptReplayKeepsFirstCompletePresentation(t *testing.T) {

@@ -28,6 +28,71 @@ func peopleRequest(t *testing.T, h *harness, token, method string, args any) (in
 	)
 }
 
+func TestExactPersonResolveIsPublicBasicIdentity(t *testing.T) {
+	t.Parallel()
+	h := setup(t, newPeers(t))
+	_, caller := registrationUser(t, h, 29301, false)
+	target, _ := registrationUser(t, h, 29302, false)
+	setPeopleName(t, h, target, "Люба", "Зеленская")
+	_, err := h.store.Pool().Exec(t.Context(), `UPDATE shuttle_users
+ SET profile='{"first_name":"Telegram name","username":"liubka_z"}' WHERE id=$1`, target)
+	require.NoError(t, err)
+	for _, state := range []struct{ visible, revoked bool }{{true, false}, {false, false}, {false, true}} {
+		personVisible(t, h, target, state.visible)
+		require.NoError(t, h.store.RevokeUser(t.Context(), target, state.revoked))
+		for _, selector := range []any{
+			map[string]any{"user_id": target}, map[string]any{"telegram_user_id": 29302},
+			map[string]any{"username": "@LIUBKA_Z"},
+		} {
+			code, raw := peopleRequest(t, h, caller, "resolve", selector)
+			require.Equal(t, http.StatusOK, code, string(raw))
+			var response struct {
+				Result db.PersonIdentity `json:"result"`
+			}
+			require.NoError(t, json.Unmarshal(raw, &response))
+			require.Equal(t, target, response.Result.UserID)
+			require.Equal(t, "Люба Зеленская", response.Result.PreferredName)
+			require.Equal(t, "https://t.me/liubka_z", response.Result.ProfileURL)
+			for _, private := range []string{"administration", "gender", "pronouns", "zitadel_subject", "revoked"} {
+				require.NotContains(t, string(raw), `"`+private+`"`)
+			}
+		}
+	}
+	for _, selector := range []any{map[string]any{}, map[string]any{"username": "@"},
+		map[string]any{"user_id": target, "username": "liubka_z"}} {
+		code, raw := peopleRequest(t, h, caller, "resolve", selector)
+		require.Equal(t, http.StatusBadRequest, code, string(raw))
+	}
+	code, raw := peopleRequest(t, h, caller, "resolve", map[string]any{"username": "liubka"})
+	require.Equal(t, http.StatusNotFound, code, string(raw))
+	duplicate, _ := registrationUser(t, h, 29303, false)
+	_, err = h.store.Pool().Exec(t.Context(),
+		`UPDATE shuttle_users SET profile='{"username":"LIUBKA_Z"}' WHERE id=$1`, duplicate)
+	require.NoError(t, err)
+	code, raw = peopleRequest(t, h, caller, "resolve", map[string]any{"username": "liubka_z"})
+	require.Equal(t, http.StatusConflict, code, string(raw))
+	for _, fallback := range []struct{ profile, name, link string }{
+		{`{"username":"only_username"}`, "@only_username", "https://t.me/only_username"},
+		{`{}`, "Telegram 29303", "tg://user?id=29303"},
+	} {
+		_, err = h.store.Pool().Exec(t.Context(), `UPDATE shuttle_users SET profile=$2 WHERE id=$1`,
+			duplicate, json.RawMessage(fallback.profile))
+		require.NoError(t, err)
+		code, raw = peopleRequest(t, h, caller, "resolve", map[string]any{"telegram_user_id": 29303})
+		require.Equal(t, http.StatusOK, code, string(raw))
+		var response struct {
+			Result db.PersonIdentity `json:"result"`
+		}
+		require.NoError(t, json.Unmarshal(raw, &response))
+		require.Equal(t, fallback.name, response.Result.PreferredName)
+		require.Equal(t, fallback.link, response.Result.ProfileURL)
+	}
+	_, err = h.store.Pool().Exec(t.Context(), `UPDATE shuttle_users SET zitadel_org='foreign' WHERE id=$1`, target)
+	require.NoError(t, err)
+	code, raw = peopleRequest(t, h, caller, "resolve", map[string]any{"user_id": target})
+	require.Equal(t, http.StatusNotFound, code, string(raw))
+}
+
 func TestPeopleNameVariantsPassIndexedCandidateSelection(t *testing.T) {
 	t.Parallel()
 	h := setup(t, newPeers(t))
@@ -280,11 +345,6 @@ func TestPeopleVisibilitySearchInfoAndScopedDirectory(t *testing.T) {
 		require.NotEqual(t, member, match.UserID)
 	}
 	personVisible(t, h, outsider, false)
-	mentioned, _, mentionErr := h.store.MessagePeople(t.Context(), paymentScope(t, h, ambassador, false),
-		[]uuid.UUID{member, outsider}, nil)
-	require.NoError(t, mentionErr)
-	require.Contains(t, mentioned, member.String())
-	require.NotContains(t, mentioned, outsider.String(), "Another event must not grant hidden-profile access")
 	code, raw = peopleRequest(t, h, ambassadorToken, "info", map[string]any{"user_id": outsider, "event_id": event.ID})
 	require.Equal(t, http.StatusNotFound, code, string(raw))
 	code, raw = peopleRequest(t, h, adminToken, "info", map[string]any{"user_id": outsider})
@@ -342,10 +402,6 @@ func TestPeopleVisibilitySearchInfoAndScopedDirectory(t *testing.T) {
 	require.NoError(t, err)
 	_, err = h.store.ListPeople(t.Context(), paymentScope(t, h, ambassador, false), db.PeopleListQuery{EventID: event.ID})
 	require.ErrorIs(t, err, db.ErrPeopleDenied)
-	mentioned, _, mentionErr = h.store.MessagePeople(t.Context(), paymentScope(t, h, ambassador, false),
-		[]uuid.UUID{member}, nil)
-	require.NoError(t, mentionErr)
-	require.Empty(t, mentioned, "Removing authority must remove hidden-profile mention access")
 	foreign := paymentScope(t, h, admin, true)
 	foreign.Organization = "foreign"
 	_, err = h.store.ListPeople(t.Context(), foreign, db.PeopleListQuery{})
@@ -366,10 +422,6 @@ func TestPeopleMassageClientsAndScopedIndicators(t *testing.T) {
 	args.Selection.SpecialistID = "beth"
 	bookMassage(t, f, other, args)
 	scope := paymentScope(t, f.H, staff.UserID, false)
-	mentioned, _, mentionErr := f.H.store.MessagePeople(t.Context(), scope, []uuid.UUID{owner.UserID, other.UserID}, nil)
-	require.NoError(t, mentionErr)
-	require.Contains(t, mentioned, owner.UserID.String())
-	require.NotContains(t, mentioned, other.UserID.String(), "Another specialist's client must stay hidden")
 	page, err := f.H.store.SearchPeople(t.Context(), scope, db.PeopleQuery{EventID: f.Event.ID, Query: "Client"})
 	require.NoError(t, err)
 	require.Len(t, page.Matches, 1)
@@ -391,9 +443,6 @@ func TestPeopleMassageClientsAndScopedIndicators(t *testing.T) {
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	binding.Active = false
 	bindingChange(t, f, staff, binding)
-	mentioned, _, mentionErr = f.H.store.MessagePeople(t.Context(), scope, []uuid.UUID{owner.UserID}, nil)
-	require.NoError(t, mentionErr)
-	require.Empty(t, mentioned, "Inactive bindings must not grant hidden-profile mention access")
 	_, err = f.H.store.ListPeople(t.Context(), scope, db.PeopleListQuery{EventID: f.Event.ID})
 	require.ErrorIs(t, err, db.ErrPeopleDenied)
 	page, err = f.H.store.SearchPeople(t.Context(), scope, db.PeopleQuery{EventID: f.Event.ID, Query: "Client"})

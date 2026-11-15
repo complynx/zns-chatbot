@@ -11,6 +11,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
 var ErrPeopleDenied = errors.New("people search scope denied")
@@ -157,7 +159,8 @@ func rankPeopleCandidates(
 			continue
 		}
 		match.Score = nameMatch(query, candidate)
-		match.ProfileURL = fmt.Sprintf("tg://user?id=%d", telegramID)
+		match.FullName = PersonPreferredName(match.FullName, match.Username, telegramID)
+		match.ProfileURL = telegram.UserProfileURL(telegramID, match.Username)
 		match.Historical = !current
 		if result.Scope == peopleScopePublic {
 			match.MatchedName, match.NameSource = match.FullName, "current"

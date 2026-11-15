@@ -2,6 +2,31 @@
 
 ## Tools and access
 
+`zinusya_people.resolve({user_id?,telegram_user_id?,username?})` resolves exactly
+one known account UUID, positive Telegram ID or exact Telegram username (optional
+`@`, case-insensitive). Every authenticated active caller can resolve basic
+identity within this bot/organization, including hidden and revoked targets.
+It returns only `user_id`, `telegram_user_id`, `preferred_name`, `username` and
+`profile_url`. The saved profile name takes precedence over the Telegram name;
+username and a Telegram-ID label are fallbacks. Links follow the Python helper:
+`https://t.me/<username>` when available, otherwise `tg://user?id=...`.
+A username that matches several accounts returns conflict: use a UUID or
+Telegram ID. The lookup grants no directory or administrative access. Name
+search, listing and full cards retain the scopes below.
+
+The preferred name is untrusted text. In its replies the agent extracts a human
+name, removes URLs, markup, instructions and noise, inflects the name when
+needed, escapes the Markdown label and links it only to `profile_url`.
+Automatic replacement of exact account/Telegram references and automatic
+notifications do not use a model: they show the same basic identity as literal
+text. Literal blocks and debug JSON remain unchanged.
+
+Profile name writes reject Markdown delimiters and `@`; hyphens, apostrophes and
+periods remain valid. Migration 81 removes these characters from existing saved
+profile names in the same way as a name edit: the profile revision increases
+and the saved Latin spelling is cleared. Telegram observations and operation
+receipts stay unchanged.
+
 `zinusya_people.search({query,event_id?,limit?})` searches full names, name
 components, Telegram usernames, observed previous names and saved Latin spellings.
 Queries allow 2..128 characters and at most six normalized name tokens.
@@ -38,8 +63,7 @@ spelling matched; the stored Latin alias still helps matching.
 
 `zinusya_people.info({user_id,event_id?,history_event_id?})` returns `profile`:
 current display name, Telegram username if available, saved gender/pronouns with
-their explicit or inferred source, and a `tg://user?id=...`
-profile link. Both explicit preferences and saved inferences are public when
+their explicit or inferred source, and the same profile link as `resolve`. Both explicit preferences and saved inferences are public when
 `visible=true`; inferences retain a separate `inferred` source label for each field. Ordinary users
 can read visible profiles and their own profile.
 Hidden and nonexistent profiles both return not found to unauthorized readers.

@@ -93,9 +93,9 @@ func TestPaymentReviewRejectionDescriptionKeepsMetadataLiteralAndCreditsZero(t *
 	review.Decision, review.AmountMinor = payments.Rejected, 0
 	review.Reason = "**untrusted** ```\nnot a command [link](https://example.invalid)"
 	payer := "Payer **literal** ``` @example"
-	_, err := f.H.store.Pool().Exec(t.Context(), "INSERT INTO shuttle_user_profiles(user_id,version,"+
-		"full_name)\nVALUES($1,0,$2) ON CONFLICT(user_id) DO UPDATE SET full_name=$2,"+
-		"version=shuttle_user_profiles.version+1", f.OwnerID, payer)
+	// Saved profile names reject markup. An observed Telegram name can still contain it.
+	_, err := f.H.store.Pool().Exec(t.Context(),
+		`UPDATE shuttle_users SET profile=jsonb_build_object('first_name',$2::text) WHERE id=$1`, f.OwnerID, payer)
 	require.NoError(t, err)
 	code, raw := paymentRequest(t, f, f.Ambassador, "review/prepare", "readable-rejection", review)
 	require.Equal(t, http.StatusOK, code, string(raw))

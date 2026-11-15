@@ -3,13 +3,13 @@ package db
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/internal/db/sqlc"
+	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
 type PersonCard struct {
@@ -80,7 +80,8 @@ func (s *Store) PeopleInfo(
 	if err != nil {
 		return result, err
 	}
-	result.Profile.ProfileURL = fmt.Sprintf("tg://user?id=%d", telegramID)
+	result.Profile.FullName = PersonPreferredName(result.Profile.FullName, result.Profile.Username, telegramID)
+	result.Profile.ProfileURL = telegram.UserProfileURL(telegramID, result.Profile.Username)
 	if mode == peopleScopePublic {
 		return result, nil
 	}

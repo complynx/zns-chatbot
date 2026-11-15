@@ -288,7 +288,7 @@ func TestMassageSpecialistNoticesShareBookingCancelAndReplayAcrossInterfaces(t *
 			f, staff, schedule, _ := staffFixture(t)
 			owner := ownerProfileScope(t, f.H, f.OwnerID)
 			_, err := f.H.store.Pool().
-				Exec(t.Context(), `UPDATE shuttle_user_profiles SET full_name='Client <untrusted>' WHERE user_id=$1`, owner.UserID)
+				Exec(t.Context(), `UPDATE shuttle_user_profiles SET full_name='Client untrusted' WHERE user_id=$1`, owner.UserID)
 			require.NoError(t, err)
 			deployment := db.EventScope{BotID: owner.BotID, Organization: owner.Organization}
 			session := nativeMassageSession(t, f, owner, 11002)

@@ -28,6 +28,7 @@ const (
 	code          = "code"
 	pre           = "pre"
 	textMention   = "text_mention"
+	textLink      = "text_link"
 )
 
 // Message is a sendable chunk. Text is also the fallback after a formatting rejection.
@@ -100,9 +101,9 @@ func PersonReferenceText(markdown string) string {
 			if destination := value.Destination.Value(source); strings.HasPrefix(destination, "tg://user?") {
 				out.WriteString(destination)
 			}
-		case *ast.AutoLink:
-			out.WriteString(value.Label.Value(source))
 			out.WriteByte('\n')
+			return
+		case *ast.AutoLink:
 			if destination := value.Destination.Value(source); strings.HasPrefix(destination, "tg://user?") {
 				out.WriteString(destination)
 			}
@@ -174,7 +175,12 @@ func (r *renderer) node(node ast.Node) {
 		language, _ := value.Language(r.source)
 		r.literal(value.Value.Str(r.source), telegram.MessageEntity{Type: pre, Language: language})
 	case *ast.Link:
+		// The explicit destination owns this identity. A user-controlled label
+		// must not turn into a mention of a different account.
+		people := r.people
+		r.people = nil
 		r.wrap(node, r.link(value.Destination.Value(r.source)))
+		r.people = people
 	case *ast.AutoLink:
 		r.literal(value.Label.Value(r.source), r.link(value.Destination.Value(r.source)))
 	case *ast.RawHTML:
@@ -270,7 +276,7 @@ func (r *renderer) link(destination string) telegram.MessageEntity {
 		return telegram.MessageEntity{}
 	}
 	if parsed.Scheme == "https" || parsed.Scheme == "http" || parsed.Scheme == "mailto" {
-		return telegram.MessageEntity{Type: "text_link", URL: destination}
+		return telegram.MessageEntity{Type: textLink, URL: destination}
 	}
 	return telegram.MessageEntity{}
 }

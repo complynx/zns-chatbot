@@ -36,32 +36,31 @@ func TestMessagePeopleScopeAndVisibility(t *testing.T) {
 		Subject:      owner.String(),
 	}
 	ids := []uuid.UUID{owner, visible, hidden, revoked, foreign, visible}
-	people, needsAdmin, err := s.MessagePeople(ctx, scope, ids, []int64{401, 402, 404})
+	people, err := s.MessagePeople(ctx, scope, ids, []int64{401, 402, 404})
 	require.NoError(t, err)
-	require.Len(t, people, 2)
-	require.True(t, needsAdmin, "Only the hidden account needs privileged resolution")
+	require.Len(t, people, 4, "Exact basic identities include hidden and revoked targets")
 	require.Equal(t, "Profile Name", people[visible.String()].FirstName)
 	require.EqualValues(t, 400, people[owner.String()].ID)
 	_, err = s.Pool().Exec(ctx, `UPDATE shuttle_users SET profile=jsonb_build_object('first_name',$2::text) WHERE id=$1`,
 		owner, strings.Repeat("Я", 300))
 	require.NoError(t, err)
-	people, _, err = s.MessagePeople(ctx, scope, []uuid.UUID{owner}, nil)
+	people, err = s.MessagePeople(ctx, scope, []uuid.UUID{owner}, nil)
 	require.NoError(t, err)
 	require.Equal(t, strings.Repeat("Я", 256), people[owner.String()].FirstName)
-	_, needsAdmin, err = s.MessagePeople(ctx, scope, []uuid.UUID{uuid.New(), revoked, foreign}, []int64{999})
+	_, err = s.Pool().Exec(ctx, `WITH cleared AS (
+ UPDATE shuttle_user_profiles SET full_name='' WHERE user_id=$1)
+ UPDATE shuttle_users SET profile=jsonb_build_object('first_name',$2::text) WHERE id=$1`,
+		visible, "Name "+hidden.String())
 	require.NoError(t, err)
-	require.False(t, needsAdmin, "Non-person, revoked and foreign IDs must not trigger IAM")
-	scope.GlobalAdmin = true
-	people, needsAdmin, err = s.MessagePeople(ctx, scope, ids, nil)
+	people, err = s.MessagePeople(ctx, scope, []uuid.UUID{visible}, nil)
 	require.NoError(t, err)
-	require.Len(t, people, 3)
-	require.False(t, needsAdmin)
-	require.EqualValues(t, 402, people[hidden.String()].ID)
-	require.NotContains(t, people, foreign.String())
-	require.NotContains(t, people, revoked.String())
-	scope.Subject = "wrong-subject"
-	people, needsAdmin, err = s.MessagePeople(ctx, scope, ids, nil)
+	require.Equal(t, "Telegram 401", people[visible.String()].FirstName,
+		"An embedded account ID must not become another person's display identity")
+	people, err = s.MessagePeople(ctx, scope, []uuid.UUID{uuid.New(), foreign}, []int64{999})
 	require.NoError(t, err)
 	require.Empty(t, people)
-	require.False(t, needsAdmin)
+	scope.Subject = "wrong-subject"
+	people, err = s.MessagePeople(ctx, scope, ids, nil)
+	require.NoError(t, err)
+	require.Empty(t, people)
 }

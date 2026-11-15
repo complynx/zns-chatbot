@@ -174,7 +174,7 @@ func TestStructuredProfilePlainTextUsesSavedLanguageAndCurrentAuthorization(t *t
 	require.NoError(t, err)
 	scope := db.ProfileScope{BotID: 123, Organization: user.Organization, Subject: user.Subject, UserID: user.ID}
 	profile, err := h.store.MutateProfile(t.Context(), scope, db.ProfileMutation{
-		OperationID: uuid.New(), Kind: "set_name", FullName: "[Daniel](https://example.invalid)"})
+		OperationID: uuid.New(), Kind: "set_name", FullName: "Daniel https://example.invalid"})
 	require.NoError(t, err)
 	_, err = h.store.MutateProfile(t.Context(), scope, db.ProfileMutation{OperationID: uuid.New(), Kind: "set_language",
 		ExpectedVersion: profile.Version, BotLanguage: "ru"})
@@ -183,7 +183,7 @@ func TestStructuredProfilePlainTextUsesSavedLanguageAndCurrentAuthorization(t *t
 	h.await(t, view, "completed")
 	h.awaitReplies(t, 2)
 	p.mu.Lock()
-	require.Contains(t, p.sent[1].Text, "Мой профиль\nИмя: [Daniel](https://example.invalid)")
+	require.Contains(t, p.sent[1].Text, "Мой профиль\nИмя: Daniel https://example.invalid")
 	require.Contains(t, p.sent[1].Text, "/name — Изменить имя")
 	require.Empty(t, p.sent[1].Entities)
 	p.mu.Unlock()

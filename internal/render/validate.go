@@ -45,7 +45,7 @@ func validEntity(entity telegram.MessageEntity, units int, boundaries map[int]bo
 	switch entity.Type {
 	case bold, italic, strikethrough, code, pre:
 		return true
-	case "text_link":
+	case textLink:
 		return entity.URL != ""
 	case "text_mention":
 		return entity.User != nil && entity.User.ID > 0
