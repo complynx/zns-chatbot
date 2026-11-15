@@ -109,6 +109,13 @@ type Run struct {
 	Version              int64       `json:"version"`
 	Question             *Question   `json:"question,omitempty"`
 	Approval             *Approval   `json:"approval,omitempty"`
+
+	// StepBudgetStart is the completed step count at the latest accepted input.
+	StepBudgetStart int64 `json:"step_budget_start,omitempty"`
+	// Any of these keeps a step-limit pause closed when Loom accepts an input.
+	PauseRequested  bool              `json:"pause_requested,omitempty"`
+	CancelRequested bool              `json:"cancel_requested,omitempty"`
+	UnresolvedSteps []json.RawMessage `json:"unresolved_steps,omitempty"`
 }
 type InputPresentation struct {
 	ReplyTo    string `json:"reply_to,omitempty"`

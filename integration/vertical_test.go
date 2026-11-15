@@ -1585,6 +1585,7 @@ func (p *peers) applyInput(w http.ResponseWriter, r *http.Request) {
 		receipt := loom.ControlReceipt{
 			ID:      run.ID,
 			Status:  run.Status,
+			Reason:  run.Reason,
 			Version: run.Version,
 			InputID: "input-" + key,
 			Context: &loom.InputContext{Revision: int64(len(p.inputs)), SourceActor: "fixture"},
@@ -1722,6 +1723,11 @@ func (p *peers) rejectAgentRequest(w http.ResponseWriter, r *http.Request) bool 
 
 // Keep the accepted prompt in subsequent reads, as the real Loom API does.
 func (p *peers) updateInputPrompt(run *loom.Run, input loom.InputRequest) {
+	// Loom renews the step budget at each input and wakes an unblocked step-limit pause.
+	run.StepBudgetStart++
+	if run.Status == "paused" && run.Reason == "step_limit" && !run.PauseRequested {
+		run.Status, run.Reason = "queued", ""
+	}
 	if !p.retainResolvedPrompts {
 		run.Question = nil
 		return

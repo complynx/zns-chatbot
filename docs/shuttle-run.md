@@ -75,6 +75,25 @@ Readiness requires PostgreSQL; IAM or Loom downtime can leave accepted work wait
 An operator can apply a [local Telegram ban](shuttle-user-bans.md) before onboarding.
 The same binary records a required actor and reason without starting workers.
 
+## Loom step-limit pauses
+
+A Loom run paused with `step_limit` stays attached to its conversation. ZiNuSya
+sends one notice with Continue and Stop reply buttons for each exhausted budget.
+The notice replaces a question or approval that the run retains. Loom's
+`step_budget_start` identifies the budget, so polls and restarts do not repeat
+the notice, and a later exhausted budget notifies again.
+
+Both buttons send ordinary conversation text. Loom renews the budget and wakes
+the same run ([Loom PR67](https://github.com/complynx/loom/pull/67)); the agent
+decides what to do with the answer. ZiNuSya does not resume, reset or replace the run.
+
+A pause request, a cancel request or an unresolved step outcome keeps the run
+paused after Loom accepts an input. ZiNuSya then confirms that the message was
+sent and does not repeat the notice.
+
+The task that owns the run retires the buttons when it next polls the run. A
+notice delivered late can thus show buttons for a short time after the run moved on.
+
 ## Telegram menu recovery
 
 Only complete menu updates enter the success cache. A partial update invalidates
