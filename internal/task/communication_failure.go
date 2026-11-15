@@ -22,7 +22,7 @@ func (s *Service) failCommunication(ctx context.Context, d db.CommunicationDeliv
 		// even if Loom cannot be reached; the run also has its own credit budget.
 		cancelCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 		defer cancel()
-		service, tokenErr := s.iam.ServiceToken(cancelCtx)
+		service, tokenErr := s.communicationServiceToken(cancelCtx)
 		if tokenErr == nil {
 			_, _ = s.loom.Cancel(cancelCtx, loom.Auth{ServiceToken: service.Token}, d.PersonalizationRunID,
 				"communication-cancel:"+d.ID.String())

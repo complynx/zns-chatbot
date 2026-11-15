@@ -731,6 +731,9 @@ func (h *harness) start(t *testing.T) {
 		h.observer,
 		slog.New(slog.DiscardHandler),
 		task.Options{
+			PersonalizationToken: func(context.Context) (identity.Credential, error) {
+				return identity.Credential{Token: "personalization-service"}, nil
+			},
 			AvatarRenderer:             p.avatarProcessor,
 			BotID:                      123,
 			RegistrationDetailsEnabled: p.registrationDetails != nil,

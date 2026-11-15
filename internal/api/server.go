@@ -41,6 +41,7 @@ const (
 )
 
 type Options struct {
+	PersonalizationEnabled                                                    bool
 	SkillsEnabled                                                             bool
 	MiniAppAllowLocalHTTP                                                     bool
 	RegistrationDetails                                                       *registrationdetails.Protector

@@ -132,6 +132,7 @@ func migrateDatabase(ctx context.Context, store *db.Store) error {
 	return task.MigrateQueue(ctx, store.Pool())
 }
 
+//nolint:funlen // Keep startup construction and its failure cleanup in one ordered path.
 func compose(
 	ctx context.Context,
 	c config.Config,
@@ -181,6 +182,11 @@ func compose(
 		_ = obs.Shutdown(ctx)
 		return nil, nil, nil, err
 	}
+	personalizer, err := personalizationToken(c, h)
+	if err != nil {
+		_ = obs.Shutdown(ctx)
+		return nil, nil, nil, err
+	}
 	engine, err := task.New(
 		store,
 		iam,
@@ -189,6 +195,7 @@ func compose(
 		obs,
 		logger,
 		task.Options{
+			PersonalizationToken:       personalizer,
 			DebugApprovalJSON:          c.DebugApprovalJSON,
 			SkillsEnabled:              c.Loom.SkillsEnabled,
 			AvatarRenderer:             renderer,
@@ -210,21 +217,22 @@ func compose(
 		iam,
 		engine,
 		api.Options{
-			SkillsEnabled:         c.Loom.SkillsEnabled,
-			RegistrationDetails:   details,
-			TelegramPrelink:       telegramPrelinkOptions(c, h),
-			APIAudience:           c.Identity.APIAudience,
-			MiniAppOrigin:         c.MiniAppOrigin,
-			MiniAppAllowLocalHTTP: c.MiniAppAllowLocalHTTP,
-			MiniAppBotToken:       c.Telegram.Token,
-			AvatarRenderer:        renderer,
-			Telegram:              tg,
-			BotID:                 c.Telegram.BotID,
-			WebhookSecret:         c.Telegram.WebhookSecret,
-			OrganizationID:        c.Identity.OrganizationID,
-			ActorID:               c.Identity.ActorID,
-			Issuer:                c.Identity.Issuer,
-			LoomAudience:          c.Identity.Audience,
+			PersonalizationEnabled: personalizer != nil,
+			SkillsEnabled:          c.Loom.SkillsEnabled,
+			RegistrationDetails:    details,
+			TelegramPrelink:        telegramPrelinkOptions(c, h),
+			APIAudience:            c.Identity.APIAudience,
+			MiniAppOrigin:          c.MiniAppOrigin,
+			MiniAppAllowLocalHTTP:  c.MiniAppAllowLocalHTTP,
+			MiniAppBotToken:        c.Telegram.Token,
+			AvatarRenderer:         renderer,
+			Telegram:               tg,
+			BotID:                  c.Telegram.BotID,
+			WebhookSecret:          c.Telegram.WebhookSecret,
+			OrganizationID:         c.Identity.OrganizationID,
+			ActorID:                c.Identity.ActorID,
+			Issuer:                 c.Identity.Issuer,
+			LoomAudience:           c.Identity.Audience,
 		},
 	)
 	if err != nil {

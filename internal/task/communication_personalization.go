@@ -14,6 +14,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/internal/broadcasts"
 	"github.com/complynx/zns-chatbot/internal/db"
+	"github.com/complynx/zns-chatbot/internal/identity"
 	"github.com/complynx/zns-chatbot/internal/loom"
 )
 
@@ -42,7 +43,7 @@ func (s *Service) personalizeCommunication(
 	if communicationPersonalizationExpired(d, time.Now()) {
 		return "", errCommunicationPersonalizationFailed
 	}
-	service, err := s.iam.ServiceToken(ctx)
+	service, err := s.communicationServiceToken(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -55,7 +56,7 @@ func (s *Service) personalizeCommunication(
 		if chatErr != nil {
 			return "", chatErr
 		}
-		raw, err = s.newCommunicationInput(ctx, service.Token, chat, c, u)
+		raw, err = s.newCommunicationInput(ctx, chat, c, u)
 		if err != nil {
 			return "", err
 		}
@@ -78,18 +79,29 @@ func (s *Service) personalizeCommunication(
 	return s.communicationPersonalizationResult(ctx, auth, d, run)
 }
 
+// communicationServiceToken never falls back to the human delegation actor.
+func (s *Service) communicationServiceToken(ctx context.Context) (identity.Credential, error) {
+	if s.options.PersonalizationToken == nil {
+		return identity.Credential{}, errCommunicationPersonalizationFailed
+	}
+	return s.options.PersonalizationToken(ctx)
+}
+
 func (s *Service) newCommunicationInput(
 	ctx context.Context,
-	service string,
 	chat string,
 	c db.Communication,
 	u db.User,
 ) (json.RawMessage, error) {
+	actor, err := s.iam.ServiceToken(ctx)
+	if err != nil {
+		return nil, err
+	}
 	credential, err := s.iam.UserToken(ctx, u.Subject)
 	if err != nil {
 		return nil, err
 	}
-	memory, err := s.loom.MemoryContext(ctx, loom.Auth{ServiceToken: service, SubjectToken: credential.Token})
+	memory, err := s.loom.MemoryContext(ctx, loom.Auth{ServiceToken: actor.Token, SubjectToken: credential.Token})
 	if err != nil {
 		return nil, err
 	}
