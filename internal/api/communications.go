@@ -6,6 +6,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/internal/broadcasts"
 	"github.com/complynx/zns-chatbot/internal/db"
@@ -36,6 +37,8 @@ func (s *Server) registerCommunications(api huma.API) {
 		communicationTransportLimit,
 		s.prepareCommunication,
 	)
+	registerAgentPost(api, "agent-communications-prepare-status", communicationPath+"prepare/status",
+		internalBodyLimit, s.communicationPrepareStatus)
 	registerAgentPost(
 		api,
 		"agent-communications-status",
@@ -147,6 +150,30 @@ func (s *Server) communicationStatus(
 	return agentReadResult(in.Body.OperationID, c), nil
 }
 
+// communicationPrepareStatus recovers preparation by its original operation ID,
+// including when the caller never received the generated communication ID.
+func (s *Server) communicationPrepareStatus(
+	ctx context.Context,
+	in *agentRegistrationStatusRequest,
+) (*paymentWriteResponse[db.Communication], error) {
+	scope, err := s.paymentScope(ctx, in.AuthInput)
+	if err != nil {
+		return nil, err
+	}
+	op, err := uuid.Parse(in.Body.OperationID)
+	if err != nil || op == uuid.Nil {
+		return nil, huma.Error400BadRequest("UUID operation_id required")
+	}
+	c, err := s.store.CommunicationByOperation(ctx, scope, op)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return paymentStatusResult[db.Communication](in.Body.OperationID, nil, err)
+	}
+	if err != nil {
+		return nil, communicationError(err)
+	}
+	return paymentStatusResult(in.Body.OperationID, &c, nil)
+}
+
 func communicationsModule() map[string]any {
 	prepare := map[string]any{
 		"id": communicationPrepareMethod,
@@ -186,6 +213,7 @@ func communicationsModule() map[string]any {
 		manifestPermissions:  []string{},
 		manifestPath:         communicationPath + "prepare",
 		manifestEffect:       effectWrite,
+		manifestStatusPath:   communicationPath + "prepare/status",
 		manifestTimeout:      toolTimeoutMillis,
 		manifestMaxResult:    communicationTransportLimit,
 		manifestInputSchema:  knowledgeInputSchema[db.CommunicationArguments](),
