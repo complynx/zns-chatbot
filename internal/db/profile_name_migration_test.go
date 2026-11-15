@@ -66,7 +66,12 @@ func TestProfileNameCleanupRemovesMarkupAndKeepsOtherText(t *testing.T) {
 	}, got)
 	_, err = s.Pool().Exec(ctx, `UPDATE shuttle_user_profiles SET full_name='@invalid' WHERE first_name=''`)
 	require.ErrorContains(t, err, "shuttle_profile_name_no_markup")
+	const versionsSQL = `SELECT string_agg(version::text,',' ORDER BY user_id) FROM shuttle_user_profiles`
+	var before, after string
+	require.NoError(t, s.Pool().QueryRow(ctx, versionsSQL).Scan(&before))
 	_, err = provider.ApplyVersion(ctx, 81, false)
 	require.NoError(t, err)
 	require.NoError(t, s.Migrate(ctx))
+	require.NoError(t, s.Pool().QueryRow(ctx, versionsSQL).Scan(&after))
+	require.Equal(t, before, after, "A repeated cleanup must not change clean names")
 }

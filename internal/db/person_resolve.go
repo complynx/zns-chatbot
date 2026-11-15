@@ -125,5 +125,6 @@ func personReferenceSelector(a PersonReference) (string, any, error) {
 	if !personUsername.MatchString(username) {
 		return "", nil, ErrPeopleInvalid
 	}
+	// No index: a deployment has about a thousand users, so a scan is sufficient.
 	return "lower(u.profile->>'username')=lower($3)", username, nil
 }

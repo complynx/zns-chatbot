@@ -2,12 +2,14 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/internal/db/sqlc"
+	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
 // PairAssignmentParticipant is bounded display context, never legal identity or consent.
@@ -31,11 +33,16 @@ func pairAssignmentParticipant(ctx context.Context, tx pgx.Tx, q *sqlc.Queries,
 	if err != nil {
 		return PairAssignmentParticipant{}, false, err
 	}
-	return PairAssignmentParticipant{
-		UserID:         id,
-		TelegramUserID: user.TgUserID,
-		DisplayName:    strings.TrimSpace(profile.FullName),
-	}, true, nil
+	name := strings.TrimSpace(profile.FullName)
+	if name == "" {
+		// No saved profile name: show the current Telegram name.
+		var observed telegram.User
+		if err = json.Unmarshal(user.Profile, &observed); err != nil {
+			return PairAssignmentParticipant{}, false, err
+		}
+		name = strings.TrimSpace(observed.FirstName + " " + observed.LastName)
+	}
+	return PairAssignmentParticipant{UserID: id, TelegramUserID: user.TgUserID, DisplayName: name}, true, nil
 }
 
 // Identity metadata comes from the original pair membership, independent of the

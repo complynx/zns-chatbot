@@ -63,8 +63,7 @@ spelling matched; the stored Latin alias still helps matching.
 
 `zinusya_people.info({user_id,event_id?,history_event_id?})` returns `profile`:
 current display name, Telegram username if available, saved gender/pronouns with
-their explicit or inferred source, and a `tg://user?id=...`
-profile link. Both explicit preferences and saved inferences are public when
+their explicit or inferred source, and the same profile link as `resolve`. Both explicit preferences and saved inferences are public when
 `visible=true`; inferences retain a separate `inferred` source label for each field. Ordinary users
 can read visible profiles and their own profile.
 Hidden and nonexistent profiles both return not found to unauthorized readers.

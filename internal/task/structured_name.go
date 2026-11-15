@@ -38,8 +38,10 @@ func (s *Service) structuredName(
 			i,
 			structuredText(
 				ru,
-				"The name request changed, expired, or the name is invalid. Open /profile and use /name again.",
-				"Запрос имени изменился, истёк или имя некорректно. Открой /profile и отправь /name заново.",
+				"The name request changed, expired, or the name is invalid. "+
+					"A name cannot contain Markdown characters or @. Open /profile and use /name again.",
+				"Запрос имени изменился, истёк или имя некорректно. "+
+					"В имени нельзя использовать символы Markdown и @. Открой /profile и отправь /name заново.",
 			),
 			false,
 			ru,
