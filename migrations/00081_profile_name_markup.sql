@@ -1,8 +1,10 @@
 -- +goose Up
 -- Remove Markdown delimiters and @ from saved profile names, then reject them.
 -- The cleanup acts like a name edit: the revision increases and the existing
--- trigger clears the Latin spelling. The periodic name sync sends the cleaned
--- name to IAM. Telegram observations and operation receipts stay unchanged.
+-- trigger clears the Latin spelling. For a profile with a name sync row, the
+-- periodic sync sends the cleaned name to IAM. A name imported from IAM has no
+-- such row and stays unchanged in IAM. Telegram observations and operation
+-- receipts stay unchanged.
 UPDATE shuttle_user_profiles p
 SET full_name = CASE WHEN c.first_name <> '' AND c.last_name <> ''
                     THEN c.first_name || ' ' || c.last_name ELSE c.full_name END,
