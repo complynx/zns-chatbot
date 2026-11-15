@@ -50,7 +50,11 @@ func TestPeopleMigrationBackfillsNamesAndPreservesPrivacy(t *testing.T) {
 	t.Parallel()
 	s := testStore(t)
 	provider := baselineProvider(t, s)
-	_, err := provider.ApplyVersion(t.Context(), 80, false)
+	_, err := provider.ApplyVersion(t.Context(), 82, false)
+	require.NoError(t, err)
+	_, err = provider.ApplyVersion(t.Context(), 81, false)
+	require.NoError(t, err)
+	_, err = provider.ApplyVersion(t.Context(), 80, false)
 	require.NoError(t, err)
 	user := uuid.New()
 	_, err = s.Pool().

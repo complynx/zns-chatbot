@@ -50,6 +50,21 @@ func TestApprovalArgumentKeysCannotInjectFormatting(t *testing.T) {
 	require.NoError(t, render.Validate(chunks[0]))
 }
 
+func TestApprovalEmptyValuesRemainDistinct(t *testing.T) {
+	t.Parallel()
+	raw := json.RawMessage(`{"content":null,"reason":{},"sources":[]}`)
+	for language, expected := range map[string][]string{
+		"en": {"Content: no value (null)", "Reason: empty object", "Sources: empty list"},
+		"ru": {"Содержимое: нет значения (null)", "Причина: пустой объект", "Источники: пустой список"},
+	} {
+		chunks := render.Render(approvalParameters(raw, language), nil)
+		require.Len(t, chunks, 1)
+		for _, line := range expected {
+			require.Contains(t, chunks[0].Text, line)
+		}
+	}
+}
+
 func TestApprovalNamesDoNotChangeArticleContent(t *testing.T) {
 	t.Parallel()
 	const id = "0d3a4c0c-28a0-44fd-8246-b1c17a0c3c8e"

@@ -2,9 +2,10 @@ package db
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/uuid"
+
+	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
 type PeopleCursor struct {
@@ -113,7 +114,8 @@ func (s *Store) ListPeople(ctx context.Context, scope PaymentScope, a PeopleList
 			}
 			break
 		}
-		person.ProfileURL = fmt.Sprintf("tg://user?id=%d", telegramID)
+		person.FullName = PersonPreferredName(person.FullName, person.Username, telegramID)
+		person.ProfileURL = telegram.UserProfileURL(telegramID, person.Username)
 		result.Users = append(result.Users, person)
 		lastKey = cursorKey
 	}

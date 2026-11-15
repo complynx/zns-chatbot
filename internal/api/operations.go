@@ -99,6 +99,7 @@ func (s *Server) register(api huma.API) {
 	registerAgentPost(api, "agent-people-search", peopleSearchPath, internalBodyLimit, s.searchPeople)
 	registerAgentPost(api, "agent-person-info", "/internal/agent/people/info", internalBodyLimit, s.personInfo)
 	registerAgentPost(api, "agent-people-list", "/internal/agent/people/list", internalBodyLimit, s.listPeople)
+	registerAgentPost(api, "agent-person-resolve", "/internal/agent/people/resolve", internalBodyLimit, s.resolvePerson)
 	s.registerEventChanges(api)
 	huma.Register(
 		api,

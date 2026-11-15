@@ -282,6 +282,7 @@ const (
 	profileNameWriteDescription = "Save the user's explicitly supplied or confirmed real first_name and last_name " +
 		"separately; components may contain spaces. Do not guess a split by word position: ask when " +
 		"ambiguous. Read get first and send expected_version. " +
+		"Names must not contain Markdown delimiters or @; clean these before asking for confirmation. " +
 		"This finishes any pending name request and schedules name-only IAM synchronization; " +
 		"it does not prove IAM has updated or change legal registration details. " +
 		"Never copy Telegram hints without the user's confirmation."
@@ -294,6 +295,7 @@ const (
 	profileCompleteNameDescription = "After explicit user input or confirmation, save separate real first_name and " +
 		"last_name and finish the matching unexpired name request. Components may contain spaces; " +
 		"clarify an ambiguous split. Requires get's version and expectation ID. " +
+		"Names must not contain Markdown delimiters or @. " +
 		"Schedules name-only IAM synchronization, not legal registration details. " +
 		"A local receipt does not prove remote IAM completion. Stale or expired requests conflict; " +
 		"reread and follow current user intent."

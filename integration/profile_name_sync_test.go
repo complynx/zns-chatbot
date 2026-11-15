@@ -66,10 +66,13 @@ func TestProfileNameRiverWorkerRecoversAfterIAMOutageAndAppRestart(t *testing.T)
 	t.Cleanup(func() {
 		if t.Failed() {
 			var state string
+			var delay float64
 			err := h.store.Pool().
-				QueryRow(ctx, `SELECT state::text FROM river_job WHERE kind='zinusya_profile_name_sync' ORDER BY id DESC LIMIT 1`).
-				Scan(&state)
-			t.Logf("profile worker state=%q query_error=%v", state, err)
+				QueryRow(ctx, `SELECT j.state::text,extract(epoch FROM j.scheduled_at-n.next_attempt_at)
+ FROM river_job j CROSS JOIN shuttle_profile_name_sync n
+ WHERE j.kind='zinusya_profile_name_sync' ORDER BY j.id DESC LIMIT 1`).
+				Scan(&state, &delay)
+			t.Logf("profile worker state=%q schedule_minus_backoff_seconds=%f query_error=%v", state, delay, err)
 		}
 	})
 	select {
@@ -90,9 +93,13 @@ func TestProfileNameRiverWorkerRecoversAfterIAMOutageAndAppRestart(t *testing.T)
 		Exec(ctx, "UPDATE river_job SET state='available',scheduled_at=clock_timestamp() WHERE "+
 			"kind='zinusya_profile_name_sync' AND state IN ('retryable','scheduled')")
 	require.NoError(t, updateErr)
+	// River schedules from Go's clock; the durable deadline uses PostgreSQL's.
+	// Require an actual snooze, allowing only sub-millisecond clock precision.
 	require.Eventually(t, func() bool {
 		var deferred bool
-		err := h.store.Pool().QueryRow(ctx, "SELECT j.state='scheduled' AND j.scheduled_at>=n.next_attempt_at\n"+
+		err := h.store.Pool().QueryRow(ctx, "SELECT j.state='scheduled' AND "+
+			"coalesce((j.metadata->>'snoozes')::int,0)>0 AND "+
+			"j.scheduled_at>=n.next_attempt_at-interval '1 millisecond'\n"+
 			"FROM river_job j CROSS JOIN shuttle_profile_name_sync n WHERE j.kind='zinusya_profile_name_sync' ORDER "+
 			"BY j.id DESC LIMIT 1").Scan(&deferred)
 		return err == nil && deferred

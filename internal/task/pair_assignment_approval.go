@@ -97,10 +97,7 @@ func fullPairAssignmentApproval(
 	}
 	var participants strings.Builder
 	writeParticipant := func(label string, person db.PairAssignmentParticipant) {
-		name := strings.TrimSpace(person.DisplayName)
-		if name == "" {
-			name = person.UserID.String()
-		}
+		name := db.PersonPreferredName(person.DisplayName, "", person.TelegramUserID)
 		fmt.Fprintf(
 			&participants,
 			"%s: [%s](tg://user?id=%d)\n\n",
@@ -147,7 +144,8 @@ func pairAssignmentDisplayDescription(view db.PairAssignmentProposalView) string
 	var replacements []string
 	for _, person := range []*db.PairAssignmentParticipant{view.Leader, view.Follower} {
 		if strings.TrimSpace(person.DisplayName) != "" {
-			replacements = append(replacements, person.UserID.String(), strconv.Quote(person.DisplayName))
+			replacements = append(replacements, person.UserID.String(),
+				strconv.Quote(db.PersonPreferredName(person.DisplayName, "", person.TelegramUserID)))
 		}
 	}
 	return strings.NewReplacer(replacements...).Replace(view.Preparation.Description)

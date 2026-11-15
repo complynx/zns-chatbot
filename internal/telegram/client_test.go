@@ -17,6 +17,12 @@ import (
 	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
+func TestUserProfileURLMatchesPython(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "https://t.me/liubka_z", telegram.UserProfileURL(123, "liubka_z"))
+	require.Equal(t, "tg://user?id=123", telegram.UserProfileURL(123, ""))
+}
+
 func TestSendMessageAndCallback(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 	"unicode"
@@ -25,6 +26,8 @@ const (
 	profileSetLanguage    = "set_language"
 	profileSetVisibility  = "set_visibility"
 	profileNameSourceUser = "user"
+	// Hyphens, apostrophes and periods remain valid name punctuation.
+	profileNameMarkup = "\\`*_[](){}<>#|~@!"
 )
 
 type ProfileScope struct {
@@ -243,6 +246,9 @@ func normalizeVisibilityMutation(m ProfileMutation) (ProfileMutation, error) {
 }
 
 func normalizeProfileNameMutation(m ProfileMutation) (ProfileMutation, error) {
+	if strings.ContainsAny(m.FullName+m.FirstName+m.LastName, profileNameMarkup) {
+		return m, fmt.Errorf("%w: names must not contain Markdown delimiters or @", ErrInvalidProfile)
+	}
 	if m.FirstName != "" || m.LastName != "" {
 		m.FirstName, m.LastName = strings.TrimSpace(m.FirstName), strings.TrimSpace(m.LastName)
 		if !validProfileNameComponent(m.FirstName) || !validProfileNameComponent(m.LastName) || m.FullName != "" {
@@ -261,7 +267,7 @@ func normalizeProfileNameMutation(m ProfileMutation) (ProfileMutation, error) {
 
 func validProfileNameComponent(value string) bool {
 	return value != "" && utf8.ValidString(value) && utf8.RuneCountInString(value) <= 200 &&
-		!strings.ContainsFunc(value, unicode.IsControl)
+		!strings.ContainsFunc(value, unicode.IsControl) && !strings.ContainsAny(value, profileNameMarkup)
 }
 
 // MutateProfile serializes owner changes with revocation and saves immutable receipts.
