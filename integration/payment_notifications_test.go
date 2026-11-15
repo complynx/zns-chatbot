@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/db"
@@ -106,6 +107,8 @@ func TestPaymentNotificationsResumeAndDistinguishDepositFromFullPayment(t *testi
 	require.Len(t, messages, 1)
 	require.Contains(t, messages[0], "Оплата ещё не подтверждена")
 	require.Contains(t, messages[0], "30.87 BYN")
+	require.Contains(t, messages[0], f.Event.Document.Name)
+	require.NotContains(t, messages[0], f.Event.ID.String())
 	require.Contains(t, messages[0], "Europe/Minsk")
 	require.Contains(t, messages[0], evidence.ID.String())
 	code, data = paymentRequest(
@@ -302,7 +305,7 @@ func TestPaymentNotificationRepairDoesNotStarveHealthyRecipientBehindWaitingPage
 	p.mu.Lock()
 	p.unavailableTokenSubjects = make(map[string]bool)
 	p.mu.Unlock()
-	for i := range 100 {
+	for i := range db.NotificationRepairPageSize {
 		id, _ := registrationUser(t, f.H, int64(50000+i), false)
 		user, err := f.H.store.GetUser(context.Background(), id)
 		require.NoError(t, err)
@@ -327,8 +330,67 @@ func TestPaymentNotificationRepairDoesNotStarveHealthyRecipientBehindWaitingPage
 		"('00000000-'||substr(md5(id::text),9,4)||'-'||substr(md5(id::text),13,4)||'-'||substr(md5(id::text),17,"+
 		"4)||'-'||substr(md5(id::text),21,12))::uuid END\n WHERE evidence_id=$2", f.AmbassadorID, evidence.ID)
 	require.NoError(t, err)
-	f.H.start(t)
 	healthy := uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")
-	awaitNotification(t, f, healthy, "delivered")
+	var preceding int
+	require.NoError(t, f.H.store.Pool().QueryRow(t.Context(), `SELECT count(*)
+ FROM shuttle_payment_notifications WHERE evidence_id=$1 AND id<$2`, evidence.ID, healthy).Scan(&preceding))
+	require.Equal(t, db.NotificationRepairPageSize, preceding, "The healthy recipient must follow a full page")
+	const queuedSQL = `SELECT EXISTS(SELECT 1 FROM river_job
+ WHERE kind='zinusya_payment_notification' AND args->>'notification_id'=$1)`
+	var queued bool
+	require.NoError(t, f.H.store.Pool().QueryRow(t.Context(), queuedSQL, healthy.String()).Scan(&queued))
+	require.False(t, queued, "Repair must discover the recipient after startup")
+	phase := "scheduling beyond the first page"
+	t.Cleanup(func() {
+		if t.Failed() {
+			logPaymentRepairState(t, f, evidence.ID, healthy, phase)
+		}
+	})
+	f.H.start(t)
+	// Assert scheduler progress separately from draining failed recipients through
+	// the two-worker queue. Poll storage directly to avoid adding API/auth traffic.
+	const phaseTimeout = 30 * time.Second
+	const pollInterval = 100 * time.Millisecond
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		var exists bool
+		queryErr := f.H.store.Pool().QueryRow(t.Context(), queuedSQL, healthy.String()).Scan(&exists)
+		if assert.NoError(c, queryErr) {
+			assert.True(c, exists, "Repair has not queued the healthy recipient")
+		}
+	}, phaseTimeout, pollInterval, "Repair must advance beyond the full page of unavailable recipients")
+	phase = "delivery of the queued healthy recipient"
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		var state string
+		queryErr := f.H.store.Pool().QueryRow(t.Context(),
+			"SELECT state FROM shuttle_payment_notifications WHERE id=$1", healthy).Scan(&state)
+		if assert.NoError(c, queryErr) {
+			assert.Equal(c, "delivered", state)
+		}
+	}, phaseTimeout, pollInterval, "The queued healthy recipient must eventually receive the notification")
 	require.Len(t, sentNotifications(p, 11003), 1)
+}
+
+func logPaymentRepairState(t *testing.T, f paymentFixture, evidence, healthy uuid.UUID, phase string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 2*time.Second)
+	defer cancel()
+	var snapshot string
+	err := f.H.store.Pool().QueryRow(ctx, `SELECT jsonb_build_object(
+ 'healthy', (SELECT jsonb_build_object('state',state,'version',version,'next_attempt_at',next_attempt_at)
+   FROM shuttle_payment_notifications WHERE id=$2),
+ 'notification_states', (SELECT jsonb_object_agg(state,total) FROM
+   (SELECT state,count(*) AS total FROM shuttle_payment_notifications WHERE evidence_id=$1 GROUP BY state) n),
+ 'queue_states', (SELECT jsonb_object_agg(state,total) FROM
+   (SELECT j.state,count(*) AS total FROM river_job j
+    JOIN shuttle_payment_notifications n ON n.id::text=j.args->>'notification_id'
+    WHERE j.kind='zinusya_payment_notification' AND n.evidence_id=$1 GROUP BY j.state) q),
+ 'healthy_jobs', (SELECT jsonb_agg(jsonb_build_object('state',state,'attempt',attempt,
+   'scheduled_at',scheduled_at,'attempted_at',attempted_at,'finalized_at',finalized_at))
+   FROM river_job WHERE kind='zinusya_payment_notification' AND args->>'notification_id'=$2::text)
+ )::text`, evidence, healthy).Scan(&snapshot)
+	if err != nil {
+		t.Logf("Payment repair stalled during %s; diagnostic query failed: %v", phase, err)
+		return
+	}
+	t.Logf("Payment repair stalled during %s: %s", phase, snapshot)
 }

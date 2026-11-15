@@ -105,6 +105,10 @@ var telegramReference = regexp.MustCompile(`tg://user\?id=([0-9]+)\b`)
 const messagePeopleTimeout = 3 * time.Second
 
 func messageReferences(text string) ([]uuid.UUID, []int64) {
+	if len(render.AccountReferences(text)) == 0 && !telegramReference.MatchString(text) {
+		return nil, nil
+	}
+	text = render.PersonReferenceText(text)
 	matches := render.AccountReferences(text)
 	links := telegramReference.FindAllStringSubmatch(text, -1)
 	telegramIDs := make([]int64, 0, len(links))
@@ -145,12 +149,12 @@ func (s *Service) messagePeople(ctx context.Context, i intent, text string) map[
 		UserID:       actor.ID,
 		Subject:      actor.Subject,
 	}
-	people, err := s.store.MessagePeople(lookup, scope, ids, telegramIDs)
+	people, needsAdmin, err := s.store.MessagePeople(lookup, scope, ids, telegramIDs)
 	if err != nil {
 		s.logger.WarnContext(ctx, "message people lookup failed", "class", "message_people")
 		return nil
 	}
-	if messagePeopleResolved(people, ids, telegramIDs) {
+	if !needsAdmin {
 		return people
 	}
 	authCtx, authCancel := context.WithTimeout(lookup, time.Second)
@@ -163,29 +167,12 @@ func (s *Service) messagePeople(ctx context.Context, i intent, text string) map[
 	if !scope.GlobalAdmin {
 		return people
 	}
-	if privileged, readErr := s.store.MessagePeople(lookup, scope, ids, telegramIDs); readErr == nil {
+	if privileged, _, readErr := s.store.MessagePeople(lookup, scope, ids, telegramIDs); readErr == nil {
 		return privileged
 	}
 	return people
 }
 
-func messagePeopleResolved(people map[string]telegram.User, ids []uuid.UUID, telegramIDs []int64) bool {
-	for _, id := range ids {
-		if _, ok := people[id.String()]; !ok {
-			return false
-		}
-	}
-	knownTelegram := make(map[int64]bool, len(people))
-	for _, person := range people {
-		knownTelegram[person.ID] = true
-	}
-	for _, id := range telegramIDs {
-		if !knownTelegram[id] {
-			return false
-		}
-	}
-	return true
-}
 func (s *Service) question(ctx context.Context, i intent, q loom.Question) []db.Outbound {
 	out := s.result(ctx, i, q.Text, "question:dialog-v1:"+keyboardPromptKey(q))
 	if len(q.Choices) > 0 {
@@ -226,10 +213,7 @@ func (s *Service) approvalContent(
 		if err := json.Indent(&arguments, a.Arguments, "", "  "); err != nil {
 			s.logger.WarnContext(ctx, "approval debug arguments invalid", "class", "approval_arguments")
 		} else {
-			fence := approvalCodeFence
-			for strings.Contains(arguments.String(), fence) {
-				fence += "`"
-			}
+			fence := approvalFence(arguments.String())
 			text += "\n\n" + fence + "json\n" + arguments.String() + "\n" + fence
 		}
 	}

@@ -184,12 +184,11 @@ func pairNotificationText(n db.PairInvitationDelivery, language string) (string,
 	if err != nil {
 		return "", err
 	}
-	reference := fmt.Sprintf("\nEvent: %.200s (%s)\nInvitation: %s", v.EventName, v.Invitation.EventID, n.InvitationID)
+	reference := fmt.Sprintf("\nEvent: %.200s\nInvitation: %s", v.EventName, n.InvitationID)
 	if language == "ru" {
 		reference = fmt.Sprintf(
-			"\nЭвент: %.200s (%s)\nПриглашение: %s",
+			"\nЭвент: %.200s\nПриглашение: %s",
 			v.EventName,
-			v.Invitation.EventID,
 			n.InvitationID,
 		)
 	}

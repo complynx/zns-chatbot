@@ -3,6 +3,7 @@ package task
 import (
 	"encoding/json"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -24,7 +25,7 @@ func TestApprovalParametersAreReadableAndComplete(t *testing.T) {
 	require.Len(t, chunks, 1)
 	for _, expected := range []string{
 		"Модератор: 0d3a4c0c", "Доступ включён: нет", "Причина:\n**literal**", "9007199254740993",
-		"Статья / Содержание:\nFull article", "Источники 1:\nhttps://example.com",
+		"Содержимое / Текст:\nFull article", "Источники 1:\nhttps://example.com",
 	} {
 		require.Contains(t, chunks[0].Text, expected)
 	}
@@ -68,5 +69,14 @@ func TestApprovalNamesDoNotChangeArticleContent(t *testing.T) {
 		}
 	}
 	require.Equal(t, 1, mentions)
+	require.NoError(t, render.Validate(chunks[0]))
+}
+
+func TestApprovalLiteralKeepsLongBacktickRuns(t *testing.T) {
+	t.Parallel()
+	text := strings.Repeat("`", 1024) + "\narticle text\n" + strings.Repeat("`", 2000)
+	chunks := render.Render(literalApprovalText(text), nil)
+	require.Len(t, chunks, 1)
+	require.Equal(t, text, strings.TrimSuffix(chunks[0].Text, "\n"))
 	require.NoError(t, render.Validate(chunks[0]))
 }

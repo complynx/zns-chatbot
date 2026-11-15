@@ -160,7 +160,7 @@ func (s *Service) sendNotification(
 func (s *Service) sendBusinessNotification(ctx context.Context, input telegram.SendMessageRequest,
 	component string, finish func(context.Context, string, json.RawMessage, time.Duration) error,
 ) error {
-	receipt, sendErr := s.tg.SendMessage(ctx, input)
+	receipt, sendErr := s.sendTextRequest(ctx, input)
 	outcome, delay := deliveryOutcome(sendErr)
 	if outcome == deliveryRetryable && delay <= 0 {
 		delay = s.options.PollInterval
@@ -217,9 +217,9 @@ func paymentNotificationText(n db.PaymentNotification, language string) (string,
 	if err != nil {
 		return "", err
 	}
-	reference := fmt.Sprintf("\nEvent: %s\nEvidence: %s", evidence.EventID, evidence.ID)
+	reference := fmt.Sprintf("\nEvent: %.200s\nEvidence: %s", document.EventName, evidence.ID)
 	if language == "ru" {
-		reference = fmt.Sprintf("\nЭвент: %s\nДоказательство: %s", evidence.EventID, evidence.ID)
+		reference = fmt.Sprintf("\nЭвент: %.200s\nДоказательство: %s", document.EventName, evidence.ID)
 	}
 	if n.Kind == "submitted" {
 		return submittedNotificationText(document, language, reference, zone), nil
