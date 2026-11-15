@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	jose "github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
@@ -130,8 +133,10 @@ func TestCommunicationOrdinaryCallerToVerifiedGlobalAdmin(t *testing.T) {
 		Text:       "Question for the administrator",
 	}
 	request := func() (int, []byte) {
+		op := uuid.NewString()
 		return adminRequest(t, h, callerToken, http.MethodPost, "/internal/agent/communications/prepare",
-			map[string]any{"protocol_version": 1, "operation_id": uuid.NewString(), "arguments": a})
+			map[string]any{"protocol_version": 1, "operation_id": op, "idempotency_key": op,
+				"confirmation": map[string]any{"mode": "none"}, "arguments": a})
 	}
 	code, raw = request()
 	require.Equal(t, http.StatusOK, code, string(raw))
@@ -153,13 +158,35 @@ func TestCommunicationPreparationRecoveryByOperation(t *testing.T) {
 	target, otherToken := registrationUser(t, h, 41602, false)
 	op := uuid.NewString()
 	a := db.CommunicationArguments{Recipients: []uuid.UUID{target}, Category: "personal", Text: "Exact draft"}
+	envelope := map[string]any{"protocol_version": 1, "operation_id": op, "run_id": uuid.NewString(),
+		"idempotency_key": op, "confirmation": map[string]any{"mode": "none"}, "arguments": a}
 	code, raw := adminRequest(t, h, authorToken, http.MethodPost, "/internal/agent/communications/prepare",
-		map[string]any{"protocol_version": 1, "operation_id": op, "arguments": a})
+		envelope)
 	require.Equal(t, http.StatusOK, code, string(raw))
 	var prepared struct {
-		Result db.Communication `json:"result"`
+		Status      string           `json:"status"`
+		OperationID string           `json:"operation_id"`
+		Result      db.Communication `json:"result"`
 	}
 	require.NoError(t, json.Unmarshal(raw, &prepared))
+	require.Equal(t, "succeeded", prepared.Status)
+	require.Equal(t, op, prepared.OperationID)
+	code, raw = adminRequest(t, h, authorToken, http.MethodPost, "/internal/agent/communications/prepare", envelope)
+	require.Equal(t, http.StatusOK, code, string(raw))
+	var replay struct {
+		Result db.Communication `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &replay))
+	require.Equal(t, prepared.Result.ID, replay.Result.ID)
+	for _, invalid := range []map[string]any{
+		{"idempotency_key": uuid.NewString()},
+		{"confirmation": map[string]any{"mode": "exact_parameters"}},
+	} {
+		bad := maps.Clone(envelope)
+		maps.Copy(bad, invalid)
+		code, raw = adminRequest(t, h, authorToken, http.MethodPost, "/internal/agent/communications/prepare", bad)
+		require.Equal(t, http.StatusBadRequest, code, string(raw))
+	}
 	for _, test := range []struct{ token, operation, status string }{
 		{authorToken, op, "succeeded"}, {otherToken, op, "not_found"}, {authorToken, uuid.NewString(), "not_found"},
 	} {
@@ -186,6 +213,20 @@ func TestCommunicationPreparationRecoveryByOperation(t *testing.T) {
 	require.NoError(t, h.store.Pool().QueryRow(t.Context(), `SELECT count(*) FROM shuttle_communication_deliveries
  WHERE communication_id=$1 AND kind='message'`, prepared.Result.ID).Scan(&deliveries))
 	require.Zero(t, deliveries, "status recovery does not confirm or send the draft")
+	a.Personalized = true
+	a.Category, a.AssessedCategory, a.Assessment = "information", broadcasts.Information, "Event update"
+	missingMachineOp := uuid.NewString()
+	envelope["operation_id"], envelope["idempotency_key"], envelope["arguments"] = missingMachineOp, missingMachineOp, a
+	code, raw = adminRequest(t, h, authorToken, http.MethodPost, "/internal/agent/communications/prepare", envelope)
+	require.Equal(t, http.StatusServiceUnavailable, code, string(raw))
+	var drafts int
+	require.NoError(
+		t,
+		h.store.Pool().
+			QueryRow(t.Context(), `SELECT count(*) FROM shuttle_communications WHERE operation_id=$1`, missingMachineOp).
+			Scan(&drafts),
+	)
+	require.Zero(t, drafts, "missing billing configuration must not create a draft or confirmation")
 }
 
 type communicationPeerStats struct{ models, memory, reads atomic.Int32 }
@@ -198,6 +239,7 @@ func TestCommunicationCompletedRewriteSurvivesDeliveryDeadline(t *testing.T) {
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/runs/expired-rewrite/cancel" {
 			cancels.Add(1)
+			assert.Equal(t, "Bearer personalization-service", r.Header.Get("Authorization"))
 			assert.Empty(t, r.Header.Get("X-Subject-Token"))
 			respond(w, loom.ControlReceipt{ID: "expired-rewrite", Status: "cancelled", Version: 2})
 			return
@@ -246,7 +288,7 @@ func communicationFailurePeer(t *testing.T, p *peers, name string) (*httptest.Se
 		case "/v1/runs/suspended-run/cancel":
 			stats.cancels.Add(1)
 			assert.Empty(t, r.Header.Get("X-Subject-Token"))
-			assert.NotEmpty(t, r.Header.Get("Authorization"))
+			assert.Equal(t, "Bearer personalization-service", r.Header.Get("Authorization"))
 			respond(w, loom.ControlReceipt{ID: "suspended-run", Status: "cancelled", Version: 2})
 		case "/v1/chats":
 			stats.chats.Add(1)
@@ -361,8 +403,18 @@ func communicationLoomPeer(t *testing.T, p *peers) (*httptest.Server, *communica
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v1/chats":
+			assert.Equal(t, "Bearer personalization-service", r.Header.Get("Authorization"))
 			respond(w, map[string]string{"id": uuid.NewString()})
 		case "/v1/users/me/memory":
+			token, err := jwt.ParseSigned(
+				strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "),
+				[]jose.SignatureAlgorithm{jose.ES256},
+			)
+			if assert.NoError(t, err) {
+				var claims jwt.Claims
+				assert.NoError(t, token.Claims(&p.key.PublicKey, &claims))
+				assert.Equal(t, "actor", claims.Subject, "memory must use the original delegation actor")
+			}
 			if stats.memory.Add(1) > 1 {
 				w.WriteHeader(http.StatusServiceUnavailable)
 				return
@@ -377,11 +429,12 @@ func communicationLoomPeer(t *testing.T, p *peers) (*httptest.Server, *communica
 				},
 			)
 		case "/v1/capabilities":
+			assert.Equal(t, "Bearer personalization-service", r.Header.Get("Authorization"))
 			respond(w, map[string]any{"execution_profiles": []string{"native_files"}})
 		case "/v1/runs":
+			assert.Equal(t, "Bearer personalization-service", r.Header.Get("Authorization"))
 			assert.Empty(t, r.Header.Get("X-Subject-Token"), "recipient must not pay for inference")
 			assert.Empty(t, r.Header.Get("X-Auth-Session-Id"))
-			assert.NotEmpty(t, r.Header.Get("Authorization"))
 			var request loom.CreateRunRequest
 			assert.NoError(t, json.NewDecoder(r.Body).Decode(&request))
 			assert.Contains(t, request.Input.Text, "Prefers concise Russian")
@@ -400,6 +453,7 @@ func communicationLoomPeer(t *testing.T, p *peers) (*httptest.Server, *communica
 				},
 			)
 		case "/v1/runs/personalization-run":
+			assert.Equal(t, "Bearer personalization-service", r.Header.Get("Authorization"))
 			assert.Empty(t, r.Header.Get("X-Subject-Token"))
 			run := loom.Run{ID: "personalization-run", Status: "succeeded", Result: "Встречаемся в 18:00.", Version: 5}
 			stats.reads.Add(1)

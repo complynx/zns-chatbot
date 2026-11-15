@@ -17,6 +17,19 @@ import (
 	"github.com/complynx/zns-chatbot/internal/loom"
 )
 
+func TestCommunicationPersonalizationRequiresConfiguredBillingMachine(t *testing.T) {
+	t.Parallel()
+	s := &Service{}
+	_, err := s.communicationServiceToken(t.Context())
+	require.ErrorIs(t, err, errCommunicationPersonalizationFailed)
+	s.options.PersonalizationToken = func(context.Context) (identity.Credential, error) {
+		return identity.Credential{Token: "billing-machine"}, nil
+	}
+	token, err := s.communicationServiceToken(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "billing-machine", token.Token)
+}
+
 func TestCommunicationPersonalizationWaitsAndTerminalFailures(t *testing.T) {
 	t.Parallel()
 	service := &Service{}

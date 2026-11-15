@@ -21,6 +21,40 @@ permissions, supported Loom execution profiles, and service credits. It does not
 back to recipient billing. Drafts expire after 30 minutes; one draft accepts up to
 1000 recipients and a text body of 2800 UTF-16 units. Apply migration 82 through the
 existing migration procedure before starting the updated service.
+
+Configure a dedicated billing machine under `loom.personalization` with `subject`,
+`client_id` and `client_secret` (or environment variable
+`ZNS_CHATBOT_LOOM_PERSONALIZATION_CLIENT_SECRET`). Its subject must differ from
+`identity.actor_id`. Register it as a Loom service account with `chat.read`,
+`chat.events.append`, `runs.create` and `runs.control` permissions and fund its
+service balance. Keep the existing delegation actor separate: it reads recipient
+memory with `X-Subject-Token` and continues normal user conversations. The billing
+machine creates, polls and cancels only its own rewrite runs. Loom intentionally
+rejects subject delegation by a service account. Without this configuration,
+new personalized preparations are rejected before creating a draft or confirmation.
+Existing personalized deliveries fail without charging a recipient; literal
+messages remain available.
+
+Before the first upgrade to this separate billing identity, quiesce new
+personalized preparations and confirmations. With the old build and original
+Loom ownership configuration still installed, drain or explicitly resolve all
+personalized deliveries in `pending`, `retryable` or `sending` state. Inspect
+`shuttle_communication_deliveries` joined to `shuttle_communications`, scoped to
+the bot and organization, including saved `personalization_chat_id`,
+`personalization_input` and `personalization_run_id`. Do not switch identities
+until that active set is empty. If the old configuration cannot finish an
+operation, reconcile its original Loom run and Telegram receipt before marking
+it terminal; never clear its IDs or replay an uncertain effect. Existing
+`delivery_unknown` rows remain held and must not be resent. Then configure and
+fund the new billing machine, install this build and resume preparation.
+Saved old-owner chats and runs are not transferable to the new machine; there
+is deliberately no automatic owner fallback.
+
+Loom's `native_files` profile omits personal-memory injection and denies memory
+tools. Service accounts also have no personal-memory tool access. Recipient
+memory is supplied only in that delivery's isolated chat input; the rewrite
+cannot save it as shared billing-account memory. These are Loom execution
+restrictions, not only prompt instructions.
 Participant contact discovery lists their event administrators and ambassadors.
 A global administrator can be addressed after identification through exact
 `people.resolve` (username or Telegram link), visible `people.search` results,

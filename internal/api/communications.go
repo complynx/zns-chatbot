@@ -114,15 +114,23 @@ func (s *Server) communicationTargetAdmin(
 
 func (s *Server) prepareCommunication(
 	ctx context.Context,
-	in *agentReadRequest[db.CommunicationArguments],
-) (*agentReadResponse[db.Communication], error) {
+	in *paymentWriteRequest[db.CommunicationArguments],
+) (*paymentWriteResponse[db.Communication], error) {
 	scope, err := s.paymentScope(ctx, in.AuthInput)
 	if err != nil {
 		return nil, err
 	}
+	if in.Body.IdempotencyKey != in.Body.OperationID ||
+		in.Body.Confirmation != nil &&
+			(in.Body.Confirmation.Mode != confirmationNone || in.Body.Confirmation.Preconditions != nil) {
+		return nil, huma.Error400BadRequest("matching operation key and no-confirmation mode required")
+	}
 	op, err := uuid.Parse(in.Body.OperationID)
 	if err != nil || op == uuid.Nil {
 		return nil, huma.Error400BadRequest("UUID operation_id required")
+	}
+	if in.Body.Arguments.Personalized && !s.options.PersonalizationEnabled {
+		return nil, huma.Error503ServiceUnavailable("broadcast personalization is not configured")
 	}
 	admin, err := s.communicationTargetAdmin(ctx, scope, in.Body.Arguments)
 	if err != nil {
@@ -132,7 +140,7 @@ func (s *Server) prepareCommunication(
 	if err != nil {
 		return nil, communicationError(err)
 	}
-	return agentReadResult(in.Body.OperationID, c), nil
+	return paymentStatusResult(in.Body.OperationID, &c, nil)
 }
 
 func (s *Server) communicationStatus(

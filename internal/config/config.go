@@ -40,8 +40,16 @@ type Telegram struct {
 	WebhookSecret  string `yaml:"webhook_secret"`
 }
 type Loom struct {
-	BaseURL       string `yaml:"base_url"`
-	SkillsEnabled bool   `yaml:"skills_enabled"`
+	BaseURL         string                  `yaml:"base_url"`
+	SkillsEnabled   bool                    `yaml:"skills_enabled"`
+	Personalization PersonalizationIdentity `yaml:"personalization"`
+}
+
+// PersonalizationIdentity pays for rewrites without the user's delegation actor.
+type PersonalizationIdentity struct {
+	Subject      string `yaml:"subject"`
+	ClientID     string `yaml:"client_id"`
+	ClientSecret string `yaml:"client_secret"`
 }
 
 // Descriptor selects its dedicated machine. Only the descriptor consumes its secret.
@@ -156,6 +164,7 @@ func Load(path string) (Config, error) {
 		"TELEGRAM_WEBHOOK_SECRET":              &c.Telegram.WebhookSecret,
 		"TELEGRAM_WEBHOOK_URL":                 &c.Telegram.WebhookURL,
 		"LOOM_BASE_URL":                        &c.Loom.BaseURL,
+		"LOOM_PERSONALIZATION_CLIENT_SECRET":   &c.Loom.Personalization.ClientSecret,
 		"IDENTITY_ISSUER":                      &c.Identity.Issuer,
 		"IDENTITY_ORGANIZATION_ID":             &c.Identity.OrganizationID,
 		"IDENTITY_AUDIENCE":                    &c.Identity.Audience,
@@ -202,11 +211,26 @@ func (c Config) Validate() error {
 		c.validateTelegramPrelink,
 		c.validateRegistrationDetails,
 		c.validateDescriptor,
+		c.validatePersonalization,
 		c.OTel.validate,
 	} {
 		if err := check(); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (c Config) validatePersonalization() error {
+	p := c.Loom.Personalization
+	if p.Subject == "" && p.ClientID == "" && p.ClientSecret == "" {
+		return nil
+	}
+	if strings.TrimSpace(p.Subject) == "" || strings.TrimSpace(p.ClientID) == "" ||
+		strings.TrimSpace(p.ClientSecret) == "" || p.Subject == c.Identity.ActorID {
+		return errors.New(
+			"personalization requires complete machine credentials and a subject distinct from the delegation actor",
+		)
 	}
 	return nil
 }

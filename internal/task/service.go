@@ -38,6 +38,7 @@ const (
 )
 
 type Options struct {
+	PersonalizationToken                        func(context.Context) (identity.Credential, error)
 	DebugApprovalJSON                           bool
 	AvatarRenderer                              avatar.Processor
 	RegistrationDetailsEnabled                  bool
