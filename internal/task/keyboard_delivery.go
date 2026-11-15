@@ -44,9 +44,11 @@ func (s *Service) sendKeyboardText(ctx context.Context, row db.Delivery) (telegr
 		}
 	case *telegram.ReplyKeyboardMarkup:
 		prefix := row.TaskID.String() + ":"
-		agent := strings.HasPrefix(row.DedupKey, prefix+"question:dialog-v1:") ||
-			strings.HasPrefix(row.DedupKey, prefix+"approval:dialog-v1:")
-		if agent {
+		// These keyboards belong to the active run's current prompt; a late delivery loses them.
+		prompt := strings.HasPrefix(row.DedupKey, prefix+"question:dialog-v1:") ||
+			strings.HasPrefix(row.DedupKey, prefix+"approval:dialog-v1:") ||
+			strings.HasPrefix(row.DedupKey, prefix+stepLimitPromptPrefix)
+		if prompt {
 			if state.ActiveTaskID != row.TaskID || pending == "" ||
 				!strings.HasPrefix(row.DedupKey, prefix+pending+":") {
 				payload.ReplyMarkup = nil

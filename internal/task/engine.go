@@ -505,7 +505,8 @@ func (s *Service) control(ctx context.Context, t *db.Task, c checkpoint, i inten
 	t.AuthSessionID = target.AuthSessionID
 	t.State = stateCompleted
 	c.Run = &run
-	if err = s.save(ctx, t, c, nil); err != nil {
+	out := s.stepLimitInputAck(ctx, i, *c.InputReceipt)
+	if err = s.save(ctx, t, c, out); err != nil {
 		return s.wait()
 	}
 	return s.deliverAndContinueStart(ctx, t, c, i)
@@ -717,6 +718,9 @@ func (s *Service) pendingRunOutput(
 	run loom.Run,
 ) ([]db.Outbound, error) {
 	t.QuestionID = ""
+	if stepLimitPaused(run) {
+		return s.pendingStepLimitOutput(ctx, c, i, run), nil
+	}
 	out, err := s.pendingApprovalMessages(ctx, t, i, run.Approval)
 	if err != nil {
 		return nil, err

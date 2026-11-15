@@ -135,6 +135,9 @@ func liveKeyboardID(run *loom.Run) string {
 	if run == nil {
 		return ""
 	}
+	if stepLimitPaused(*run) {
+		return stepLimitPromptKey(*run)
+	}
 	if q := run.Question; q != nil && q.Answer == nil && q.ExpiresAt.After(time.Now()) {
 		if len(q.Choices) > 0 {
 			return "question:dialog-v1:" + keyboardPromptKey(*q)
@@ -150,6 +153,9 @@ func liveKeyboardID(run *loom.Run) string {
 
 // A resolved answer is acknowledged; an expired unanswered prompt still warns.
 func retiredKeyboardText(run loom.Run, prompt string, ru bool) string {
+	if strings.HasPrefix(prompt, stepLimitPromptPrefix) {
+		return structuredText(ru, "The task state has changed.", "Состояние задачи изменилось.")
+	}
 	answered := strings.HasPrefix(prompt, "question:dialog-v1:") && run.Question != nil && run.Question.Answer != nil
 	decided := strings.HasPrefix(prompt, "approval:dialog-v1:") && run.Approval != nil && run.Approval.Decision != ""
 	if answered || decided {
