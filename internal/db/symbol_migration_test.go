@@ -12,7 +12,9 @@ func TestSymbolMigrationPreservesVersion74(t *testing.T) {
 	ctx := t.Context()
 	task := accepted(t, s, 1)
 	// Rewind the fixture's empty post-baseline additions as well as version 76.
-	_, err := s.Pool().Exec(ctx, `ALTER TABLE shuttle_user_profiles DROP CONSTRAINT shuttle_profile_name_no_markup;
+	_, err := s.Pool().
+		Exec(ctx, `DROP TABLE shuttle_broadcast_subscriptions,shuttle_communication_deliveries,shuttle_communications;
+ALTER TABLE shuttle_user_profiles DROP CONSTRAINT shuttle_profile_name_no_markup;
 DROP TRIGGER shuttle_users_remember_names ON shuttle_users;
 DROP TRIGGER shuttle_profiles_remember_names ON shuttle_user_profiles;
 DROP TABLE shuttle_user_names;
@@ -51,7 +53,7 @@ DELETE FROM goose_db_version WHERE version_id>=76;
 	require.Equal(t, task, retained)
 	var version int
 	require.NoError(t, s.Pool().QueryRow(ctx, "SELECT max(version_id) FROM goose_db_version").Scan(&version))
-	require.Equal(t, 81, version)
+	require.Equal(t, 82, version)
 }
 
 func TestReactionMigrationPreservesVersion75CatalogAndTasks(t *testing.T) {
@@ -61,7 +63,8 @@ func TestReactionMigrationPreservesVersion75CatalogAndTasks(t *testing.T) {
 	task := accepted(t, s, 3)
 	// The version-75 fixture predates both the baseline and the empty ban audit table.
 	_, err := s.Pool().
-		Exec(ctx, `ALTER TABLE shuttle_user_profiles DROP CONSTRAINT shuttle_profile_name_no_markup;
+		Exec(ctx, `DROP TABLE shuttle_broadcast_subscriptions,shuttle_communication_deliveries,shuttle_communications;
+ALTER TABLE shuttle_user_profiles DROP CONSTRAINT shuttle_profile_name_no_markup;
 DROP TRIGGER shuttle_users_remember_names ON shuttle_users;
 DROP TRIGGER shuttle_profiles_remember_names ON shuttle_user_profiles;
 DROP TABLE shuttle_user_names;
@@ -97,5 +100,5 @@ VALUES(1,'sticker','retained','00000000-0000-0000-0000-000000000001',
 	require.Equal(t, task, retained)
 	var version int
 	require.NoError(t, s.Pool().QueryRow(ctx, "SELECT max(version_id) FROM goose_db_version").Scan(&version))
-	require.Equal(t, 81, version)
+	require.Equal(t, 82, version)
 }

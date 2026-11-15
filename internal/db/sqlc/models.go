@@ -135,6 +135,46 @@ type ShuttleAvatarResolutionAlias struct {
 	CanonicalOperationID uuid.UUID `json:"canonical_operation_id"`
 }
 
+type ShuttleBroadcastSubscription struct {
+	UserID     uuid.UUID          `json:"user_id"`
+	Scope      string             `json:"scope"`
+	Category   string             `json:"category"`
+	Subscribed bool               `json:"subscribed"`
+	ChangedAt  pgtype.Timestamptz `json:"changed_at"`
+}
+
+type ShuttleCommunication struct {
+	ID             uuid.UUID          `json:"id"`
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	AuthorID       uuid.UUID          `json:"author_id"`
+	OperationID    uuid.UUID          `json:"operation_id"`
+	EventID        pgtype.UUID        `json:"event_id"`
+	Arguments      []byte             `json:"arguments"`
+	State          string             `json:"state"`
+	Category       string             `json:"category"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+}
+
+type ShuttleCommunicationDelivery struct {
+	ID                       uuid.UUID          `json:"id"`
+	CommunicationID          uuid.UUID          `json:"communication_id"`
+	RecipientID              uuid.UUID          `json:"recipient_id"`
+	Kind                     string             `json:"kind"`
+	State                    string             `json:"state"`
+	Version                  int64              `json:"version"`
+	AttemptID                pgtype.UUID        `json:"attempt_id"`
+	RenderedText             pgtype.Text        `json:"rendered_text"`
+	PersonalizationRunID     pgtype.Text        `json:"personalization_run_id"`
+	PersonalizationChatID    pgtype.Text        `json:"personalization_chat_id"`
+	PersonalizationInput     []byte             `json:"personalization_input"`
+	PersonalizationStartedAt pgtype.Timestamptz `json:"personalization_started_at"`
+	PersonalizationPolls     int32              `json:"personalization_polls"`
+	Receipt                  []byte             `json:"receipt"`
+	NextAttemptAt            pgtype.Timestamptz `json:"next_attempt_at"`
+}
+
 type ShuttleConversation struct {
 	ID                 uuid.UUID   `json:"id"`
 	UserID             uuid.UUID   `json:"user_id"`

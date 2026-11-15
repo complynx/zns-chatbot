@@ -67,6 +67,7 @@ type revokeResponse struct {
 }
 
 func (s *Server) register(api huma.API) {
+	s.registerCommunications(api)
 	s.registerKnowledge(api)
 	s.registerAgentAdministration(api)
 	s.registerArchiveValidation(api)

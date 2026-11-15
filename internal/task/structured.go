@@ -78,6 +78,9 @@ func (s *Service) structured(ctx context.Context, t *db.Task, c checkpoint, i in
 		UserID:       user.ID,
 	}
 	ru := s.languageFor(ctx, i) == "ru"
+	if i.StructuredCommand == "/communications" {
+		return s.handleCommunicationAction(ctx, t, c, i, s.taskPaymentScope(user, principal), ru)
+	}
 	if i.StructuredCommand == registerCommand {
 		return s.structuredRegister(ctx, t, c, i, scope, ru)
 	}

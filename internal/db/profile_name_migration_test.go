@@ -12,7 +12,7 @@ func TestProfileNameCleanupRemovesMarkupAndKeepsOtherText(t *testing.T) {
 	s := testStore(t)
 	ctx := t.Context()
 	provider := baselineProvider(t, s)
-	_, err := provider.ApplyVersion(ctx, 81, false)
+	_, err := provider.DownTo(ctx, 80)
 	require.NoError(t, err)
 	type profile struct {
 		full, first, last, source, latin string
@@ -69,7 +69,7 @@ func TestProfileNameCleanupRemovesMarkupAndKeepsOtherText(t *testing.T) {
 	const versionsSQL = `SELECT string_agg(version::text,',' ORDER BY user_id) FROM shuttle_user_profiles`
 	var before, after string
 	require.NoError(t, s.Pool().QueryRow(ctx, versionsSQL).Scan(&before))
-	_, err = provider.ApplyVersion(ctx, 81, false)
+	_, err = provider.DownTo(ctx, 80)
 	require.NoError(t, err)
 	require.NoError(t, s.Migrate(ctx))
 	require.NoError(t, s.Pool().QueryRow(ctx, versionsSQL).Scan(&after))
