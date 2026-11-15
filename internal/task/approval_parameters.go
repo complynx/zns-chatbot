@@ -34,11 +34,11 @@ func approvalParameterLabel(key, language string) string {
 		"user_id":                    {"Person", "Пользователь"},
 		"event_id":                   {"Event", "Событие"},
 		"role":                       {"Role", "Роль"},
-		"title":                      {"Title", "Название"},
-		"body":                       {"Content", "Содержание"},
+		"title":                      {"Title", "Заголовок"},
+		"body":                       {"Text", "Текст"},
 		"language":                   {"Language", "Язык"},
 		"sources":                    {"Sources", "Источники"},
-		"content":                    {"Article", "Статья"},
+		"content":                    {"Content", "Содержимое"},
 		"decision":                   {"Decision", "Решение"},
 		"amount_minor":               {"Amount in currency minor units", "Сумма в минимальных единицах валюты"},
 		"expected_moderator_version": {"Current moderator assignment version", "Текущая версия назначения модератора"},
@@ -133,9 +133,20 @@ func literalApprovalText(text string) string {
 		len(render.AccountReferences(text)) == 0 {
 		return "`" + text + "`"
 	}
-	fence := approvalCodeFence
-	for strings.Contains(text, fence) {
-		fence += "`"
-	}
+	fence := approvalFence(text)
 	return fence + "\n" + text + "\n" + fence
+}
+
+// One pass bounds fence construction even for long runs in article/config text.
+func approvalFence(text string) string {
+	longest, run := len(approvalCodeFence)-1, 0
+	for n := range len(text) {
+		if text[n] == '`' {
+			run++
+			longest = max(longest, run)
+		} else {
+			run = 0
+		}
+	}
+	return strings.Repeat("`", longest+1)
 }

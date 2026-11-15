@@ -35,6 +35,11 @@ func (s *Service) sendText(ctx context.Context, raw json.RawMessage) (telegram.R
 	if json.Unmarshal(raw, &payload) != nil {
 		return telegram.Receipt{}, &telegram.Error{Outcome: telegram.Rejected}
 	}
+	return s.sendTextRequest(ctx, payload)
+}
+
+// Retry only an explicit entity rejection: that request did not send a message.
+func (s *Service) sendTextRequest(ctx context.Context, payload telegram.SendMessageRequest) (telegram.Receipt, error) {
 	receipt, err := s.tg.SendMessage(ctx, payload)
 	var rejected *telegram.Error
 	if errors.As(err, &rejected) && rejected.InvalidEntities && rejected.Outcome == telegram.Rejected &&

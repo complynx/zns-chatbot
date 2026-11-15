@@ -56,9 +56,13 @@ func (s *Service) save(ctx context.Context, t *db.Task, c checkpoint, out []db.O
 			return err
 		}
 		keys := make(map[string]bool, len(existing))
+		presentations := make(map[string]bool)
 		var next int32
 		for _, row := range existing {
 			keys[row.DedupKey] = true
+			if key := outboundPresentationKey(row.DedupKey); key != "" {
+				presentations[key] = true
+			}
 			if row.ChunkSeq >= next {
 				next = row.ChunkSeq + 1
 			}
@@ -66,7 +70,7 @@ func (s *Service) save(ctx context.Context, t *db.Task, c checkpoint, out []db.O
 		fresh := make([]db.Outbound, 0, len(out))
 		for _, item := range out {
 			item.DedupKey = t.ID.String() + ":" + item.DedupKey
-			if keys[item.DedupKey] {
+			if keys[item.DedupKey] || presentations[outboundPresentationKey(item.DedupKey)] {
 				continue
 			}
 			item.ID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(item.DedupKey))

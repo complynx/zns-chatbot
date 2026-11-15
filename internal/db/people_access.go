@@ -53,8 +53,8 @@ func (s *Store) peopleReadScope(ctx context.Context, tx pgx.Tx, scope PaymentSco
 		return mode, nil
 	}
 	var authority bool
-	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM shuttle_event_authorities
- WHERE event_id=$1 AND user_id=$2 AND role IN ('ambassador','administrator'))`, event, scope.UserID).Scan(&authority)
+	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM shuttle_event_authorities a
+ WHERE a.event_id=$1 AND a.user_id=$2 AND `+peopleAuthorityRolesSQL+`)`, event, scope.UserID).Scan(&authority)
 	if err != nil {
 		return "", err
 	}
@@ -81,12 +81,22 @@ const peopleAccessSQL = `u.bot_id=$1 AND u.zitadel_org=$2 AND ($3<>'public' OR N
  AND ($6::uuid IS NULL OR u.id=$6)
  AND ($3='all' OR ($3='public' AND (u.visible OR ($6::uuid=$5 AND u.id=$5)))
  OR ($3='event_registrations' AND EXISTS(SELECT 1 FROM shuttle_registrations r WHERE r.event_id=$4 AND r.user_id=u.id))
- OR ($3='massage_clients' AND EXISTS(SELECT 1 FROM shuttle_massage_bookings b
- JOIN shuttle_massage_specialist_bindings sb ON sb.event_id=b.event_id AND sb.specialist_id=b.specialist_id
- WHERE b.event_id=$4 AND b.user_id=u.id AND b.state='booked' AND sb.user_id=$5 AND sb.active)))`
+ OR ($3='massage_clients' AND EXISTS(` + peopleMassageClientSQL + ` AND b.event_id=$4 AND sb.user_id=$5)))`
 
-const basicPersonSQL = `u.id,left(coalesce(nullif(p.full_name,''),
- btrim(concat_ws(' ',u.profile->>'first_name',u.profile->>'last_name'))),256) AS full_name,
- left(coalesce(u.profile->>'username',''),64) AS username,u.tg_user_id,
+// Directory reads and message mentions share relationship eligibility. Each
+// caller supplies its event/deployment and actor constraints.
+const peopleAuthorityRolesSQL = `a.role IN ('ambassador','administrator')`
+
+const peopleMassageClientSQL = `SELECT 1 FROM shuttle_massage_bookings b
+ JOIN shuttle_massage_specialist_bindings sb ON sb.event_id=b.event_id AND sb.specialist_id=b.specialist_id
+ WHERE b.user_id=u.id AND b.state='booked' AND sb.active`
+
+const personNameSQL = `left(coalesce(nullif(btrim(p.full_name),''),
+ btrim(concat_ws(' ',u.profile->>'first_name',u.profile->>'last_name'))),256)`
+
+const personUsernameSQL = `left(coalesce(u.profile->>'username',''),64)`
+
+const basicPersonSQL = `u.id,` + personNameSQL + ` AS full_name,
+ ` + personUsernameSQL + ` AS username,u.tg_user_id,
  coalesce(p.gender,'') AS gender,coalesce(p.pronouns,'') AS pronouns,
  coalesce(p.gender_source,'') AS gender_source,coalesce(p.pronouns_source,'') AS pronouns_source`

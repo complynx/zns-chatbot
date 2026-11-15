@@ -222,10 +222,7 @@ func fullOrderApproval(p db.OrderPreparation, expires time.Time, language string
 		note,
 	)
 	text := body.String()
-	fence := "```"
-	for strings.Contains(text, fence) {
-		fence += "`"
-	}
+	fence := approvalFence(text)
 	return title + "\n\n" + fence + "\n" + text + "\n" + fence, nil
 }
 

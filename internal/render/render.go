@@ -77,6 +77,45 @@ func AccountReferences(text string) []string {
 	return accountReference.FindAllString(text, -1)
 }
 
+// PersonReferenceText excludes preserved blocks and includes Telegram link targets.
+// Only text that can produce a mention needs an identity lookup.
+func PersonReferenceText(markdown string) string {
+	source := []byte(strings.ToValidUTF8(markdown, "�"))
+	document := parser.New(parser.WithExtensions(extension.StrikethroughParser)).Parse(source)
+	var out strings.Builder
+	var visit func(ast.Node)
+	visit = func(node ast.Node) {
+		switch value := node.(type) {
+		case *ast.CodeBlock:
+			return
+		case *ast.Text:
+			out.WriteString(value.Value.Value(source))
+		case *ast.CodeSpan:
+			out.WriteString(value.Value.Value(source))
+		case *ast.RawHTML:
+			out.WriteString(value.Value.Value(source))
+		case *ast.HTMLBlock:
+			out.WriteString(value.Value.Str(source))
+		case *ast.Link:
+			if destination := value.Destination.Value(source); strings.HasPrefix(destination, "tg://user?") {
+				out.WriteString(destination)
+			}
+		case *ast.AutoLink:
+			out.WriteString(value.Label.Value(source))
+			out.WriteByte('\n')
+			if destination := value.Destination.Value(source); strings.HasPrefix(destination, "tg://user?") {
+				out.WriteString(destination)
+			}
+		}
+		out.WriteByte('\n')
+		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+			visit(child)
+		}
+	}
+	visit(document)
+	return out.String()
+}
+
 func (r *renderer) write(value string) {
 	start := 0
 	var locations [][]int

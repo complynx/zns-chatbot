@@ -3,7 +3,11 @@ package task
 import (
 	"encoding/json"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -119,10 +123,81 @@ func TestPairAssignmentApprovalLinksPeopleAndKeepsTerms(t *testing.T) {
 	require.Contains(t, unnamed, follower.String(), "Keep the locator when there is no display name")
 }
 
-func TestMixedPersonReferencesAreAlreadyResolved(t *testing.T) {
+func TestMessagePeopleSkipsIAMForNonPeopleAndLiteralContent(t *testing.T) {
 	t.Parallel()
-	id := uuid.New()
-	people := map[string]telegram.User{id.String(): {ID: 7, FirstName: "Даниил"}}
-	require.True(t, messagePeopleResolved(people, []uuid.UUID{id}, []int64{7}))
-	require.False(t, messagePeopleResolved(people, []uuid.UUID{id}, []int64{8}))
+	store := menuScanStore(t)
+	actor, target := uuid.New(), uuid.New()
+	_, err := store.Pool().Exec(t.Context(), `INSERT INTO shuttle_users
+ (id,bot_id,tg_user_id,zitadel_subject,zitadel_org,visible,profile)
+ VALUES($1,1,7,'actor','org',true,'{"first_name":"Actor"}'),
+ ($2,1,8,'target','org',false,'{"first_name":"Hidden"}')`, actor, target)
+	require.NoError(t, err)
+	var calls atomic.Int32
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	t.Cleanup(server.Close)
+	credentials := identity.ClientCredentials{ID: "fixture", Secret: "fixture"}
+	iam, err := identity.New(identity.Options{Issuer: server.URL, OrganizationID: "org",
+		LoomAudience: "loom", APIAudience: "api", ActorID: "service-actor", BotID: 1,
+		ActorClientCredentials: credentials, ExchangeClientCredentials: credentials,
+		IntrospectionClientCredentials: credentials}, server.Client())
+	require.NoError(t, err)
+	s := &Service{store: store, iam: iam, logger: slog.Default()}
+	i := intent{ChatID: 7, User: telegram.User{ID: 7}}
+	s.messagePeople(t.Context(), i, "Event "+uuid.NewString())
+	s.messagePeople(t.Context(), i, "```json\n{\"user_id\":\""+target.String()+"\"}\n```\n"+
+		"    "+target.String()+"\n")
+	people := s.messagePeople(t.Context(), i, actor.String()+" [Actor](tg://user?id=7)")
+	require.Contains(t, people, actor.String())
+	require.Zero(t, calls.Load(), "Unreplaceable literals and unrelated IDs do not require IAM")
+	require.Empty(t, s.messagePeople(t.Context(), i, "Person "+target.String()))
+	require.Positive(t, calls.Load(), "Genuine hidden-person references still check IAM")
+}
+
+func TestPromptReplayKeepsFirstCompletePresentation(t *testing.T) {
+	t.Parallel()
+	store := menuScanStore(t)
+	ctx := t.Context()
+	task, _, err := store.Intake(ctx, db.IntakeRequest{
+		BotID: 1, UpdateID: 1, TelegramUserID: 7, ChatID: 7,
+		Payload: json.RawMessage(`{"kind":"message","text":"hello"}`),
+	}, nil)
+	require.NoError(t, err)
+	task, err = store.Route(ctx, task.ID)
+	require.NoError(t, err)
+	task, err = store.Claim(ctx, task.ID, "presentation-test", time.Minute)
+	require.NoError(t, err)
+	s := &Service{store: store, owner: "presentation-test", logger: slog.Default()}
+	// Protocol prompts have no revision; conversational prompts can return with a
+	// new revision after a question. Both must retain their first complete render.
+	for _, suffix := range []string{"", ":presentation:1"} {
+		out := func(count int) []db.Outbound {
+			items := make([]db.Outbound, count)
+			for n := range items {
+				payload := telegram.SendMessageRequest{ChatID: 7, Text: "chunk " + strconv.Itoa(n)}
+				if n == count-1 {
+					payload.ReplyMarkup = approvalKeyboard("Approve", "Reject")
+				}
+				raw, marshalErr := json.Marshal(payload)
+				require.NoError(t, marshalErr)
+				items[n] = db.Outbound{
+					DedupKey: "approval:dialog-v1:prompt:" + strconv.Itoa(n) + suffix,
+					Payload:  raw,
+				}
+			}
+			return items
+		}
+		require.NoError(t, s.save(ctx, &task, checkpoint{}, out(2)))
+		before, readErr := store.ListOutbox(ctx, task.ID)
+		require.NoError(t, readErr)
+		require.NoError(t, s.save(ctx, &task, checkpoint{}, out(3)))
+		after, readErr := store.ListOutbox(ctx, task.ID)
+		require.NoError(t, readErr)
+		require.Equal(t, before, after, "A lookup failure or renamed profile cannot append chunks/buttons")
+	}
+	rows, err := store.ListOutbox(ctx, task.ID)
+	require.NoError(t, err)
+	require.Len(t, rows, 4, "A new presentation revision must still deliver all its chunks")
 }

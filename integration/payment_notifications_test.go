@@ -107,6 +107,8 @@ func TestPaymentNotificationsResumeAndDistinguishDepositFromFullPayment(t *testi
 	require.Len(t, messages, 1)
 	require.Contains(t, messages[0], "Оплата ещё не подтверждена")
 	require.Contains(t, messages[0], "30.87 BYN")
+	require.Contains(t, messages[0], f.Event.Document.Name)
+	require.NotContains(t, messages[0], f.Event.ID.String())
 	require.Contains(t, messages[0], "Europe/Minsk")
 	require.Contains(t, messages[0], evidence.ID.String())
 	code, data = paymentRequest(

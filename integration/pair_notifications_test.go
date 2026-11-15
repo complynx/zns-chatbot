@@ -156,7 +156,8 @@ func TestPairNotificationWaitsForIAMAndRetriesKnownRejection(t *testing.T) {
 	require.Contains(t, messages[1], "приглашает вас в пару")
 	require.Contains(t, messages[1], "Europe/Minsk")
 	require.Contains(t, messages[1], "+03:00")
-	require.Contains(t, messages[1], f.EventID.String())
+	require.Contains(t, messages[1], "Registration fixture")
+	require.NotContains(t, messages[1], f.EventID.String())
 	f.H.stop(t)
 	f.H.start(t)
 	require.Never(

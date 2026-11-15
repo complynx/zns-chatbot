@@ -138,10 +138,7 @@ func fullPairAssignmentApproval(
 	}
 
 	text := body.String()
-	fence := "```"
-	for strings.Contains(text, fence) {
-		fence += "`"
-	}
+	fence := approvalFence(text)
 	return title + "\n\n" + participants.String() + fence + "\n" + text + "\n" + fence, nil
 }
 

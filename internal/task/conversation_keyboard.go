@@ -76,6 +76,25 @@ func keyboardPromptKey(prompt any) string {
 	return hex.EncodeToString(sum[:replyTokenBytes])
 }
 
+// Freeze all chunks of a recorded presentation together. Profile lookups can
+// change chunk counts on replay; a new presentation revision still gets delivered.
+func outboundPresentationKey(key string) string {
+	prefix, revision, ok := strings.Cut(key, ":presentation:")
+	_, prompt, hasTask := strings.Cut(prefix, ":")
+	if !hasTask || (!strings.HasPrefix(prompt, "approval:dialog-v1:") &&
+		!strings.HasPrefix(prompt, "question:dialog-v1:")) {
+		return ""
+	}
+	presentation, _, hasChunk := strings.CutLast(prefix, ":")
+	if !hasChunk {
+		return ""
+	}
+	if ok {
+		return presentation + ":presentation:" + revision
+	}
+	return presentation
+}
+
 func questionKeyboard(q loom.Question) *telegram.ReplyKeyboardMarkup {
 	keyboard := &telegram.ReplyKeyboardMarkup{ResizeKeyboard: true, OneTimeKeyboard: true}
 	for n, choice := range q.Choices {
