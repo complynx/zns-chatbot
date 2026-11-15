@@ -265,6 +265,7 @@ func normalizeProfileNameMutation(m ProfileMutation) (ProfileMutation, error) {
 	return normalizeProfileLatin(m)
 }
 
+// IAM imports also rely on this check to stay within the database name constraint.
 func validProfileNameComponent(value string) bool {
 	return value != "" && utf8.ValidString(value) && utf8.RuneCountInString(value) <= 200 &&
 		!strings.ContainsFunc(value, unicode.IsControl) && !strings.ContainsAny(value, profileNameMarkup)

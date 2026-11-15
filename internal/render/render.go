@@ -46,8 +46,7 @@ type renderer struct {
 	entities []telegram.MessageEntity
 }
 
-// Render accepts imperfect Markdown. Verified users become mentions; other
-// Telegram user links remain ordinary links.
+// Render accepts imperfect Markdown and mentions only users verified by the caller.
 func Render(markdown string, mentions map[int64]telegram.User) []Message {
 	return People(markdown, mentions, nil)
 }
@@ -273,10 +272,6 @@ func (r *renderer) link(destination string) telegram.MessageEntity {
 		user, found := r.mentions[id]
 		if parseErr == nil && found && id > 0 && user.ID == id {
 			return telegram.MessageEntity{Type: textMention, User: &user}
-		}
-		if parseErr == nil && !found && id > 0 {
-			// Keep exact-lookup links clickable without claiming a verified mention.
-			return telegram.MessageEntity{Type: textLink, URL: destination}
 		}
 		return telegram.MessageEntity{}
 	}

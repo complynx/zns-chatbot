@@ -81,6 +81,7 @@ func TestProfileNameRejectsMarkupAndMentions(t *testing.T) {
 			require.ErrorContains(t, err, "Markdown delimiters or @")
 		}
 	}
+	require.False(t, usableImportedIAMName("Анна@", "Иванова"), "An IAM import must not break the name constraint")
 	_, err := normalizeProfileMutation(ProfileMutation{OperationID: uuid.New(), Kind: "set_name",
 		FirstName: "Anne-Marie", LastName: "D’Arcy A."})
 	require.NoError(t, err)
