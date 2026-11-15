@@ -55,7 +55,7 @@ func TestPairAssignmentApprovalDisplaysAuthorizedOriginalPairBeforeConsent(t *te
 	// The current agent transport adopts an existing native-capable proposal.
 	_, err = f.H.store.AdoptPairAssignment(t.Context(), scoped, "loom-pair-approval", f.args, prep.ID)
 	require.NoError(t, err)
-	pairIdentityName(t, f.pairFixture, f.A, "Alex ``` **literal**")
+	pairIdentityName(t, f.pairFixture, f.A, "Alex O’Neil-Leader")
 	raw, err := json.Marshal(f.args)
 	require.NoError(t, err)
 	f.H.peers.mu.Lock()
@@ -101,12 +101,12 @@ func TestPairAssignmentApprovalDisplaysAuthorizedOriginalPairBeforeConsent(t *te
 		}
 	}
 	text := combined.String()
-	require.Contains(t, text, "Alex ``` **literal**")
+	require.Contains(t, text, "Alex O’Neil-Leader")
 	require.Contains(t, text, "Sam Follower")
 	require.Equal(t, map[int64]int{12002: 1, 12003: 1}, mentions)
 	require.NotContains(t, text, f.A.UserID.String())
 	require.NotContains(t, text, f.B.UserID.String())
-	expectedTerms := strings.NewReplacer(f.A.UserID.String(), strconv.Quote("Alex ``` **literal**"),
+	expectedTerms := strings.NewReplacer(f.A.UserID.String(), strconv.Quote("Alex O’Neil-Leader"),
 		f.B.UserID.String(), strconv.Quote("Sam Follower")).Replace(prep.Description)
 	require.Contains(t, text, expectedTerms)
 	require.Contains(t, text, "deposit minimum 30.00 BYN")

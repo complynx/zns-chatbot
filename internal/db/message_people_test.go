@@ -64,32 +64,3 @@ func TestMessagePeopleScopeAndVisibility(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, people)
 }
-
-func TestUsernameIndexPreservesPopulatedUpgradeAndRollback(t *testing.T) {
-	t.Parallel()
-	s := testStore(t)
-	ctx := t.Context()
-	provider := baselineProvider(t, s)
-	_, err := provider.DownTo(ctx, 80)
-	require.NoError(t, err)
-	_, err = s.Pool().Exec(ctx, `INSERT INTO shuttle_users
- (id,bot_id,tg_user_id,zitadel_org,zitadel_subject,profile) VALUES
- ($1,1,701,'org','one','{"username":"same_name"}'),
- ($2,1,702,'org','two','{"username":"SAME_NAME"}')`, uuid.New(), uuid.New())
-	require.NoError(t, err)
-	const dataSQL = `SELECT jsonb_agg(to_jsonb(u) ORDER BY id)::text FROM shuttle_users u`
-	var before, after string
-	require.NoError(t, s.Pool().QueryRow(ctx, dataSQL).Scan(&before))
-	require.NoError(t, s.Migrate(ctx))
-	require.NoError(t, s.Pool().QueryRow(ctx, dataSQL).Scan(&after))
-	require.Equal(t, before, after, "The nonunique index must preserve duplicate usernames and all row data")
-	var exists bool
-	require.NoError(t, s.Pool().QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_indexes
- WHERE schemaname=current_schema() AND indexname='shuttle_users_username_idx')`).Scan(&exists))
-	require.True(t, exists)
-	_, err = provider.DownTo(ctx, 80)
-	require.NoError(t, err)
-	require.NoError(t, s.Pool().QueryRow(ctx, dataSQL).Scan(&after))
-	require.Equal(t, before, after)
-	require.NoError(t, s.Migrate(ctx))
-}

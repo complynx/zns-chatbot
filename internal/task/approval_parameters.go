@@ -85,7 +85,7 @@ func writeApprovalValue(out *strings.Builder, path string, value any, identity b
 		}
 		sort.Strings(keys)
 		if len(keys) == 0 {
-			fmt.Fprintf(out, "%s: %s\n", path, structuredText(language == "ru", "empty object", "пустой объект"))
+			fmt.Fprintf(out, "%s: —\n", path)
 		}
 		for _, key := range keys {
 			label := approvalParameterLabel(key, language)
@@ -96,7 +96,7 @@ func writeApprovalValue(out *strings.Builder, path string, value any, identity b
 		}
 	case []any:
 		if len(v) == 0 {
-			fmt.Fprintf(out, "%s: %s\n", path, structuredText(language == "ru", "empty list", "пустой список"))
+			fmt.Fprintf(out, "%s: —\n", path)
 		}
 		for n, item := range v {
 			writeApprovalValue(out, fmt.Sprintf("%s %d", path, n+1), item, identity, language)
@@ -117,7 +117,7 @@ func writeApprovalScalar(out *strings.Builder, path string, value any, identity 
 	}
 	text := fmt.Sprint(value)
 	if value == nil {
-		text = structuredText(language == "ru", "no value (null)", "нет значения (null)")
+		text = "—"
 	}
 	if boolean, ok := value.(bool); ok {
 		text = structuredText(language == "ru", "no", "нет")
