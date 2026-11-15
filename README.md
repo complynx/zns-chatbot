@@ -21,3 +21,5 @@ See [identity cache counter semantics and verification](docs/shuttle-identity-me
 See [River due-job backlog, timing and verification](docs/shuttle-queue-metrics.md).
 See [file access](docs/shuttle-files.md), [schema compatibility](docs/shuttle-schema.md)
 and the [roadmap](docs/shuttle-roadmap.md).
+
+See [personal messages, broadcasts and delivery limits](docs/shuttle-communications.md).

@@ -109,10 +109,15 @@ type InlineKeyboardMarkup struct {
 	InlineKeyboard [][]InlineKeyboardButton `json:"inline_keyboard"`
 }
 type SendMessageRequest struct {
-	ChatID      int64           `json:"chat_id"`
-	Text        string          `json:"text"`
-	Entities    []MessageEntity `json:"entities,omitempty"`
-	ReplyMarkup ReplyMarkup     `json:"reply_markup,omitempty"`
+	ChatID             int64               `json:"chat_id"`
+	Text               string              `json:"text"`
+	Entities           []MessageEntity     `json:"entities,omitempty"`
+	ReplyMarkup        ReplyMarkup         `json:"reply_markup,omitempty"`
+	LinkPreviewOptions *LinkPreviewOptions `json:"link_preview_options,omitempty"`
+}
+
+type LinkPreviewOptions struct {
+	IsDisabled bool `json:"is_disabled"`
 }
 type EditMessageRequest struct {
 	ChatID      int64                 `json:"chat_id"`

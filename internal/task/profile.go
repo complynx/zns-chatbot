@@ -194,11 +194,9 @@ func (s *Service) profilePrompt(ctx context.Context, t db.Task, i intent) (strin
 	}
 	language := profileLanguage(profile.BotLanguage, i.User.LanguageCode, settings.Document.DefaultLanguage)
 	var text strings.Builder
-	input, err := s.symbolPrompt(ctx, bot, t.ID, i)
-	if err != nil {
+	if err = s.appendCommunicationMessage(ctx, &text, scope, t.ID, i, language); err != nil {
 		return "", err
 	}
-	text.WriteString(messagePrompt(i, input, language))
 	if err = appendStartProfileContext(&text, profile, i, language, s.options.SkillsEnabled); err != nil {
 		return "", err
 	}

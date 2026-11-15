@@ -140,6 +140,9 @@ func callbackIntent(i intent, cb *telegram.CallbackQuery) (intent, error) {
 	}
 	i.User = cb.From
 	i.ChatID = cb.Message.Chat.ID
+	if normalized, matched, err := communicationCallback(i, cb); matched {
+		return normalized, err
+	}
 	if normalized, matched, err := registrationCallback(i, cb); matched {
 		return normalized, err
 	}

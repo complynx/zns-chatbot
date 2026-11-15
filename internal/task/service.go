@@ -79,6 +79,7 @@ type Service struct {
 	knowledgeArchiveCursor        uuid.UUID
 	avatarSourceExpiryCursor      uuid.UUID
 	knowledgeNotificationCursor   uuid.UUID
+	communicationCursor           uuid.UUID
 	pairNotificationCursor        uuid.UUID
 	avatarDeliveryCursor          uuid.UUID
 	orderNotificationCursor       uuid.UUID
@@ -192,6 +193,7 @@ func New(
 	river.AddWorker(workers, &pairNotificationWorker{service: s})
 	river.AddWorker(workers, &orderNotificationWorker{service: s})
 	river.AddWorker(workers, &knowledgeNotificationWorker{service: s})
+	river.AddWorker(workers, &communicationWorker{service: s})
 	river.AddWorker(workers, &avatarDeliveryWorker{service: s})
 	river.AddWorker(workers, &massageReminderWorker{service: s})
 	river.AddWorker(workers, &massageSpecialistNoticeWorker{service: s})
@@ -206,9 +208,12 @@ func New(
 	s.queue, err = river.NewClient(
 		riverpgxv5.New(store.Pool()),
 		&river.Config{
-			Schema:               schema,
-			Workers:              workers,
-			Queues:               map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: o.MaxWorkers}},
+			Schema:  schema,
+			Workers: workers,
+			Queues: map[string]river.QueueConfig{
+				river.QueueDefault: {MaxWorkers: o.MaxWorkers},
+				communicationQueue: {MaxWorkers: communicationQueueWorkers},
+			},
 			JobTimeout:           jobTimeout,
 			RescueStuckJobsAfter: rescueAfter,
 			Logger:               logger,
@@ -223,6 +228,7 @@ func (s *Service) recoverBusinessNotifications(ctx context.Context) error {
 	for _, recoverNotices := range []func(context.Context, db.EventScope) error{
 		s.store.RecoverNotifications, s.store.RecoverPairNotifications, s.store.RecoverOrderNotifications,
 		s.store.RecoverAvatarDeliveries,
+		s.store.RecoverCommunications,
 		s.store.RecoverMassageReminders, s.store.RecoverMassageSpecialistNotifications, s.store.RecoverKnowledgeNotifications,
 	} {
 		if err := recoverNotices(ctx, scope); err != nil {
@@ -341,6 +347,7 @@ func (s *Service) watchLock(ctx context.Context, conn *pgxpool.Conn, done chan s
 			s.repairProfileNames(ctx)
 			s.repairOrderNotifications(ctx)
 			s.repairKnowledgeNotifications(ctx)
+			s.repairCommunications(ctx)
 			s.repairAvatarDeliveries(ctx)
 			s.repairMassageReminders(ctx)
 			s.repairMassageSpecialistNotices(ctx)
