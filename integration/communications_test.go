@@ -145,6 +145,49 @@ func TestCommunicationOrdinaryCallerToVerifiedGlobalAdmin(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, code, string(raw))
 }
 
+func TestCommunicationPreparationRecoveryByOperation(t *testing.T) {
+	t.Parallel()
+	p := newPeers(t)
+	h := setup(t, p)
+	_, authorToken := registrationUser(t, h, 41601, true)
+	target, otherToken := registrationUser(t, h, 41602, false)
+	op := uuid.NewString()
+	a := db.CommunicationArguments{Recipients: []uuid.UUID{target}, Category: "personal", Text: "Exact draft"}
+	code, raw := adminRequest(t, h, authorToken, http.MethodPost, "/internal/agent/communications/prepare",
+		map[string]any{"protocol_version": 1, "operation_id": op, "arguments": a})
+	require.Equal(t, http.StatusOK, code, string(raw))
+	var prepared struct {
+		Result db.Communication `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &prepared))
+	for _, test := range []struct{ token, operation, status string }{
+		{authorToken, op, "succeeded"}, {otherToken, op, "not_found"}, {authorToken, uuid.NewString(), "not_found"},
+	} {
+		code, raw = adminRequest(t, h, test.token, http.MethodPost, "/internal/agent/communications/prepare/status",
+			map[string]any{"protocol_version": 1, "operation_id": test.operation})
+		require.Equal(t, http.StatusOK, code, string(raw))
+		var found struct {
+			Status      string            `json:"status"`
+			OperationID string            `json:"operation_id"`
+			Result      *db.Communication `json:"result"`
+		}
+		require.NoError(t, json.Unmarshal(raw, &found))
+		require.Equal(t, test.status, found.Status)
+		require.Equal(t, test.operation, found.OperationID)
+		if test.status == "succeeded" {
+			require.NotNil(t, found.Result)
+			require.Equal(t, prepared.Result.ID, found.Result.ID)
+			require.Equal(t, a.Text, found.Result.Arguments.Text)
+		} else {
+			require.Nil(t, found.Result)
+		}
+	}
+	var deliveries int
+	require.NoError(t, h.store.Pool().QueryRow(t.Context(), `SELECT count(*) FROM shuttle_communication_deliveries
+ WHERE communication_id=$1 AND kind='message'`, prepared.Result.ID).Scan(&deliveries))
+	require.Zero(t, deliveries, "status recovery does not confirm or send the draft")
+}
+
 type communicationPeerStats struct{ models, memory, reads atomic.Int32 }
 
 func TestCommunicationCompletedRewriteSurvivesDeliveryDeadline(t *testing.T) {
