@@ -3088,6 +3088,47 @@ func (q *Queries) GetPaymentPreparation(ctx context.Context, arg GetPaymentPrepa
 	return i, err
 }
 
+const getRecoveryObserver = `-- name: GetRecoveryObserver :one
+SELECT task.id, task.user_id, task.conversation_id, task.seq, task.request, task.state, task.route, task.target_task_id, task.target_run_id, task.run_id, task.auth_session_id, task.question_id, task.snapshot, task.version, task.fence, task.lease_owner, task.lease_until, task.created_at, task.response_started_at, task.response_first_chunk_seq, task.response_last_chunk_seq, task.response_delivered_at FROM shuttle_tasks task
+JOIN shuttle_conversations conversation ON conversation.active_task_id=task.id
+WHERE conversation.id=$1 AND task.user_id=$2
+`
+
+type GetRecoveryObserverParams struct {
+	ConversationID uuid.UUID `json:"conversation_id"`
+	UserID         uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) GetRecoveryObserver(ctx context.Context, arg GetRecoveryObserverParams) (ShuttleTask, error) {
+	row := q.db.QueryRow(ctx, getRecoveryObserver, arg.ConversationID, arg.UserID)
+	var i ShuttleTask
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ConversationID,
+		&i.Seq,
+		&i.Request,
+		&i.State,
+		&i.Route,
+		&i.TargetTaskID,
+		&i.TargetRunID,
+		&i.RunID,
+		&i.AuthSessionID,
+		&i.QuestionID,
+		&i.Snapshot,
+		&i.Version,
+		&i.Fence,
+		&i.LeaseOwner,
+		&i.LeaseUntil,
+		&i.CreatedAt,
+		&i.ResponseStartedAt,
+		&i.ResponseFirstChunkSeq,
+		&i.ResponseLastChunkSeq,
+		&i.ResponseDeliveredAt,
+	)
+	return i, err
+}
+
 const getRegistration = `-- name: GetRegistration :one
 SELECT id, event_id, user_id, role, state, version, requested_at FROM shuttle_registrations WHERE event_id=$1 AND user_id=$2
 `

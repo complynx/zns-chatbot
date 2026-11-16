@@ -45,6 +45,18 @@ type closeTaskRequest struct {
 type closeTaskResponse struct{ Body db.TaskResolution }
 
 func (s *Server) registerTaskAdministration(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-reconcile-recovery", Method: http.MethodPost,
+		Path:         "/internal/admin/tasks/{id}/reconcile-recovery",
+		Summary:      "Retry the retained request to reconcile its receipt; this can deliver accepted customer work",
+		MaxBodyBytes: internalBodyLimit,
+	}, s.reconcileRecovery)
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-abandon-recovery", Method: http.MethodPost,
+		Path:         "/internal/admin/tasks/{id}/abandon-recovery",
+		Summary:      "Explicitly withdraw retained input in Loom and close its local task",
+		MaxBodyBytes: internalBodyLimit,
+	}, s.abandonRecovery)
 	huma.Register(
 		api,
 		huma.Operation{OperationID: "admin-list-tasks", Method: http.MethodGet, Path: "/internal/admin/tasks"},
@@ -109,6 +121,9 @@ func (s *Server) closeTask(ctx context.Context, in *closeTaskRequest) (*closeTas
 	if !in.Body.Confirm || strings.TrimSpace(in.Body.Reason) == "" {
 		return nil, huma.Error400BadRequest("explicit confirmation and reason required")
 	}
+	if db.IsRecoveryOperationID(in.Body.OperationID) {
+		return nil, huma.Error400BadRequest("operation ID prefix is reserved for recovery reconciliation")
+	}
 	result, err := s.store.CloseUncertainTask(ctx, db.CloseTaskRequest{
 		TaskID:          in.ID,
 		BotID:           s.options.BotID,
@@ -121,8 +136,12 @@ func (s *Server) closeTask(ctx context.Context, in *closeTaskRequest) (*closeTas
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, huma.Error404NotFound("task not found")
 	}
+	if errors.Is(err, db.ErrRecoveryPending) {
+		return nil, huma.Error409Conflict("retained Loom message must be reconciled before local closure; " +
+			"verify delivery or explicit upstream abandonment with the original actor")
+	}
 	if errors.Is(err, db.ErrConflict) {
-		return nil, huma.Error409Conflict("task changed, is leased, or has no uncertain outcome")
+		return nil, huma.Error409Conflict("task changed, is leased, has pending inbox input, or is not uncertain or parked")
 	}
 	if err != nil {
 		return nil, huma.Error503ServiceUnavailable("task closure unavailable")

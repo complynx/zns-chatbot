@@ -174,6 +174,31 @@ func TestAdminClosureIsConfirmedAuditedIdempotentAndSurvivesRestart(t *testing.T
 	require.Len(t, p.runs, 1)
 }
 
+func TestAdminClosureCannotOrphanAnUndeliveredRecoveryMessage(t *testing.T) {
+	t.Parallel()
+	p := newPeers(t)
+	p.loseSend = true
+	h := setup(t, p)
+	id := unknownTask(t, h)
+	h.stop(t)
+	_, err := h.store.Pool().Exec(t.Context(), `UPDATE shuttle_tasks SET state='auth_unknown',
+	 snapshot=snapshot || '{"reauthorizing":true,"recovery":{"chat_id":"retained-chat",
+	 "receipt":{"accepted":true,"delivered":false,"message_id":"retained-message"}}}'::jsonb WHERE id=$1`, id)
+	require.NoError(t, err)
+	operator := taskAdminToken(t, h, id)
+	before, err := h.store.GetTask(t.Context(), id)
+	require.NoError(t, err)
+	code, data := adminRequest(t, h, operator, http.MethodPost, "/internal/admin/tasks/"+id.String()+"/close",
+		map[string]any{"operation_id": "retain-recovery", "expected_version": before.Version,
+			"reason": "Resolve unknown authorization", "confirm": true})
+	require.Equal(t, http.StatusConflict, code)
+	require.Contains(t, string(data), "retained Loom message must be reconciled")
+	after, err := h.store.GetTask(t.Context(), id)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+	require.Empty(t, adminDiagnostics(t, h, operator, id).Resolutions)
+}
+
 func TestAdminClosureDoesNotOverrideLiveLeaseOrKnownOutcome(t *testing.T) {
 	t.Parallel()
 	p := newPeers(t)

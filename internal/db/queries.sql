@@ -1,5 +1,9 @@
 -- name: GetTask :one
 SELECT * FROM shuttle_tasks WHERE id=$1;
+-- name: GetRecoveryObserver :one
+SELECT task.* FROM shuttle_tasks task
+JOIN shuttle_conversations conversation ON conversation.active_task_id=task.id
+WHERE conversation.id=sqlc.arg(conversation_id) AND task.user_id=sqlc.arg(user_id);
 -- name: EnsureTelegramUser :one
 INSERT INTO shuttle_users(id,bot_id,tg_user_id,profile) VALUES($1,$2,$3,$4)
 ON CONFLICT(bot_id,tg_user_id) DO UPDATE SET tg_user_id=shuttle_users.tg_user_id RETURNING *;

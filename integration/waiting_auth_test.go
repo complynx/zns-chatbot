@@ -76,10 +76,30 @@ func TestWaitingAuthLostRenewalReceiptDoesNotRepeatAfterRestart(t *testing.T) {
 
 func TestWaitingAuthPermissionRevocationDoesNotRenew(t *testing.T) {
 	t.Parallel()
+	for _, recovered := range []bool{false, true} {
+		name := "ordinary"
+		if recovered {
+			name = "recovered"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			testWaitingAuthPermissionRevocation(t, recovered)
+		})
+	}
+}
+
+func testWaitingAuthPermissionRevocation(t *testing.T, recovered bool) {
+	t.Helper()
 	p := newPeers(t)
 	p.steering = true
 	h := setup(t, p)
 	id, _ := suspendRunAuthorization(t, h, "permission_revoked")
+	if recovered {
+		_, err := h.store.Pool().Exec(t.Context(), `UPDATE shuttle_tasks SET snapshot=snapshot ||
+		 jsonb_build_object('recovery',jsonb_build_object('chat_id','retained-chat','receipt',
+		 jsonb_build_object('delivered',true,'run_id',run_id))) WHERE id=$1`, id)
+		require.NoError(t, err)
+	}
 	h.start(t)
 	h.await(t, id, "failed")
 	h.awaitReplies(t, 1)

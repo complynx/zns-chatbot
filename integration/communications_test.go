@@ -306,6 +306,7 @@ func communicationFailurePeer(t *testing.T, p *peers, name string) (*httptest.Se
 			stats.creates.Add(1)
 			if name == "rejected" {
 				w.WriteHeader(http.StatusForbidden)
+				respond(w, map[string]any{"error": map[string]string{"code": "forbidden"}})
 				return
 			}
 			if name == "injected_link" {

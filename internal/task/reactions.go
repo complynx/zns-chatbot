@@ -29,7 +29,9 @@ const reactionHistoryLimit = 50
 const reactionAuthRetry = 5 * time.Second
 
 func (s *Service) registerRunReactions(ctx context.Context, t *db.Task, c *checkpoint, run loom.Run) error {
-	if run.ChatID == "" || c.ReactionChatID == run.ChatID || c.Create == nil || c.Create.Interaction.Reactions == nil {
+	enabled := c.Create != nil && c.Create.Interaction.Reactions != nil ||
+		c.Recovery != nil && run.Interaction.Reactions != nil
+	if run.ChatID == "" || c.ReactionChatID == run.ChatID || !enabled {
 		return nil
 	}
 	// Mapping initial user messages must see a durable run ID before the consumer starts.

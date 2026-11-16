@@ -171,7 +171,8 @@ func (s *Store) ReactionTarget(ctx context.Context, user uuid.UUID, kind, run, i
 		err := s.pool.QueryRow(ctx, `SELECT (request->>'chat_id')::bigint,
 (request->'raw_update'->'message'->>'message_id')::bigint FROM shuttle_tasks
 WHERE user_id=$1 AND ((route='new_run' AND run_id=$2 AND $3='message.user') OR
- (snapshot->'input_receipt'->>'input_id'=$4 AND $3 IN('input.steering','input.answer')))
+ ((snapshot->'input_receipt'->>'input_id'=$4 OR
+ snapshot#>>'{recovery,receipt,input_id}'=$4) AND $3 IN('input.steering','input.answer')))
 AND request->'raw_update'->'message'->>'message_id' IS NOT NULL ORDER BY seq LIMIT 1`,
 			user, run, kind, id).Scan(&chat, &message)
 		return chat, message, err

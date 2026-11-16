@@ -21,6 +21,9 @@ import (
 const routeNewRun = "new_run"
 const routeStructured = "structured"
 const taskStateCompleted = "completed"
+const taskStateClosed = "closed"
+const taskStateFailed = "failed"
+const taskStateCancelled = "cancelled"
 
 type Store struct {
 	pool *pgxpool.Pool
@@ -52,6 +55,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 }
 func task(t sqlc.ShuttleTask) Task {
 	return Task{
+		CreatedAt:      t.CreatedAt.Time,
 		ID:             t.ID,
 		UserID:         t.UserID,
 		ConversationID: t.ConversationID,
@@ -364,7 +368,7 @@ func (s *Store) Save(ctx context.Context, t Task, owner string, fence int64, out
 
 func terminalTask(state string) bool {
 	switch state {
-	case taskStateCompleted, "failed", "cancelled", deliveryUnknown, deliveryFailed, "closed":
+	case taskStateCompleted, taskStateFailed, taskStateCancelled, deliveryUnknown, deliveryFailed, taskStateClosed:
 		return true
 	default:
 		return false

@@ -2,6 +2,8 @@ package integration_test
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
 	"sync"
 	"testing"
 	"time"
@@ -223,10 +225,48 @@ func TestLostReauthorizationReceiptIsNotRepeatedAfterRestart(t *testing.T) {
 	require.Equal(t, id, h.submit(t, 93))
 	h.stop(t)
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	require.Equal(t, 1, p.sessionReauthorizations)
 	require.Len(t, p.sent, 1)
 	require.Len(t, p.runs, 1)
+	p.mu.Unlock()
+	closeUnknownObserverAndProcessQueuedInput(t, h, p, id)
+}
+
+func closeUnknownObserverAndProcessQueuedInput(t *testing.T, h *harness, p *peers, id uuid.UUID) {
+	t.Helper()
+	h.start(t)
+	queued := h.submitText(t, 9301, "Continue after the earlier observer is explicitly closed")
+	awaitRecoveryDeliverySettled(t, h, queued)
+	h.stop(t)
+	prior, err := h.store.GetTask(t.Context(), id)
+	require.NoError(t, err)
+	var snapshot struct {
+		Reauthorizing bool `json:"reauthorizing"`
+	}
+	require.NoError(t, json.Unmarshal(prior.Snapshot, &snapshot))
+	require.True(t, snapshot.Reauthorizing, "closure must preserve the unknown receipt as audit evidence")
+	operator := taskAdminToken(t, h, id)
+	code, result := adminRequest(t, h, operator, http.MethodPost, "/internal/admin/tasks/"+id.String()+"/close",
+		map[string]any{"operation_id": "close-unknown-observer", "expected_version": prior.Version,
+			"reason": "Stop local observation after upstream state was checked", "confirm": true})
+	require.Equal(t, http.StatusOK, code, string(result))
+	p.mu.Lock()
+	run := p.runs[id.String()]
+	run.Status, run.Reason = "cancelled", "operator_stop"
+	p.runs[id.String()] = run
+	p.steering, p.loseReauthorization = false, false
+	p.mu.Unlock()
+	_, err = h.store.Pool().Exec(t.Context(), "UPDATE river_job SET scheduled_at=now() WHERE state='scheduled'")
+	require.NoError(t, err)
+	h.start(t)
+	h.await(t, queued, "completed")
+	later := h.submitText(t, 9302, "Later messages can also proceed")
+	h.await(t, later, "completed")
+	h.stop(t)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	require.Equal(t, 1, p.sessionReauthorizations, "closed renewal must never run again")
+	require.Equal(t, []string{id.String(), queued.String(), later.String()}, p.createKeys)
 }
 
 func TestLoomAuthorizationRecoveryBeforeBootstrapKeepsAcceptedWork(t *testing.T) {

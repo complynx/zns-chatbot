@@ -16,8 +16,8 @@ const (
 	stepLimitPromptPrefix = "step-limit:"
 )
 
-func stepLimitPaused(run loom.Run) bool {
-	return run.Status == runPaused && run.Reason == stepLimitReason
+func allowancePaused(run loom.Run) bool {
+	return run.Status == runPaused && (run.Reason == stepLimitReason || run.Reason == "budget_exhausted")
 }
 
 // Loom renews step_budget_start at each accepted input. The key identifies one exhausted budget.

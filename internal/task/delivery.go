@@ -363,6 +363,7 @@ func (s *Service) verifyDeliveryAuthorization(ctx context.Context, u db.User, ro
 	if !strings.HasPrefix(row.DedupKey, prefix+"result:") &&
 		!strings.HasPrefix(row.DedupKey, prefix+"question:") &&
 		!strings.HasPrefix(row.DedupKey, prefix+"approval:") &&
+		!strings.HasPrefix(row.DedupKey, prefix+stepLimitPromptPrefix) &&
 		!strings.HasPrefix(row.DedupKey, prefix+"avatar:") {
 		return nil
 	}

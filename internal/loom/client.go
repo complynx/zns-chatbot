@@ -98,6 +98,7 @@ type Approval struct {
 	ExpiresAt          time.Time       `json:"expires_at"`
 }
 type Run struct {
+	ReplacesRunID        string      `json:"replaces_run_id,omitempty"`
 	Interaction          Interaction `json:"interaction"`
 	ConversationRevision int64       `json:"conversation_revision,omitempty"`
 	ID                   string      `json:"run_id"`
@@ -383,32 +384,29 @@ func decodeFailure(resp *http.Response, data []byte, mutation, idempotent bool) 
 	}
 	var code string
 	// An HTTP status from a proxy is not an authoritative Loom rejection.
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		var body struct {
-			Error struct {
-				Code string `json:"code"`
-			} `json:"error"`
-		}
-		if json.Unmarshal(data, &body) == nil {
-			code = body.Error.Code
-			if code == CodeRunTerminal && resp.StatusCode != http.StatusConflict {
-				code = ""
-			}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(data, &body) == nil {
+		code = body.Error.Code
+		if code == CodeRunTerminal && resp.StatusCode != http.StatusConflict {
+			code = ""
 		}
 	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		if code == "" && resp.StatusCode == http.StatusNotFound {
-			return &Error{StatusCode: resp.StatusCode, Outcome: outcome, Retryable: !mutation || idempotent}
-		}
-		e := &Error{StatusCode: resp.StatusCode, Outcome: Rejected, Code: code}
-		if resp.StatusCode >= http.StatusInternalServerError {
-			e.Outcome = outcome
-			e.Retryable = !mutation || idempotent
-		}
-		if resp.StatusCode == http.StatusTooManyRequests {
-			e.Retryable = true
-		}
-		return e
+	if code == "" && resp.StatusCode != http.StatusUnauthorized {
+		// Proxy failures neither establish a read outcome nor reject a prior
+		// mutation. Reads and idempotent mutations retain their retry path.
+		return &Error{StatusCode: resp.StatusCode, Outcome: outcome, Retryable: !mutation || idempotent}
 	}
-	return nil
+	e := &Error{StatusCode: resp.StatusCode, Outcome: Rejected, Code: code}
+	if resp.StatusCode >= http.StatusInternalServerError {
+		e.Outcome = outcome
+		e.Retryable = !mutation || idempotent
+	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		e.Retryable = true
+	}
+	return e
 }

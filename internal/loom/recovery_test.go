@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"testing"
 
@@ -15,24 +16,29 @@ import (
 	"github.com/complynx/zns-chatbot/internal/loom"
 )
 
-func TestProxy404DoesNotProveRunOrMessageRejection(t *testing.T) {
+func TestProxyFailureDoesNotProveRunOrMessageRejection(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-		_, _ = io.WriteString(w, "404 page not found\n")
-	}))
-	defer srv.Close()
-	c, err := loom.New(srv.URL, srv.Client())
-	require.NoError(t, err)
-	auth := loom.Auth{ServiceToken: "actor", SubjectToken: "user"}
-	_, err = c.GetRun(context.Background(), auth, "retained-run")
-	var failure *loom.Error
-	require.ErrorAs(t, err, &failure)
-	require.True(t, failure.Retryable)
-	_, err = c.RecoverMessage(context.Background(), auth, "chat", "immutable-key", loom.RecoverMessage{Text: "hello"})
-	require.ErrorAs(t, err, &failure)
-	require.True(t, failure.Retryable)
-	require.Equal(t, loom.Unknown, failure.Outcome)
+	for _, status := range []int{400, 403, 404, 409, 422} {
+		t.Run(strconv.Itoa(status), func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(status)
+				_, _ = io.WriteString(w, "404 page not found\n")
+			}))
+			defer srv.Close()
+			c, err := loom.New(srv.URL, srv.Client())
+			require.NoError(t, err)
+			auth := loom.Auth{ServiceToken: "actor", SubjectToken: "user"}
+			_, err = c.GetRun(context.Background(), auth, "retained-run")
+			var failure *loom.Error
+			require.ErrorAs(t, err, &failure)
+			require.True(t, failure.Retryable)
+			_, err = c.RecoverMessage(context.Background(), auth, "chat", "immutable-key", loom.RecoverMessage{Text: "hello"})
+			require.ErrorAs(t, err, &failure)
+			require.True(t, failure.Retryable)
+			require.Equal(t, loom.Unknown, failure.Outcome)
+		})
+	}
 }
 
 func TestRecoveryWireReplaysFrozenBodyAfterLostReceipt(t *testing.T) {
@@ -99,4 +105,38 @@ func TestRecoveryWireReplaysFrozenBodyAfterLostReceipt(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	require.Equal(t, 2, calls)
+}
+
+func TestAbandonMessageRequiresItsMatchingUndeliveredReceipt(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"matching", "foreign", "delivered"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "/v1/chats/chat/messages/message/abandon", r.URL.Path)
+				assert.Equal(t, http.MethodPost, r.Method)
+				assert.Equal(t, "withdraw-key", r.Header.Get("Idempotency-Key"))
+				assert.Equal(t, "user", r.Header.Get("X-Subject-Token"))
+				receipt := loom.RecoveryReceipt{Accepted: true, Abandoned: true, MessageID: "message"}
+				if mode == "foreign" {
+					receipt.MessageID = "other-message"
+				}
+				receipt.Delivered = mode == "delivered"
+				respondErr := json.NewEncoder(w).Encode(receipt)
+				assert.NoError(t, respondErr)
+			}))
+			defer srv.Close()
+			client, err := loom.New(srv.URL, srv.Client())
+			require.NoError(t, err)
+			_, err = client.AbandonMessage(t.Context(), loom.Auth{ServiceToken: "actor", SubjectToken: "user"},
+				"chat", "message", "withdraw-key")
+			if mode == "matching" {
+				require.NoError(t, err)
+				return
+			}
+			var failure *loom.Error
+			require.ErrorAs(t, err, &failure)
+			require.Equal(t, loom.Unknown, failure.Outcome)
+		})
+	}
 }

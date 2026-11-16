@@ -135,7 +135,7 @@ func liveKeyboardID(run *loom.Run) string {
 	if run == nil {
 		return ""
 	}
-	if stepLimitPaused(*run) {
+	if allowancePaused(*run) {
 		return stepLimitPromptKey(*run)
 	}
 	if q := run.Question; q != nil && q.Answer == nil && q.ExpiresAt.After(time.Now()) {

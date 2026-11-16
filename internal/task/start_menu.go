@@ -25,7 +25,7 @@ func (s *Service) completedStartWelcome(
 	if err != nil || !named {
 		return nil, err
 	}
-	if i.StartContinuation != "" {
+	if i.StartContinuation != "" || len(c.RecoveryStartOrigins) > 0 {
 		return nil, nil
 	}
 	deferred, err := s.store.HasDeferredStartForTask(ctx, t.ID)

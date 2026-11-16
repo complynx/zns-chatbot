@@ -13,6 +13,8 @@ import (
 	"github.com/complynx/zns-chatbot/internal/db/sqlc"
 )
 
+var ErrRecoveryPending = errors.New("retained Loom message requires reconciliation before local closure")
+
 type TaskSummary struct {
 	ID             uuid.UUID  `json:"id"`
 	UserID         uuid.UUID  `json:"user_id"`
@@ -168,6 +170,9 @@ func (s *Store) taskQueueJobs(ctx context.Context, id uuid.UUID) ([]QueueJobSumm
 
 // CloseUncertainTask ends local processing without claiming or replaying an external result.
 func (s *Store) CloseUncertainTask(ctx context.Context, in CloseTaskRequest) (TaskResolution, error) {
+	if IsRecoveryOperationID(in.OperationID) {
+		return TaskResolution{}, ErrConflict
+	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return TaskResolution{}, err
@@ -183,7 +188,7 @@ func (s *Store) CloseUncertainTask(ctx context.Context, in CloseTaskRequest) (Ta
 		sqlc.GetTaskResolutionParams{TaskID: in.TaskID, OperationID: in.OperationID},
 	)
 	if err == nil {
-		if previous.Actor != in.Actor || previous.Reason != in.Reason ||
+		if t.State != taskStateClosed || previous.Actor != in.Actor || previous.Reason != in.Reason ||
 			previous.ExpectedVersion != in.ExpectedVersion {
 			return TaskResolution{}, ErrConflict
 		}
@@ -210,10 +215,18 @@ func (s *Store) closeUncertainTaskTx(
 	t sqlc.ShuttleTask,
 	in CloseTaskRequest,
 ) (TaskResolution, error) {
+	if IsRecoveryOperationID(in.OperationID) {
+		return TaskResolution{}, ErrConflict
+	}
 	if err := s.requireUncertainTask(ctx, q, t); err != nil {
 		return TaskResolution{}, err
 	}
-	closed, err := q.CloseUncertainTask(ctx, sqlc.CloseUncertainTaskParams{ID: t.ID, Version: in.ExpectedVersion})
+	return s.closeTaskTx(ctx, q, t, in, in.ExpectedVersion)
+}
+
+func (s *Store) closeTaskTx(ctx context.Context, q *sqlc.Queries, t sqlc.ShuttleTask,
+	in CloseTaskRequest, version int64) (TaskResolution, error) {
+	closed, err := q.CloseUncertainTask(ctx, sqlc.CloseUncertainTaskParams{ID: t.ID, Version: version})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return TaskResolution{}, ErrConflict
 	}
@@ -248,16 +261,29 @@ func (s *Store) closeUncertainTaskTx(
 }
 
 func (s *Store) requireUncertainTask(ctx context.Context, q *sqlc.Queries, t sqlc.ShuttleTask) error {
-	if t.State == "closed" {
+	if t.State == taskStateClosed {
 		return ErrConflict
+	}
+	// Local closure cannot withdraw a retained inbox message. Keep the only
+	// replay record until delivery or explicit upstream abandonment is known.
+	var saved recoveryCheckpoint
+	if err := json.Unmarshal(t.Snapshot, &saved); err != nil {
+		return ErrConflict
+	}
+	if r := saved.Recovery; r != nil {
+		if r.Receipt == nil && !r.Rejected || r.Receipt != nil && !r.Receipt.Delivered && !r.Receipt.Abandoned {
+			return errors.Join(ErrConflict, ErrRecoveryPending)
+		}
 	}
 	if t.State == "auth_unknown" {
 		return nil
 	}
-	var checkpoint struct {
-		Reauthorizing bool `json:"reauthorizing"`
+	if saved.Reauthorizing {
+		return nil
 	}
-	if json.Unmarshal(t.Snapshot, &checkpoint) == nil && checkpoint.Reauthorizing {
+	// Explicit administrative closure may release a parked observer. The
+	// receipt guard above still forbids discarding an unresolved inbox message.
+	if t.State == "awaiting_service" && t.Route == "new_run" && t.RunID != "" {
 		return nil
 	}
 	rows, err := q.ListOutbox(ctx, t.ID)

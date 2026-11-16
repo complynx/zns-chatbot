@@ -84,3 +84,21 @@ func (c *Client) RecoverMessage(
 	}
 	return result, err
 }
+
+// AbandonMessage withdraws retained input as its original actor. It never cancels a run.
+func (c *Client) AbandonMessage(ctx context.Context, auth Auth, chat, message, key string) (RecoveryReceipt, error) {
+	var result RecoveryReceipt
+	path, err := resourcePath("chats", chat, "/messages")
+	if err != nil {
+		return result, err
+	}
+	path, err = resourcePath(path[1:], message, "/abandon")
+	if err != nil {
+		return result, err
+	}
+	err = c.call(ctx, http.MethodPost, path, auth, key, struct{}{}, &result, true, true)
+	if err == nil && (!result.Accepted || !result.Abandoned || result.Delivered || result.MessageID != message) {
+		err = &Error{Outcome: Unknown, Retryable: true}
+	}
+	return result, err
+}

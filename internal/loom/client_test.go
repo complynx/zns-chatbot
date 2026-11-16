@@ -307,6 +307,10 @@ func TestInputRecoveryRecognizesOnlyTypedTerminalRejection(t *testing.T) {
 			if tc.status == http.StatusServiceUnavailable {
 				require.Equal(t, loom.Unknown, failure.Outcome)
 			}
+			if tc.status == http.StatusConflict && failure.Code == "" {
+				require.Equal(t, loom.Unknown, failure.Outcome)
+				require.True(t, failure.Retryable)
+			}
 		})
 	}
 }
@@ -334,4 +338,20 @@ func TestGetRunPreservesResolvedPromptState(t *testing.T) {
 	require.Equal(t, []string{"one"}, run.Question.Answer.ChoiceIDs)
 	require.NotNil(t, run.Approval)
 	require.Equal(t, "approve", run.Approval.Decision)
+}
+
+func TestUntypedRateLimitDoesNotAuthorizeReplayingSessionRenewal(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+	client, err := loom.New(server.URL, server.Client())
+	require.NoError(t, err)
+	_, err = client.Reauthorize(t.Context(), loom.Auth{ServiceToken: "service", SubjectToken: "subject"}, "session", 1)
+	var failure *loom.Error
+	require.ErrorAs(t, err, &failure)
+	// A proxy status cannot prove this non-idempotent mutation was not forwarded.
+	require.Equal(t, loom.Unknown, failure.Outcome)
+	require.False(t, failure.Retryable)
 }

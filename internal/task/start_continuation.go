@@ -75,10 +75,45 @@ func (s *Service) deliverAndContinueStart(ctx context.Context, t *db.Task, c che
 	if err := s.deliver(ctx, t, c); err != nil {
 		return err
 	}
+	if err := s.continueRecoveredStarts(ctx, t, &c); err != nil {
+		return s.wait()
+	}
 	if err := s.continueStart(ctx, *t, i); err != nil {
 		return s.wait()
 	}
 	return nil
+}
+
+func (s *Service) continueRecoveredStarts(ctx context.Context, t *db.Task, c *checkpoint) error {
+	if t.State != stateCompleted || len(c.RecoveryStartOrigins) == 0 {
+		return nil
+	}
+	if err := s.startDeliveryComplete(ctx, t.ID); err != nil {
+		return err
+	}
+	for _, id := range c.RecoveryStartOrigins {
+		source, err := s.store.GetTask(ctx, id)
+		if err != nil {
+			return err
+		}
+		if source.State == stateCancelled {
+			continue
+		}
+		var i intent
+		if err = json.Unmarshal(source.Request, &i); err != nil {
+			return err
+		}
+		bot, organization, _ := s.iam.DeploymentScope()
+		named, nameErr := s.store.HasTelegramProfileName(ctx, bot, i.User.ID, organization)
+		if nameErr != nil || !named {
+			return nameErr
+		}
+		if err = s.intakeStartContinuation(ctx, source.ID, t.ID, i); err != nil {
+			return err
+		}
+	}
+	c.RecoveryStartOrigins = nil
+	return s.save(ctx, t, *c, nil)
 }
 
 // A deterministic child and its queue job commit together. The parent's River
@@ -110,6 +145,10 @@ func (s *Service) continueStart(ctx context.Context, t db.Task, i intent) error 
 	if err != nil || !named {
 		return err
 	}
+	return s.intakeStartContinuation(ctx, t.ID, t.ID, i)
+}
+
+func (s *Service) intakeStartContinuation(ctx context.Context, source, observer uuid.UUID, i intent) error {
 	applyStartPayload(&i, i.StartContinuation)
 	i.AfterStartOnboarding = true
 	i.ReplyToMessageID = 0
@@ -117,7 +156,7 @@ func (s *Service) continueStart(ctx context.Context, t db.Task, i intent) error 
 	if err != nil {
 		return err
 	}
-	_, err = s.store.IntakeStartContinuation(ctx, t.ID, payload,
+	_, err = s.store.IntakeRecoveredStartContinuation(ctx, source, observer, payload,
 		func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
 			_, insertErr := s.queue.InsertTx(ctx, tx, JobArgs{TaskID: id}, nil)
 			return insertErr

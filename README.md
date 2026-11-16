@@ -26,30 +26,4 @@ See [personal messages, broadcasts and delivery limits](docs/shuttle-communicati
 
 ## Conversation recovery
 
-Text recovery integrates with [Loom PR #69](https://github.com/complynx/loom/pull/69),
-verified at `f220e1b0821c756a3bd7b5216eb8825977cd145c`.
-It activates only when Loom advertises `conversation_recovery.version: 1`.
-Apply Loom's migrations and stop older Loom workers before enabling that capability.
-Servers without it retain the existing run/input path. Existing saved create/input
-requests keep their original endpoint, body and idempotency key during upgrades.
-
-For an existing default chat, Shuttle checkpoints the exact text and a stable
-task key before calling the durable message endpoint. Loom continues or replaces
-the run in that same chat; history and operation receipts stay on the server.
-Shuttle retains blocked messages in source order, fences superseded local
-observers, and preserves the original session receipt for reauthorization.
-An untyped proxy 404 does not close the task. Recovery retries stop making
-upstream calls after two minutes; another incoming message opens a new retry
-window for the saved earlier message first. Funds, authorization and uncertain
-effects have separate user-visible statuses. No blocked message is automatically
-abandoned, and no observer starts a paid successor without a customer message.
-
-Loom enforces the owner's shared wallet. Its contract gives a successor the current
-configured per-run allowance; it does not carry a narrower original run cap.
-Shuttle never adds funds or changes those policies. Version 1 accepts text only;
-Shuttle file messages already use text with durable `zinusya_files.fetch` references,
-so their captions and file metadata use the same inbox. Binary file access retains
-its existing authorization checks. Native commands and protocol callbacks retain
-their existing handling; callbacks wait behind earlier undelivered conversation text.
-No cross-chat import is used. Uncertain
-effects and unavailable recovery receipts still require operator reconciliation.
+See [Conversation recovery](docs/conversation-recovery.md) for behavior, rollout requirements and operator recovery.

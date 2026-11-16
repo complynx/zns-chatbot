@@ -3,6 +3,8 @@ package db
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -11,10 +13,11 @@ import (
 )
 
 var (
-	ErrConflict       = errors.New("state version conflict")
-	ErrLeaseLost      = errors.New("task lease lost")
-	ErrRoutingPending = errors.New("earlier inbox routing pending")
-	ErrNoActiveTask   = errors.New("conversation has no active task")
+	ErrConflict                     = errors.New("state version conflict")
+	ErrLeaseLost                    = errors.New("task lease lost")
+	ErrRoutingPending               = errors.New("earlier inbox routing pending")
+	ErrRecoveryAuthorizationUnknown = fmt.Errorf("%w: recovery authorization unknown", ErrRoutingPending)
+	ErrNoActiveTask                 = errors.New("conversation has no active task")
 )
 
 type IntakeRequest struct {
@@ -24,6 +27,7 @@ type IntakeRequest struct {
 	Profile, Payload                        json.RawMessage
 }
 type Task struct {
+	CreatedAt                                                   time.Time
 	ID, UserID, ConversationID, TargetTaskID                    uuid.UUID
 	Seq                                                         int64
 	Request                                                     json.RawMessage
