@@ -40,13 +40,22 @@ func (s *Service) pendingStepLimitOutput(
 	c.KeyboardRevision++
 	c.KeyboardPrompt = prompt
 	ru := s.languageFor(ctx, i) == "ru"
+	enText := "I reached the step limit and the task is paused. Would you like to continue or stop? " +
+		"Choose Continue or Stop below, or write your answer. " +
+		"Some actions may already have completed; stopping will not undo them."
+	ruText := "Я достигла лимита шагов, и задача приостановлена. Продолжить работу или прекратить? " +
+		"Выбери «Продолжить» или «Прекратить» ниже либо напиши ответ. " +
+		"Часть действий могла уже выполниться; остановка их не отменит."
+	if run.Reason == "budget_exhausted" {
+		enText = "The work allowance for this task is used. Would you like to continue or stop?"
+		ruText = "Лимит работы над этой задачей исчерпан. Продолжить или прекратить?"
+	}
+	if run.Result != "" {
+		enText = run.Result + "\n\n" + enText
+		ruText = run.Result + "\n\n" + ruText
+	}
 	out := s.result(ctx, i, structuredText(ru,
-		"I reached the step limit and the task is paused. Would you like to continue or stop? "+
-			"Choose Continue or Stop below, or write your answer. "+
-			"Some actions may already have completed; stopping will not undo them.",
-		"Я достигла лимита шагов, и задача приостановлена. Продолжить работу или прекратить? "+
-			"Выбери «Продолжить» или «Прекратить» ниже либо напиши ответ. "+
-			"Часть действий могла уже выполниться; остановка их не отменит.",
+		enText, ruText,
 	), prompt+":presentation:"+strconv.FormatInt(c.KeyboardRevision, 10))
 	// Both buttons send ordinary conversation text. Loom wakes the run and the agent decides.
 	setReplyMarkup(out, &telegram.ReplyKeyboardMarkup{

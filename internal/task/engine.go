@@ -23,6 +23,7 @@ import (
 var errControlTargetFinished = errors.New("control target finished without applying input")
 
 type checkpoint struct {
+	Recovery               *messageRecovery       `json:"recovery,omitempty"`
 	ReactionChatID         string                 `json:"reaction_chat_id,omitempty"`
 	WelcomeAfterOnboarding bool                   `json:"welcome_after_onboarding,omitempty"`
 	NativeAvatar           *db.AvatarDraftReceipt `json:"native_avatar,omitempty"`
@@ -164,7 +165,22 @@ func (s *Service) work(parent context.Context, id uuid.UUID) error {
 func (s *Service) authorizedTask(
 	ctx context.Context, t *db.Task, c checkpoint, i intent, user db.User, service string,
 ) error {
-	if t.Route != "new_run" {
+	if t.RunID == "" && (i.Kind == kindMessage || i.Kind == kindApproval) {
+		ready, _, err := s.store.RecoveryReady(ctx, *t)
+		if err != nil || !ready {
+			return s.wait()
+		}
+	}
+	if c.Recovery != nil {
+		return s.recoverConversation(ctx, t, c, i, user, service)
+	}
+	if i.Kind == kindMessage && c.Create == nil && c.Control == nil && t.RunID == "" {
+		handled, err := s.startConversationRecovery(ctx, t, &c, i, user, service)
+		if handled {
+			return err
+		}
+	}
+	if t.Route != routeNewRun {
 		return s.control(ctx, t, c, i, user, service)
 	}
 	return s.runTask(ctx, t, c, i, user, service)
@@ -249,7 +265,7 @@ func (s *Service) ensureSession(
 	user db.User,
 	service string,
 ) (bool, error) {
-	recovering := c.Run != nil && c.Run.Status == "waiting_auth" && c.Run.Reason == "authorization_required"
+	recovering := c.Run != nil && c.Run.Status == runWaitingAuth && c.Run.Reason == reasonAuthorizationRequired
 	if t.AuthSessionID != "" && c.Session.ExpiresAt.After(time.Now().Add(sessionRenewSkew)) && !recovering {
 		return true, nil
 	}
@@ -323,6 +339,13 @@ func (s *Service) sessionError(ctx context.Context, t *db.Task, c *checkpoint, i
 		return s.waitForLoomAuthorization(ctx, t, *c, i)
 	}
 	if known && !upstream.Retryable && upstream.Outcome == loom.Rejected {
+		if c.Recovery != nil {
+			t.State = stateAwaitingAuth
+			if saveErr := s.save(ctx, t, *c, nil); saveErr != nil {
+				return s.wait()
+			}
+			return s.wait()
+		}
 		if c.ReplyModeMismatch {
 			return s.waitForLoomAuthorization(ctx, t, *c, i)
 		}
@@ -345,6 +368,9 @@ func (s *Service) advanceRun(ctx context.Context, t *db.Task, c checkpoint, i in
 		run, err = s.loom.GetRun(ctx, auth, t.RunID)
 	}
 	if err != nil {
+		if handled, recoveryErr := s.recoverBusyCreation(ctx, t, &c, i, auth, err); handled {
+			return recoveryErr
+		}
 		return s.runRequestError(ctx, t, c, i, run, err)
 	}
 	if run.AuthSessionID != "" && run.AuthSessionID != t.AuthSessionID {
@@ -353,16 +379,16 @@ func (s *Service) advanceRun(ctx context.Context, t *db.Task, c checkpoint, i in
 	if err = s.registerRunReactions(ctx, t, &c, run); err != nil {
 		return s.wait()
 	}
-	if run.Status == "paused" && run.Reason == "shutdown" {
+	if run.Status == runPaused && run.Reason == reasonShutdown {
 		return s.resumeShutdown(ctx, t, c, i, auth, run)
 	}
-	if run.Status == "waiting_auth" {
+	if run.Status == runWaitingAuth {
 		t.RunID = run.ID
 		c.Run = &run
 		if run.Reason == "permission_revoked" {
 			return s.finish(ctx, t, c, i, stateFailed, "denied")
 		}
-		if run.Reason == "authorization_required" {
+		if run.Reason == reasonAuthorizationRequired {
 			return s.waitForLoomAuthorization(ctx, t, c, i)
 		}
 		t.State = stateAwaitingAuth
@@ -388,7 +414,7 @@ func (s *Service) observeRun(ctx context.Context, t *db.Task, c checkpoint, i in
 		return s.finish(ctx, t, c, i, stateCancelled, stateCancelled)
 	default:
 		t.State = "running"
-		if run.Status == "paused" || run.Status == "reconciling" {
+		if run.Status == runPaused || run.Status == "reconciling" {
 			t.State = stateAwaitingService
 		}
 		out, err := s.pendingRunOutput(ctx, t, &c, i, run)
@@ -431,6 +457,11 @@ func (s *Service) completeRun(ctx context.Context, t *db.Task, c checkpoint, i i
 
 func (s *Service) identityError(ctx context.Context, t *db.Task, c checkpoint, i intent, err error) error {
 	if errors.Is(err, identity.ErrDenied) || errors.Is(err, identity.ErrConflict) {
+		if c.Recovery != nil {
+			t.State = stateAwaitingAuth
+			out := s.result(ctx, i, s.localized(ctx, i, "denied"), "recovery-denied")
+			return s.waitWithRecoveryOutput(ctx, t, c, out)
+		}
 		if c.ReplyModeMismatch {
 			return s.waitForLoomAuthorization(ctx, t, c, i)
 		}
@@ -448,6 +479,12 @@ func (s *Service) loomError(ctx context.Context, t *db.Task, c checkpoint, i int
 		return s.waitForLoomAuthorization(ctx, t, c, i)
 	}
 	if upstream != nil && upstream.Outcome == loom.Rejected && !upstream.Retryable {
+		if c.Recovery != nil || t.RunID != "" {
+			// Rejection of a consumer request does not prove the retained run finished.
+			t.State = stateAwaitingService
+			out := s.recoveryBlocker(ctx, i, upstream.Code, "resolve_blocker_then_retry")
+			return s.waitWithRecoveryOutput(ctx, t, c, out)
+		}
 		return s.finish(ctx, t, c, i, stateFailed, stateFailed)
 	}
 	c.LoomAuthRetryUntil = nil
@@ -537,7 +574,7 @@ func (s *Service) finishedTarget(
 	}
 	// Promotion retains the immutable accepted task ID and request, with a fresh run checkpoint.
 	*t = promoted
-	return s.runTask(ctx, t, checkpoint{}, i, user, service)
+	return s.authorizedTask(ctx, t, checkpoint{}, i, user, service)
 }
 
 // A prepared Input is uncertain until the same key returns a receipt or run_terminal.
@@ -707,7 +744,7 @@ func (s *Service) waitForLoomAuthorization(ctx context.Context, t *db.Task, c ch
 // A prepared create may have succeeded despite a lost response. Authorization
 // failure alone does not prove that its run stopped or release its conversation.
 func mayHaveRun(t db.Task, c checkpoint) bool {
-	return t.Route == "new_run" && (t.RunID != "" || c.Create != nil)
+	return c.Recovery != nil || t.Route == routeNewRun && (t.RunID != "" || c.Create != nil)
 }
 
 func (s *Service) pendingRunOutput(
@@ -718,8 +755,11 @@ func (s *Service) pendingRunOutput(
 	run loom.Run,
 ) ([]db.Outbound, error) {
 	t.QuestionID = ""
-	if stepLimitPaused(run) {
+	if stepLimitPaused(run) || run.Status == runPaused && run.Reason == "budget_exhausted" {
 		return s.pendingStepLimitOutput(ctx, c, i, run), nil
+	}
+	if run.Status == runPaused && run.Reason == "credits_exhausted" {
+		return s.recoveryBlocker(ctx, i, run.Reason, "fund_wallet_then_retry"), nil
 	}
 	out, err := s.pendingApprovalMessages(ctx, t, i, run.Approval)
 	if err != nil {

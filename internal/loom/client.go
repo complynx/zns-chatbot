@@ -367,19 +367,39 @@ func decodeResponse(resp *http.Response, result any, mutation bool, idempotent b
 	if err != nil || len(data) > MaxResponseBytes {
 		return &Error{StatusCode: resp.StatusCode, Outcome: outcome, Retryable: !mutation || idempotent}
 	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return decodeFailure(resp, data, mutation, idempotent)
+	}
+	if err = json.Unmarshal(data, result); err != nil {
+		return &Error{StatusCode: resp.StatusCode, Outcome: outcome, Retryable: !mutation || idempotent}
+	}
+	return nil
+}
+
+func decodeFailure(resp *http.Response, data []byte, mutation, idempotent bool) error {
+	outcome := Rejected
+	if mutation {
+		outcome = Unknown
+	}
 	var code string
-	// Only this typed conflict is safe negative evidence after an idempotent Input replay.
-	if resp.StatusCode == http.StatusConflict {
+	// An HTTP status from a proxy is not an authoritative Loom rejection.
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		var body struct {
 			Error struct {
 				Code string `json:"code"`
 			} `json:"error"`
 		}
-		if json.Unmarshal(data, &body) == nil && body.Error.Code == CodeRunTerminal {
-			code = CodeRunTerminal
+		if json.Unmarshal(data, &body) == nil {
+			code = body.Error.Code
+			if code == CodeRunTerminal && resp.StatusCode != http.StatusConflict {
+				code = ""
+			}
 		}
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if code == "" && resp.StatusCode == http.StatusNotFound {
+			return &Error{StatusCode: resp.StatusCode, Outcome: outcome, Retryable: !mutation || idempotent}
+		}
 		e := &Error{StatusCode: resp.StatusCode, Outcome: Rejected, Code: code}
 		if resp.StatusCode >= http.StatusInternalServerError {
 			e.Outcome = outcome
@@ -389,9 +409,6 @@ func decodeResponse(resp *http.Response, result any, mutation bool, idempotent b
 			e.Retryable = true
 		}
 		return e
-	}
-	if err = json.Unmarshal(data, result); err != nil {
-		return &Error{StatusCode: resp.StatusCode, Outcome: outcome, Retryable: !mutation || idempotent}
 	}
 	return nil
 }
