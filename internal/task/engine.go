@@ -601,6 +601,11 @@ func (s *Service) reconcileFinishedInput(
 		return true, s.wait()
 	}
 	if receipt.ID != target.RunID {
+		if !terminal(target.State) {
+			// The target can still renew its session. Its receipt is final only
+			// after the target task ended.
+			return true, s.waitForService(ctx, t, c)
+		}
 		return true, s.adoptRun(ctx, t, i, user, service, target, receipt.ID)
 	}
 	c.InputReceipt = &receipt

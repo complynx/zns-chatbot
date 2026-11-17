@@ -405,12 +405,12 @@ func decodeFailure(status int, data []byte, mutation, idempotent bool) *Error {
 	case !fromLoom:
 		e.Retryable = true
 		if mutation {
-			// The proxy answered, so Loom did not get the request. Keep the unknown
-			// outcome where the retry has an idempotency key, because that retry is
-			// safe without this assumption. A session request has no key, and its
-			// unknown outcome stops the task until an operator acts. Repeat it: if
-			// Loom did apply a renewal, the repeat gets a typed version conflict
-			// and the task fails with a notice.
+			// Retry policy, not proof that Loom did not get the request. A request
+			// with an idempotency key keeps the unknown outcome: its retry is safe
+			// in each case. A session request has no key, and its unknown outcome
+			// stops the task until an operator acts. Treat it as not started and
+			// repeat it. If Loom did apply a renewal, the repeat gets a typed
+			// version conflict and the task fails with a notice.
 			e.Outcome = NotStarted
 			if idempotent {
 				e.Outcome = Unknown
