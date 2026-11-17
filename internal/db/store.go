@@ -393,6 +393,27 @@ func (s *Store) ControlReady(ctx context.Context, taskID uuid.UUID) (bool, error
 // Call only with proof that no external input effect occurred. A rejected input
 // may have a persisted intent; an unknown outcome does not permit promotion.
 func (s *Store) PromoteMessage(ctx context.Context, taskID uuid.UUID, owner string, fence int64) (Task, error) {
+	return s.promoteMessage(ctx, taskID, owner, fence, nil)
+}
+
+// AdoptedRun is a Loom run that already received the text of a promoted message.
+type AdoptedRun struct {
+	RunID, AuthSessionID string
+	Snapshot             json.RawMessage
+}
+
+// AdoptRun promotes a message as PromoteMessage does. In the same transaction it
+// makes the task the observer of a run that already received the text. A partial
+// result would leave a new request that sends the delivered text again.
+func (s *Store) AdoptRun(
+	ctx context.Context, taskID uuid.UUID, owner string, fence int64, run AdoptedRun,
+) (Task, error) {
+	return s.promoteMessage(ctx, taskID, owner, fence, &run)
+}
+
+func (s *Store) promoteMessage(
+	ctx context.Context, taskID uuid.UUID, owner string, fence int64, run *AdoptedRun,
+) (Task, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Task{}, err
@@ -437,10 +458,33 @@ func (s *Store) PromoteMessage(ctx context.Context, taskID uuid.UUID, owner stri
 	); err != nil {
 		return Task{}, err
 	}
+	if run != nil {
+		if promoted, err = adoptPromotedRun(ctx, q, promoted, owner, fence, *run); err != nil {
+			return Task{}, err
+		}
+	}
 	if err = tx.Commit(ctx); err != nil {
 		return Task{}, err
 	}
 	return task(promoted), nil
+}
+
+func adoptPromotedRun(
+	ctx context.Context, q *sqlc.Queries, t sqlc.ShuttleTask, owner string, fence int64, run AdoptedRun,
+) (sqlc.ShuttleTask, error) {
+	adopted, err := q.SaveTask(ctx, sqlc.SaveTaskParams{
+		ID: t.ID, LeaseOwner: owner, Fence: fence, State: "awaiting_service",
+		RunID: run.RunID, AuthSessionID: run.AuthSessionID, Snapshot: run.Snapshot,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return adopted, ErrLeaseLost
+	}
+	if err != nil {
+		return adopted, err
+	}
+	return adopted, q.UpdateConversationRun(ctx, sqlc.UpdateConversationRunParams{
+		ID: t.ConversationID, ActiveTaskID: pgtype.UUID{Bytes: t.ID, Valid: true}, ActiveRunID: run.RunID,
+	})
 }
 
 func routingActiveTask(

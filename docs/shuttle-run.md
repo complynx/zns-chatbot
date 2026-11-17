@@ -94,6 +94,54 @@ sent and does not repeat the notice.
 The task that owns the run retires the buttons when it next polls the run. A
 notice delivered late can thus show buttons for a short time after the run moved on.
 
+## Spent run allowance and lost runs
+
+A run paused with `budget_exhausted` spent its own money allowance. ZiNuSya shows
+the same Continue/Stop notice, with the progress note that Loom saved as the run
+result. Loom does not wake such a run from an input. ZiNuSya sends the customer's
+reply to the chat inbox instead
+([Loom conversation recovery](https://github.com/complynx/loom/blob/main/docs/api/conversation-recovery.md)).
+Loom cancels the run as `superseded` and admits a successor with the same
+authorization session. The task that owns the run then follows the successor and
+delivers its result. The reply task completes only when the owner observes the
+run that received the reply. If the paused run ended for another cause, Loom
+starts a new round and the owner task ends; the reply task then observes that
+round itself.
+
+Loom can fail to give a successor the operation receipts of the replaced run
+(pauses `recovery_context_too_large` and `recovery_context_unavailable`, and
+`waiting_auth / recovery_authorization_required`). No input and no session
+renewal continues such a run. Its owner task ends with a failure notice, and
+the next customer message starts a new run as described below.
+
+An inbox message that Loom keeps without delivery blocks all later messages of
+the chat. ZiNuSya waits at most five minutes while Loom stops the replaced run
+or the session renews. After that, and for other blockers, it withdraws the
+message and tells the customer. The next customer message is a new attempt.
+If the owner task already ended, the withdrawn text starts its own run. A text
+that Loom blocked with `inference_or_effect_uncertain` never starts new work.
+
+A run paused with `credits_exhausted` means an empty wallet. ZiNuSya tells the
+customer once for each failed attempt. The next message wakes the run.
+
+A 4xx response without a Loom error code comes from a proxy. It does not prove
+that a run is gone or that Loom rejected a request, so the task keeps its state
+and retries. These retries have no time limit.
+
+A new request can find the default chat busy (`chat_busy` or
+`pending_conversation_messages`) while no local task observes the run. This
+occurs after the observer failed or an operator closed it. That run cannot
+deliver a result. ZiNuSya cancels it, withdraws a retained message, and creates
+the new run in the same chat, which keeps the history. Cancellation does not
+undo completed actions. If the chat stays busy for five minutes, the request
+fails with the usual notice. A run with an unknown effect (Loom reports
+`inference_or_effect_uncertain`, or the run is `reconciling`) is not cancelled:
+the request fails, and an operator must reconcile the run in Loom. For other
+runs the cancellation is an accepted risk: a cancelled
+run can be in the middle of an action, and the new run gets the chat history
+but no operation receipts. Protect a critical business action with a
+transaction or idempotency in its own API.
+
 ## Telegram menu recovery
 
 Only complete menu updates enter the success cache. A partial update invalidates

@@ -42,6 +42,9 @@ type checkpoint struct {
 	Create                 *loom.CreateRunRequest `json:"create,omitempty"`
 	Run                    *loom.Run              `json:"run,omitempty"`
 	Control                *loom.InputRequest     `json:"control,omitempty"`
+	InboxChatID            string                 `json:"inbox_chat_id,omitempty"`
+	InboxBlocker           string                 `json:"inbox_blocker,omitempty"`
+	ChatRetryUntil         *time.Time             `json:"chat_retry_until,omitempty"`
 	ControlUnapplied       bool                   `json:"control_unapplied,omitempty"`
 	ReplyModeMismatch      bool                   `json:"reply_mode_mismatch,omitempty"`
 }
@@ -249,7 +252,7 @@ func (s *Service) ensureSession(
 	user db.User,
 	service string,
 ) (bool, error) {
-	recovering := c.Run != nil && c.Run.Status == "waiting_auth" && c.Run.Reason == "authorization_required"
+	recovering := c.Run != nil && c.Run.Status == "waiting_auth" && c.Run.Reason == reasonAuthorizationRequired
 	if t.AuthSessionID != "" && c.Session.ExpiresAt.After(time.Now().Add(sessionRenewSkew)) && !recovering {
 		return true, nil
 	}
@@ -345,10 +348,13 @@ func (s *Service) advanceRun(ctx context.Context, t *db.Task, c checkpoint, i in
 		run, err = s.loom.GetRun(ctx, auth, t.RunID)
 	}
 	if err != nil {
-		return s.runRequestError(ctx, t, c, i, run, err)
+		return s.runRequestError(ctx, t, c, i, auth, run, err)
 	}
 	if run.AuthSessionID != "" && run.AuthSessionID != t.AuthSessionID {
 		return s.finish(ctx, t, c, i, stateFailed, "denied")
+	}
+	if superseded(run) {
+		return s.followSuccessor(ctx, t, c, i, auth, run)
 	}
 	if err = s.registerRunReactions(ctx, t, &c, run); err != nil {
 		return s.wait()
@@ -359,10 +365,10 @@ func (s *Service) advanceRun(ctx context.Context, t *db.Task, c checkpoint, i in
 	if run.Status == "waiting_auth" {
 		t.RunID = run.ID
 		c.Run = &run
-		if run.Reason == "permission_revoked" {
+		if authorizationLost(run) {
 			return s.finish(ctx, t, c, i, stateFailed, "denied")
 		}
-		if run.Reason == "authorization_required" {
+		if run.Reason == reasonAuthorizationRequired {
 			return s.waitForLoomAuthorization(ctx, t, c, i)
 		}
 		t.State = stateAwaitingAuth
@@ -379,6 +385,11 @@ func (s *Service) observeRun(ctx context.Context, t *db.Task, c checkpoint, i in
 	t.RunID = run.ID
 	c.Run = &run
 	t.QuestionID = ""
+	if receiptsUnavailable(run) {
+		// End the task with the failure notice. The next customer message finds the
+		// chat busy, and releaseChat stops this run before the new one.
+		return s.finish(ctx, t, c, i, stateFailed, stateFailed)
+	}
 	switch run.Status {
 	case stateCompleted, "succeeded":
 		return s.completeRun(ctx, t, c, i, run.Result)
@@ -388,7 +399,7 @@ func (s *Service) observeRun(ctx context.Context, t *db.Task, c checkpoint, i in
 		return s.finish(ctx, t, c, i, stateCancelled, stateCancelled)
 	default:
 		t.State = "running"
-		if run.Status == "paused" || run.Status == "reconciling" {
+		if run.Status == runPaused || run.Status == runReconciling {
 			t.State = stateAwaitingService
 		}
 		out, err := s.pendingRunOutput(ctx, t, &c, i, run)
@@ -488,7 +499,11 @@ func (s *Service) control(ctx context.Context, t *db.Task, c checkpoint, i inten
 	if run.AuthSessionID != "" && run.AuthSessionID != target.AuthSessionID {
 		return s.finish(ctx, t, c, i, stateFailed, "denied")
 	}
-	if finishedRun(run.Status) {
+	switch {
+	case superseded(run):
+		// The target moves to the successor run at its next attempt.
+		return s.wait()
+	case finishedRun(run.Status):
 		return s.finishedTarget(ctx, t, c, i, user, service, target)
 	}
 	if i.CallbackTaskID != uuid.Nil && i.CallbackTaskID != target.ID {
@@ -501,12 +516,24 @@ func (s *Service) control(ctx context.Context, t *db.Task, c checkpoint, i inten
 		}
 		return err
 	}
+	return s.completeControl(ctx, t, c, i, target, run)
+}
+
+// completeControl ends a control whose input Loom accepted for a run.
+func (s *Service) completeControl(
+	ctx context.Context, t *db.Task, c checkpoint, i intent, target db.Task, run loom.Run,
+) error {
+	if c.InputReceipt.ID != target.RunID {
+		// The inbox message reached another run of the chat. Complete only when the
+		// target observes that run. If the target ends first, adoptRun takes the run.
+		return s.waitForService(ctx, t, c)
+	}
 	t.RunID = target.RunID
 	t.AuthSessionID = target.AuthSessionID
 	t.State = stateCompleted
 	c.Run = &run
 	out := s.stepLimitInputAck(ctx, i, *c.InputReceipt)
-	if err = s.save(ctx, t, c, out); err != nil {
+	if err := s.save(ctx, t, c, out); err != nil {
 		return s.wait()
 	}
 	return s.deliverAndContinueStart(ctx, t, c, i)
@@ -554,8 +581,11 @@ func (s *Service) reconcileFinishedInput(
 		return true, s.identityError(ctx, t, c, i, err)
 	}
 	auth := loom.Auth{ServiceToken: service, SubjectToken: credential.Token}
-	receipt, err := s.loom.Input(ctx, auth, target.RunID, t.ID.String(), *c.Control)
+	receipt, err := s.dispatchControl(ctx, auth, *t, c, target.RunID)
 	if err != nil {
+		if retained, ok := errors.AsType[*retainedMessageError](err); ok {
+			return s.retainedAfterTarget(ctx, t, c, i, auth, retained.receipt)
+		}
 		var upstream *loom.Error
 		if errors.As(err, &upstream) && upstream.Outcome == loom.Rejected &&
 			upstream.StatusCode == http.StatusConflict && upstream.Code == loom.CodeRunTerminal {
@@ -569,6 +599,9 @@ func (s *Service) reconcileFinishedInput(
 			return true, s.wait()
 		}
 		return true, s.wait()
+	}
+	if receipt.ID != target.RunID {
+		return true, s.adoptRun(ctx, t, i, user, service, target, receipt.ID)
 	}
 	c.InputReceipt = &receipt
 	t.RunID = target.RunID
@@ -590,6 +623,14 @@ func (s *Service) sendControl(
 	run loom.Run,
 ) (bool, error) {
 	unapplied := c.Control == nil || c.ControlUnapplied
+	if c.Control == nil {
+		c.InboxChatID = ""
+		if i.Kind == kindMessage && budgetPaused(run) {
+			// Input does not wake a run that spent its money allowance. The chat inbox
+			// replaces it. prepareControl saves this route with the control text.
+			c.InboxChatID = run.ChatID
+		}
+	}
 	if err := s.prepareControl(ctx, t, c, i, run); err != nil {
 		if errors.Is(err, ErrUnsupportedUpdate) {
 			return false, s.finish(ctx, t, *c, i, stateFailed, "stale")
@@ -603,8 +644,15 @@ func (s *Service) sendControl(
 			return false, s.wait()
 		}
 	}
-	receipt, err := s.loom.Input(ctx, auth, runID, t.ID.String(), *c.Control)
+	receipt, err := s.dispatchControl(ctx, auth, *t, *c, runID)
 	if err != nil {
+		if retained, ok := errors.AsType[*retainedMessageError](err); ok {
+			withdrawn, wait := s.withdrawRetainedMessage(ctx, t, c, i, auth, retained.receipt, true)
+			if withdrawn {
+				return false, s.finish(ctx, t, *c, i, stateFailed, retainedMessageNotice(c.InboxBlocker))
+			}
+			return false, wait
+		}
 		return false, s.controlError(ctx, t, c, i, auth, runID, unapplied, err)
 	}
 	c.InputReceipt = &receipt
@@ -718,8 +766,20 @@ func (s *Service) pendingRunOutput(
 	run loom.Run,
 ) ([]db.Outbound, error) {
 	t.QuestionID = ""
-	if stepLimitPaused(run) {
+	if allowancePaused(run) {
 		return s.pendingStepLimitOutput(ctx, c, i, run), nil
+	}
+	if run.Status == runPaused && run.Reason == reasonCreditsExhausted {
+		// The wallet of the customer is empty. The next message wakes the run, and the
+		// run version changes with each attempt: one notice for each failed attempt.
+		key := "credits-exhausted:" + run.ID + ":" + strconv.FormatInt(run.Version, 10)
+		out := s.result(ctx, i, s.localized(ctx, i, reasonCreditsExhausted), key)
+		if c.KeyboardPrompt != "" {
+			// The Continue/Stop buttons of an earlier allowance pause are obsolete.
+			removeReplyKeyboard(out)
+			c.KeyboardPrompt = ""
+		}
+		return out, nil
 	}
 	out, err := s.pendingApprovalMessages(ctx, t, i, run.Approval)
 	if err != nil {

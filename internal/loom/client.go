@@ -157,6 +157,8 @@ const (
 
 const (
 	CodeRunTerminal          = "run_terminal"
+	CodeChatBusy             = "chat_busy"
+	CodePendingMessages      = "pending_conversation_messages"
 	CodeUnsupportedReplyMode = "unsupported_reply_mode"
 )
 
@@ -367,31 +369,53 @@ func decodeResponse(resp *http.Response, result any, mutation bool, idempotent b
 	if err != nil || len(data) > MaxResponseBytes {
 		return &Error{StatusCode: resp.StatusCode, Outcome: outcome, Retryable: !mutation || idempotent}
 	}
-	var code string
-	// Only this typed conflict is safe negative evidence after an idempotent Input replay.
-	if resp.StatusCode == http.StatusConflict {
-		var body struct {
-			Error struct {
-				Code string `json:"code"`
-			} `json:"error"`
-		}
-		if json.Unmarshal(data, &body) == nil && body.Error.Code == CodeRunTerminal {
-			code = CodeRunTerminal
-		}
-	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		e := &Error{StatusCode: resp.StatusCode, Outcome: Rejected, Code: code}
-		if resp.StatusCode >= http.StatusInternalServerError {
-			e.Outcome = outcome
-			e.Retryable = !mutation || idempotent
-		}
-		if resp.StatusCode == http.StatusTooManyRequests {
-			e.Retryable = true
-		}
-		return e
+		return decodeFailure(resp.StatusCode, data, mutation, idempotent)
 	}
 	if err = json.Unmarshal(data, result); err != nil {
 		return &Error{StatusCode: resp.StatusCode, Outcome: outcome, Retryable: !mutation || idempotent}
 	}
 	return nil
+}
+
+// decodeFailure classifies an error response. Loom gives an error code with each
+// rejection. A 4xx response without a code comes from a proxy: it does not prove
+// that Loom rejected the request, so the caller can retry.
+func decodeFailure(status int, data []byte, mutation, idempotent bool) *Error {
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	_ = json.Unmarshal(data, &body)
+	e := &Error{StatusCode: status, Outcome: Rejected, Code: body.Error.Code}
+	fromLoom := e.Code != "" || status == http.StatusUnauthorized
+	if e.Code == CodeRunTerminal && status != http.StatusConflict {
+		// Only the typed conflict is safe negative evidence after an idempotent Input replay.
+		e.Code = ""
+	}
+	switch {
+	case status == http.StatusTooManyRequests:
+		e.Retryable = true
+	case status >= http.StatusInternalServerError:
+		if mutation {
+			e.Outcome = Unknown
+		}
+		e.Retryable = !mutation || idempotent
+	case !fromLoom:
+		e.Retryable = true
+		if mutation {
+			// The proxy answered, so Loom did not get the request. Keep the unknown
+			// outcome where the retry has an idempotency key, because that retry is
+			// safe without this assumption. A session request has no key, and its
+			// unknown outcome stops the task until an operator acts. Repeat it: if
+			// Loom did apply a renewal, the repeat gets a typed version conflict
+			// and the task fails with a notice.
+			e.Outcome = NotStarted
+			if idempotent {
+				e.Outcome = Unknown
+			}
+		}
+	}
+	return e
 }
