@@ -305,7 +305,8 @@ func communicationFailurePeer(t *testing.T, p *peers, name string) (*httptest.Se
 		case "/v1/runs":
 			stats.creates.Add(1)
 			if name == "rejected" {
-				w.WriteHeader(http.StatusForbidden)
+				// Loom gives an error code with each rejection.
+				rejectLoom(w, http.StatusForbidden, "forbidden")
 				return
 			}
 			if name == "injected_link" {

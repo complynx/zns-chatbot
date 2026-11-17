@@ -161,7 +161,7 @@ func (s *Service) communicationPersonalizationResult(
 			return "", err
 		}
 		return "", errCommunicationPersonalizationFailed
-	case "queued", communicationRunRunning, "reconciling":
+	case "queued", communicationRunRunning, runReconciling:
 		return "", nil
 	default:
 		return "", errCommunicationPersonalizationFailed

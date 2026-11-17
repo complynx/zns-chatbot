@@ -10,8 +10,11 @@ import (
 )
 
 func (s *Service) runRequestError(
-	ctx context.Context, t *db.Task, c checkpoint, i intent, run loom.Run, err error,
+	ctx context.Context, t *db.Task, c checkpoint, i intent, auth loom.Auth, run loom.Run, err error,
 ) error {
+	if t.RunID == "" && (conflictWith(err, loom.CodeChatBusy) || conflictWith(err, loom.CodePendingMessages)) {
+		return s.releaseChat(ctx, t, c, i, auth, err)
+	}
 	var upstream *loom.Error
 	if t.RunID == "" && run.ID != "" && errors.As(err, &upstream) &&
 		upstream.Code == loom.CodeUnsupportedReplyMode {

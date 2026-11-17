@@ -307,8 +307,45 @@ func TestInputRecoveryRecognizesOnlyTypedTerminalRejection(t *testing.T) {
 			if tc.status == http.StatusServiceUnavailable {
 				require.Equal(t, loom.Unknown, failure.Outcome)
 			}
+			if tc.status == http.StatusConflict && failure.Code == "" {
+				// A response without a Loom error code can come from a proxy.
+				require.Equal(t, loom.Unknown, failure.Outcome)
+				require.True(t, failure.Retryable)
+			}
 		})
 	}
+}
+
+func TestProxyNotFoundDoesNotProveThatRunIsGone(t *testing.T) {
+	t.Parallel()
+	typed := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		if typed {
+			fmt.Fprint(w, `{"error":{"code":"not_found"}}`)
+			return
+		}
+		fmt.Fprint(w, "404 page not found\n")
+	}))
+	defer server.Close()
+	client, err := loom.New(server.URL, server.Client())
+	require.NoError(t, err)
+	auth := loom.Auth{ServiceToken: "service", SessionID: "session"}
+	var failure *loom.Error
+	_, err = client.GetRun(t.Context(), auth, "run-1")
+	require.ErrorAs(t, err, &failure)
+	require.True(t, failure.Retryable)
+	// A session renewal has no idempotency key. The proxy did not pass it to Loom,
+	// so it must not become an unknown outcome that only an operator can resolve.
+	_, err = client.Reauthorize(t.Context(), loom.Auth{ServiceToken: "service", SubjectToken: "subject"}, "session", 1)
+	require.ErrorAs(t, err, &failure)
+	require.True(t, failure.Retryable)
+	require.Equal(t, loom.NotStarted, failure.Outcome)
+	typed = true
+	_, err = client.GetRun(t.Context(), auth, "run-1")
+	require.ErrorAs(t, err, &failure)
+	require.False(t, failure.Retryable)
+	require.Equal(t, loom.Rejected, failure.Outcome)
 }
 func TestGetRunPreservesResolvedPromptState(t *testing.T) {
 	t.Parallel()

@@ -360,7 +360,8 @@ func (p *peers) receiveInput(w http.ResponseWriter, r *http.Request) {
 			run.Result = "first message"
 			p.runs[key] = run
 		}
-		w.WriteHeader(p.rejectInputStatus)
+		// Loom gives an error code with each rejection.
+		rejectLoom(w, p.rejectInputStatus, "input_rejected")
 		return
 	}
 	p.applyInput(w, r)
@@ -375,7 +376,8 @@ func (p *peers) resumeRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if p.resumeBlocked {
-		w.WriteHeader(http.StatusConflict)
+		// Loom gives an error code with each rejection.
+		rejectLoom(w, http.StatusConflict, "run_not_resumable")
 		return
 	}
 	if receipt, ok := p.resumeReceipts[key]; ok {

@@ -69,6 +69,11 @@ func (s *Service) localized(ctx context.Context, i intent, key string) string {
 			"I cancelled the task. Actions already completed may remain.",
 		},
 		"no_active": {"Нет активной задачи.", "There is no active task."},
+		reasonCreditsExhausted: {
+			"Бюджет исчерпан, поэтому я не могу продолжить. Пополни баланс или дождись следующего пополнения, " +
+				"затем напиши мне ещё раз.",
+			"The budget is used, so I can’t continue. Add funds or wait for the next funding, then write to me again.",
+		},
 		"stale": {
 			"Этот вопрос уже не актуален. Используй моё последнее сообщение.",
 			"This prompt is no longer current. Use my latest message.",
@@ -363,6 +368,7 @@ func (s *Service) verifyDeliveryAuthorization(ctx context.Context, u db.User, ro
 	if !strings.HasPrefix(row.DedupKey, prefix+"result:") &&
 		!strings.HasPrefix(row.DedupKey, prefix+"question:") &&
 		!strings.HasPrefix(row.DedupKey, prefix+"approval:") &&
+		!strings.HasPrefix(row.DedupKey, prefix+stepLimitPromptPrefix) &&
 		!strings.HasPrefix(row.DedupKey, prefix+"avatar:") {
 		return nil
 	}

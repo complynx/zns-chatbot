@@ -12,12 +12,22 @@ import (
 
 const (
 	runPaused             = "paused"
+	runReconciling        = "reconciling"
 	stepLimitReason       = "step_limit"
+	budgetExhaustedReason = "budget_exhausted"
 	stepLimitPromptPrefix = "step-limit:"
 )
 
-func stepLimitPaused(run loom.Run) bool {
-	return run.Status == runPaused && run.Reason == stepLimitReason
+// allowancePaused reports a run that used its step or money allowance without a
+// final result. The customer decides whether the work continues.
+func allowancePaused(run loom.Run) bool {
+	return run.Status == runPaused && (run.Reason == stepLimitReason || run.Reason == budgetExhaustedReason)
+}
+
+// budgetPaused reports a run that spent its own money allowance. Loom does not
+// wake it: a message in the chat inbox replaces it with a successor run.
+func budgetPaused(run loom.Run) bool {
+	return run.Status == runPaused && run.Reason == budgetExhaustedReason
 }
 
 // Loom renews step_budget_start at each accepted input. The key identifies one exhausted budget.
@@ -25,7 +35,7 @@ func stepLimitPromptKey(run loom.Run) string {
 	return stepLimitPromptPrefix + run.ID + ":budget:" + strconv.FormatInt(run.StepBudgetStart, 10)
 }
 
-// pendingStepLimitOutput returns the Continue/Stop notice once for each exhausted budget.
+// pendingStepLimitOutput returns the Continue/Stop notice once for each exhausted allowance.
 // The checkpoint keeps the presented key, so polls and restarts do not repeat the notice.
 func (s *Service) pendingStepLimitOutput(
 	ctx context.Context, c *checkpoint, i intent, run loom.Run,
@@ -40,14 +50,29 @@ func (s *Service) pendingStepLimitOutput(
 	c.KeyboardRevision++
 	c.KeyboardPrompt = prompt
 	ru := s.languageFor(ctx, i) == "ru"
-	out := s.result(ctx, i, structuredText(ru,
+	text := structuredText(ru,
 		"I reached the step limit and the task is paused. Would you like to continue or stop? "+
 			"Choose Continue or Stop below, or write your answer. "+
 			"Some actions may already have completed; stopping will not undo them.",
 		"Я достигла лимита шагов, и задача приостановлена. Продолжить работу или прекратить? "+
 			"Выбери «Продолжить» или «Прекратить» ниже либо напиши ответ. "+
 			"Часть действий могла уже выполниться; остановка их не отменит.",
-	), prompt+":presentation:"+strconv.FormatInt(c.KeyboardRevision, 10))
+	)
+	if run.Reason == budgetExhaustedReason {
+		text = structuredText(ru,
+			"I used the work allowance of this task and it is paused. Would you like to continue or stop? "+
+				"Choose Continue or Stop below, or write your answer. "+
+				"Some actions may already have completed; stopping will not undo them.",
+			"Я исчерпала лимит работы над этой задачей, и она приостановлена. Продолжить работу или прекратить? "+
+				"Выбери «Продолжить» или «Прекратить» ниже либо напиши ответ. "+
+				"Часть действий могла уже выполниться; остановка их не отменит.",
+		)
+	}
+	if run.Result != "" {
+		// Loom can save a progress note of the agent as the result of the paused run.
+		text = run.Result + "\n\n" + text
+	}
+	out := s.result(ctx, i, text, prompt+":presentation:"+strconv.FormatInt(c.KeyboardRevision, 10))
 	// Both buttons send ordinary conversation text. Loom wakes the run and the agent decides.
 	setReplyMarkup(out, &telegram.ReplyKeyboardMarkup{
 		Keyboard: [][]telegram.KeyboardButton{{
