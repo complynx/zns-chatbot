@@ -36,7 +36,10 @@ const actionRestoreChatAccess = "restore_chat_access"
 const actionResolveThenRetry = "resolve_blocker_then_retry"
 
 type messageRecovery struct {
-	Rejected        bool                  `json:"rejected,omitempty"`
+	Rejected bool `json:"rejected,omitempty"`
+	// True only when no submission may have been accepted. Missing old metadata
+	// is conservative; clear and save this flag before an HTTP attempt.
+	Unsubmitted     bool                  `json:"unsubmitted,omitempty"`
 	ObserverRunID   string                `json:"observer_run_id,omitempty"`
 	SupersededRunID string                `json:"superseded_run_id,omitempty"`
 	ObservedRunID   string                `json:"observed_run_id,omitempty"`
@@ -124,6 +127,7 @@ func (s *Service) startConversationRecovery(
 		Request:       loom.RecoverMessage{Text: text, ReplaceRunID: replacement},
 		RetryUntil:    time.Now().Add(recoveryRetryWindow),
 		WakeSequence:  seq,
+		Unsubmitted:   true,
 	}
 	if err = s.save(ctx, t, *c, nil); err != nil {
 		return true, s.wait()
@@ -326,9 +330,17 @@ func (s *Service) recoverConversation(
 		return s.identityError(ctx, t, c, i, err)
 	}
 	auth := loom.Auth{ServiceToken: service, SubjectToken: credential.Token}
+	unsubmitted := r.Unsubmitted
+	if unsubmitted {
+		r.Unsubmitted = false
+		if err = s.save(ctx, t, c, nil); err != nil {
+			return s.wait()
+		}
+	}
 	// Replaying the exact accepted message is safe; switching to /input is not.
 	receipt, err := s.loom.RecoverMessage(ctx, auth, r.ChatID, t.ID.String(), r.Request)
 	if err != nil {
+		r.Unsubmitted = unsubmitted && recoveryAttemptNotAccepted(err)
 		return s.recoveryMessageError(ctx, t, c, i, auth, err)
 	}
 	return s.acceptRecoveryReceipt(ctx, t, c, i, user, service, auth, receipt)

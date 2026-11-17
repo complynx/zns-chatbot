@@ -121,8 +121,26 @@ func (s *Service) requestRecoveryResolution(ctx context.Context, t *db.Task, c *
 		}
 		return receipt, abandonErr
 	}
+	return s.replayRecoveryResolution(ctx, t, c, owner, auth)
+}
+
+func (s *Service) replayRecoveryResolution(ctx context.Context, t *db.Task, c *checkpoint,
+	owner string, auth loom.Auth) (loom.RecoveryReceipt, error) {
+	unsubmitted := c.Recovery.Unsubmitted
+	if unsubmitted {
+		c.Recovery.Unsubmitted = false
+		if err := s.saveRecoveryResolution(ctx, t, *c, owner); err != nil {
+			return loom.RecoveryReceipt{}, err
+		}
+	}
 	receipt, err := s.loom.RecoverMessage(ctx, auth, c.Recovery.ChatID, t.ID.String(), c.Recovery.Request)
 	if err != nil {
+		if unsubmitted && recoveryAttemptNotAccepted(err) {
+			c.Recovery.Unsubmitted = true
+			if saveErr := s.saveRecoveryResolution(ctx, t, *c, owner); saveErr != nil {
+				return loom.RecoveryReceipt{}, saveErr
+			}
+		}
 		return loom.RecoveryReceipt{}, err
 	}
 	if !receipt.Accepted || receipt.MessageID == "" ||

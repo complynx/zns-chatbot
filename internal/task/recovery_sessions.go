@@ -79,7 +79,7 @@ func (s *Service) prepareObservationSession(ctx context.Context, t *db.Task, c *
 
 func (s *Service) waitForRecoveryOrder(t db.Task) error {
 	if !t.CreatedAt.IsZero() && time.Since(t.CreatedAt) >= recoveryRetryWindow {
-		return river.JobSnooze(time.Minute)
+		return river.JobSnooze(recoveryBackoffLimit)
 	}
 	return s.wait()
 }

@@ -165,20 +165,56 @@ func TestConversationRecoveryRetainsOrderedMessagesAcrossRestart(t *testing.T) {
 	}
 	h.start(t)
 	third := submitFile(t, h, 3, time.Now())
+	fourth := h.submitText(t, 4, "One more queued request")
 	h.stop(t)
-	_, err = h.store.Pool().Exec(t.Context(), "UPDATE river_job SET scheduled_at=now() WHERE state='scheduled'")
+	_, err = h.store.Pool().Exec(t.Context(), `UPDATE shuttle_tasks SET created_at=now()-interval '5 minutes'
+	 WHERE id=$1 OR id=$2`, third, fourth)
+	require.NoError(t, err)
+	_, err = h.store.Pool().Exec(t.Context(), `UPDATE river_job SET scheduled_at=now()+interval '1 hour'
+	 WHERE args->>'task_id'=$1 AND state='scheduled'`, second.String())
+	require.NoError(t, err)
+	var boundary time.Time
+	require.NoError(t, h.store.Pool().QueryRow(t.Context(), "SELECT clock_timestamp()").Scan(&boundary))
+	queued := []string{third.String(), fourth.String()}
+	_, err = h.store.Pool().Exec(t.Context(), `UPDATE river_job SET scheduled_at=now()
+	 WHERE args->>'task_id'=ANY($1::text[]) AND state='scheduled'`, queued)
 	require.NoError(t, err)
 	h.start(t)
-	h.await(t, second, "completed")
-	h.await(t, third, "completed")
+	require.Eventually(t, func() bool {
+		var parked int
+		e := h.store.Pool().QueryRow(t.Context(), `SELECT count(*) FROM river_job
+		 WHERE args->>'task_id'=ANY($1::text[]) AND state='scheduled' AND attempted_at>$2`,
+			queued, boundary).Scan(&parked)
+		return e == nil && parked == 2
+	}, 10*time.Second, 20*time.Millisecond)
+	h.stop(t)
+	_, err = h.store.Pool().Exec(t.Context(), `UPDATE river_job SET scheduled_at=now()
+	 WHERE args->>'task_id'=$1 AND state='scheduled'`, second.String())
+	require.NoError(t, err)
+	h.start(t)
+	awaitRecoveryQueueCompleted(t, h, queued)
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	require.Equal(t, []string{second.String(), third.String()}, order)
+	require.Equal(t, []string{second.String(), third.String(), fourth.String()}, order)
 	require.Len(t, p.createdInputs, 1, "recovery must not fall back to a second POST /runs")
 	require.Contains(t, bodies[second.String()], "Check the previous result")
 	require.Contains(t, bodies[third.String()], "Attachment metadata")
 	require.Contains(t, bodies[third.String()], "Посмотри этот документ")
 	require.NotContains(t, bodies[third.String()], "private-telegram-file")
+}
+
+func awaitRecoveryQueueCompleted(t *testing.T, h *harness, queued []string) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		for _, id := range queued {
+			var state string
+			if e := h.store.Pool().QueryRow(t.Context(), "SELECT state FROM shuttle_tasks WHERE id=$1::uuid", id).
+				Scan(&state); e != nil || state != "completed" {
+				return false
+			}
+		}
+		return true
+	}, 35*time.Second, 20*time.Millisecond, "old queued messages must drain without a minute per predecessor")
 }
 
 func recordRecoveryRequest(t *testing.T, bodies map[string]string, order *[]string, key, body string) {

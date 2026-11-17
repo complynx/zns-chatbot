@@ -395,7 +395,7 @@ func decodeFailure(resp *http.Response, data []byte, mutation, idempotent bool) 
 			code = ""
 		}
 	}
-	if code == "" && resp.StatusCode != http.StatusUnauthorized {
+	if code == "" {
 		// Proxy failures neither establish a read outcome nor reject a prior
 		// mutation. Reads and idempotent mutations retain their retry path.
 		return &Error{StatusCode: resp.StatusCode, Outcome: outcome, Retryable: !mutation || idempotent}

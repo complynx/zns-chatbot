@@ -1686,6 +1686,7 @@ func (p *peers) authSession(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Header.Get("X-Subject-Token") == "" {
 		w.WriteHeader(http.StatusUnauthorized)
+		respond(w, map[string]any{"error": map[string]string{"code": "unauthorized"}})
 		return
 	}
 	if p.loseAuth {
@@ -1719,6 +1720,7 @@ func (p *peers) rejectAgentRequest(w http.ResponseWriter, r *http.Request) bool 
 	if p.loomAuthDenied || r.Header.Get("Authorization") == "" {
 		p.loomAuthDeniedCalls++
 		w.WriteHeader(http.StatusUnauthorized)
+		respond(w, map[string]any{"error": map[string]string{"code": "unauthorized"}})
 		return true
 	}
 	return false

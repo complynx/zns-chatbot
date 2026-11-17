@@ -124,9 +124,21 @@ func (s *Service) recoveryChat(ctx context.Context, t db.Task, auth loom.Auth) (
 	return s.loom.DefaultChat(ctx, auth)
 }
 
+func recoveryAttemptNotAccepted(failure error) bool {
+	upstream, known := errors.AsType[*loom.Error](failure)
+	return known && (upstream.Outcome == loom.NotStarted || upstream.Outcome == loom.Rejected)
+}
+
 func (s *Service) recoveryMessageError(ctx context.Context, t *db.Task, c checkpoint, i intent,
 	auth loom.Auth, failure error) error {
 	r := c.Recovery
+	if r.Unsubmitted && r.Receipt == nil && rejectedRecovery(failure, http.StatusNotFound, "not_found") {
+		return s.rejectUnacceptedRecovery(ctx, t, c, i, structuredText(s.languageFor(ctx, i) == "ru",
+			"The agent did not accept your message because the conversation is no longer available. "+
+				"Send the request again or ask an administrator to check access.",
+			"Агент не принял сообщение: исходный разговор больше недоступен. "+
+				"Отправь запрос снова или попроси администратора проверить доступ."), "recovery-not-found")
+	}
 	if r.Receipt == nil && rejectedRecovery(failure, http.StatusConflict, "no_run") {
 		// The inbox checks the retained key before admission. No run means
 		// this request was not accepted; rediscover without changing task identity.
@@ -136,6 +148,7 @@ func (s *Service) recoveryMessageError(ctx context.Context, t *db.Task, c checkp
 	if r.Receipt == nil && rejectedRecovery(failure, http.StatusConflict, "replacement_target_changed") {
 		// Loom checks the retained key before validating the target. This typed
 		// rejection proves that no version of this message was accepted.
+		r.Unsubmitted = true
 		located, err := s.loom.ActiveRun(ctx, auth, r.ChatID)
 		if err != nil {
 			return s.loomError(ctx, t, c, i, err)
@@ -153,19 +166,23 @@ func (s *Service) recoveryMessageError(ctx context.Context, t *db.Task, c checkp
 		return s.waitWithRecoveryOutput(ctx, t, c, nil)
 	}
 	if r.Receipt == nil && rejectedRecovery(failure, http.StatusUnprocessableEntity, "invalid_message") {
-		r.Rejected = true
-		t.State = stateFailed
-		out := s.result(ctx, i, structuredText(s.languageFor(ctx, i) == "ru",
+		return s.rejectUnacceptedRecovery(ctx, t, c, i, structuredText(s.languageFor(ctx, i) == "ru",
 			"The agent rejected the message or saved context. "+
 				"Edit the request or ask an administrator to check it.",
 			"Агент не принял сообщение или сохранённый контекст. "+
 				"Измени запрос или попроси администратора проверить его."), "recovery-invalid-message")
-		if err := s.save(ctx, t, c, out); err != nil {
-			return s.wait()
-		}
-		return s.deliverAndContinueStart(ctx, t, c, i)
 	}
 	return s.loomError(ctx, t, c, i, failure)
+}
+
+func (s *Service) rejectUnacceptedRecovery(ctx context.Context, t *db.Task, c checkpoint, i intent,
+	text, key string) error {
+	c.Recovery.Rejected = true
+	t.State = stateFailed
+	if err := s.save(ctx, t, c, s.result(ctx, i, text, key)); err != nil {
+		return s.wait()
+	}
+	return s.deliverAndContinueStart(ctx, t, c, i)
 }
 
 // A failed read is not a completion receipt. After a bounded fast retry window,

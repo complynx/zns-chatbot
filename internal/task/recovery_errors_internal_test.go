@@ -33,7 +33,7 @@ func TestRecoveryOrderKeepsInteractiveLatencyThenSlowsParkedQueues(t *testing.T)
 	require.ErrorAs(t, s.waitForRecoveryOrder(db.Task{CreatedAt: time.Now()}), &recent)
 	require.Equal(t, s.options.PollInterval, recent.Duration)
 	require.ErrorAs(t, s.waitForRecoveryOrder(db.Task{CreatedAt: time.Now().Add(-time.Hour)}), &parked)
-	require.Equal(t, time.Minute, parked.Duration)
+	require.LessOrEqual(t, parked.Duration, 10*time.Second, "old queued input must not wait a minute per predecessor")
 }
 
 func TestRecoveryTransientBackoffSurvivesRestartAndReopensWithNewInput(t *testing.T) {

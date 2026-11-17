@@ -30,6 +30,11 @@ creation. A typed `replacement_target_changed` rejection permits correcting the
 target before acceptance. Unknown outcomes preserve the original body and key.
 Accepted messages never use these fallbacks.
 
+A typed `not_found` may fail a message locally only when no submission could
+have been accepted. The worker saves submission intent before HTTP I/O. A lost
+response, interrupted attempt or missing historical proof keeps the message
+uncertain; a later 404 cannot discard it or authorize a new paid run.
+
 The existing `/input` path already supplied the full profile prompt for steering.
 Inbox messages preserve that context and add reaction and reply guidance. The
 complete frozen prompt also supports a run finishing before inbox acceptance.
@@ -41,6 +46,10 @@ message opens a new window for the saved earlier message. Parked jobs check for
 this change once a minute. Already delivered messages continue observation.
 Initial discovery and failed run reads also slow to minute checks after two
 minutes.
+
+Old messages queued behind earlier work use ten-second order checks instead of
+minute waits. This is separate from the minute checks for a known funding,
+access or operator blocker.
 
 Known blockers that require funding, model access or operator action use minute
 checks immediately. Transient delivery and earlier-message retries use bounded
@@ -93,11 +102,15 @@ operator must restore access or provide an authoritative disposition through
 Loom before local closure. Shuttle has no override that guesses abandonment
 from a 404, or replaces the missing receipt with an operator assertion.
 
-For an unresolved inbox receipt, an administrator can POST to
+For an unresolved inbox receipt on a task in `auth_unknown` or `delivery_unknown`,
+an administrator can POST to
 `/internal/admin/tasks/{id}/reconcile-recovery` with `operation_id`,
 `expected_version`, `reason` and `confirm: true`. This explicitly retries the
 original frozen request and can deliver work. Current customer authorization is
 checked again. The receipt and audit entry commit together.
+
+Tasks parked in `awaiting_service` or `awaiting_authorization` do not use this
+endpoint. Their worker retains the normal retry policy.
 
 A delivered receipt queues observer attachment and result delivery. An existing
 healthy observer keeps ownership. An abandoned receipt permits a separate
@@ -124,8 +137,8 @@ local task has a newer exact-session receipt. Closure and inbox replay cannot
 repair this upstream capability gap. The status asks an operator to reconcile it.
 
 An untyped proxy response cannot prove a mutation was rejected. This includes a
-429 on non-idempotent session renewal: Shuttle records an unknown outcome rather
-than retrying a mutation that might already have succeeded.
+401 or 429 on non-idempotent session renewal: Shuttle records an unknown outcome
+rather than retrying a mutation that might already have succeeded.
 
 ## Money and input formats
 

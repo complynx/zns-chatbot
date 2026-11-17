@@ -340,18 +340,33 @@ func TestGetRunPreservesResolvedPromptState(t *testing.T) {
 	require.Equal(t, "approve", run.Approval.Decision)
 }
 
-func TestUntypedRateLimitDoesNotAuthorizeReplayingSessionRenewal(t *testing.T) {
+func TestSessionRenewalSeparatesProxyFailureFromTypedRejection(t *testing.T) {
 	t.Parallel()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusTooManyRequests)
-	}))
-	defer server.Close()
-	client, err := loom.New(server.URL, server.Client())
-	require.NoError(t, err)
-	_, err = client.Reauthorize(t.Context(), loom.Auth{ServiceToken: "service", SubjectToken: "subject"}, "session", 1)
-	var failure *loom.Error
-	require.ErrorAs(t, err, &failure)
-	// A proxy status cannot prove this non-idempotent mutation was not forwarded.
-	require.Equal(t, loom.Unknown, failure.Outcome)
-	require.False(t, failure.Retryable)
+	for _, tc := range []struct {
+		name    string
+		status  int
+		body    string
+		outcome loom.Outcome
+	}{
+		{"proxy_unauthorized", http.StatusUnauthorized, "", loom.Unknown},
+		{"proxy_rate_limit", http.StatusTooManyRequests, "", loom.Unknown},
+		{"loom_unauthorized", http.StatusUnauthorized, `{"error":{"code":"unauthorized"}}`, loom.Rejected},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = fmt.Fprint(w, tc.body)
+			}))
+			defer server.Close()
+			client, err := loom.New(server.URL, server.Client())
+			require.NoError(t, err)
+			_, err = client.Reauthorize(t.Context(), loom.Auth{ServiceToken: "service", SubjectToken: "subject"}, "session", 1)
+			var failure *loom.Error
+			require.ErrorAs(t, err, &failure)
+			// Only a typed rejection can prove this mutation was not forwarded.
+			require.Equal(t, tc.outcome, failure.Outcome)
+			require.False(t, failure.Retryable)
+		})
+	}
 }
