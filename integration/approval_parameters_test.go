@@ -42,9 +42,9 @@ func TestTelegramApprovalShowsCompleteLiteralParametersBeforeButtons(t *testing.
 		sent = append([]telegram.SendMessageRequest(nil), p.sent...)
 		return len(sent) > 1 && sent[len(sent)-1].ReplyMarkup != nil
 	}, 5*time.Second, 10*time.Millisecond)
-	require.True(t, strings.HasPrefix(sent[0].Text, "Approval required ⚠️\n"))
+	require.True(t, strings.HasPrefix(sent[0].Text, "⚠️ Approval required ⚠️\n"))
 	require.Contains(t, sent[0].Entities, telegram.MessageEntity{
-		Type: "bold", Offset: 0, Length: len("Approval required"),
+		Type: "bold", Offset: 3, Length: len("Approval required"),
 	})
 	var complete strings.Builder
 	for i, message := range sent {
@@ -112,7 +112,7 @@ func TestSpecialistAccessApprovalUsesHumanTermsWithoutImplementationFields(t *te
 				}
 				return
 			}
-			require.Equal(t, "Approval required ⚠️\n"+terms, sent.Text)
+			require.Equal(t, "⚠️ Approval required ⚠️\n"+terms, sent.Text)
 			require.NotContains(t, sent.Text, "expected_version")
 			require.NotContains(t, sent.Text, "expected_schedule_version")
 			require.NotContains(t, sent.Text, "8cd21b03-601e-40ba-9311-f7c63071fefa")

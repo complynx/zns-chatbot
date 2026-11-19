@@ -60,9 +60,9 @@ func TestApprovalOutputNamesDebugAndFinalButtons(t *testing.T) {
 			require.NoError(t, render.Validate(render.Message{Text: payload.Text, Entities: payload.Entities}))
 			if n == 0 {
 				const title = "Необходимо подтверждение"
-				require.True(t, strings.HasPrefix(payload.Text, title+" ⚠️\n"))
+				require.True(t, strings.HasPrefix(payload.Text, "⚠️ "+title+" ⚠️\n"))
 				require.Contains(t, payload.Entities, telegram.MessageEntity{
-					Type: "bold", Offset: 0, Length: len([]rune(title)),
+					Type: "bold", Offset: 3, Length: len([]rune(title)),
 				})
 			}
 			text.WriteString(payload.Text)
