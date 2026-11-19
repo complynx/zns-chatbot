@@ -328,7 +328,7 @@ func TestOrderApprovalReturnsAfterQuestionWithoutChangingApprovalIdentity(t *tes
 		return len(p.sent) > questionMessages && strings.Contains(p.sent[len(p.sent)-1].Text, "25.68 BYN") &&
 			p.sent[len(p.sent)-1].ReplyMarkup != nil
 	}, 5*time.Second, 10*time.Millisecond)
-	require.Equal(t, "Approve", replyChoice(t, p, f.H, id))
+	require.Equal(t, "✅ Approve", replyChoice(t, p, f.H, id))
 	var count int
 	require.NoError(t, f.H.store.Pool().QueryRow(t.Context(), "SELECT count(*) FROM shuttle_orders").Scan(&count))
 	require.Zero(t, count)
