@@ -122,7 +122,7 @@ func TestConversationProtocolCallbackRemainsBoundWhileQuestionUsesKeyboard(t *te
 
 func TestConversationApprovalTextDoesNotBecomeBinaryClientDecision(t *testing.T) {
 	t.Parallel()
-	for _, text := range []string{"Approve", "No", "Cancel", "Yes, but only for one person", "How much?"} {
+	for _, text := range []string{"✅ Approve", "❌ Decline", "No", "Cancel", "Yes, but only for one person", "How much?"} {
 		t.Run(text, func(t *testing.T) {
 			t.Parallel()
 			p := newPeers(t)
@@ -136,7 +136,7 @@ func TestConversationApprovalTextDoesNotBecomeBinaryClientDecision(t *testing.T)
 			h := setup(t, p)
 			id := h.submit(t, 96021)
 			h.await(t, id, "awaiting_user")
-			require.Equal(t, "Approve", replyChoice(t, p, h, id))
+			require.Equal(t, "✅ Approve", replyChoice(t, p, h, id))
 			next := h.submitText(t, 96022, text)
 			h.await(t, next, "completed")
 			p.mu.Lock()
@@ -182,7 +182,7 @@ func TestConversationRestoresApprovalKeyboardAfterClarificationCompletes(t *test
 		defer p.mu.Unlock()
 		for _, message := range slices.Backward(p.sent) {
 			if keyboard, ok := message.ReplyMarkup.(*telegram.ReplyKeyboardMarkup); ok {
-				return keyboard.Keyboard[0][0].Text == "Approve"
+				return keyboard.Keyboard[0][0].Text == "✅ Approve"
 			}
 		}
 		return false
@@ -213,7 +213,7 @@ func TestConversationRestoresApprovalKeyboardAfterClarificationCompletes(t *test
 			return ok && removal.RemoveKeyboard
 		}
 		keyboard, ok := markup.(*telegram.ReplyKeyboardMarkup)
-		return ok && keyboard.Keyboard[0][0].Text == "Approve"
+		return ok && keyboard.Keyboard[0][0].Text == "✅ Approve"
 	}
 	freeQuestion := &loom.Question{
 		ID:        "free-clarification",

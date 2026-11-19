@@ -42,6 +42,10 @@ func TestTelegramApprovalShowsCompleteLiteralParametersBeforeButtons(t *testing.
 		sent = append([]telegram.SendMessageRequest(nil), p.sent...)
 		return len(sent) > 1 && sent[len(sent)-1].ReplyMarkup != nil
 	}, 5*time.Second, 10*time.Millisecond)
+	require.True(t, strings.HasPrefix(sent[0].Text, "Approval required ⚠️\n"))
+	require.Contains(t, sent[0].Entities, telegram.MessageEntity{
+		Type: "bold", Offset: 0, Length: len("Approval required"),
+	})
 	var complete strings.Builder
 	for i, message := range sent {
 		require.LessOrEqual(t, len(utf16.Encode([]rune(message.Text))), 4096)
@@ -59,7 +63,10 @@ func TestTelegramApprovalShowsCompleteLiteralParametersBeforeButtons(t *testing.
 		require.Contains(t, text, value, "All values must remain literal and complete")
 	}
 	require.NotContains(t, text, `{"content":`)
-	require.Len(t, sent[len(sent)-1].ReplyMarkup.(*telegram.InlineKeyboardMarkup).InlineKeyboard[0], 2)
+	buttons := sent[len(sent)-1].ReplyMarkup.(*telegram.InlineKeyboardMarkup).InlineKeyboard[0]
+	require.Len(t, buttons, 2)
+	require.Equal(t, "✅ Approve", buttons[0].Text)
+	require.Equal(t, "❌ Decline", buttons[1].Text)
 }
 
 func TestSpecialistAccessApprovalUsesHumanTermsWithoutImplementationFields(t *testing.T) {
@@ -105,7 +112,7 @@ func TestSpecialistAccessApprovalUsesHumanTermsWithoutImplementationFields(t *te
 				}
 				return
 			}
-			require.Equal(t, terms, sent.Text)
+			require.Equal(t, "Approval required ⚠️\n"+terms, sent.Text)
 			require.NotContains(t, sent.Text, "expected_version")
 			require.NotContains(t, sent.Text, "expected_schedule_version")
 			require.NotContains(t, sent.Text, "8cd21b03-601e-40ba-9311-f7c63071fefa")

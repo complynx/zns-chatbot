@@ -206,16 +206,21 @@ func (s *Service) approvalContent(
 			text += "\n\n" + fence + "json\n" + arguments.String() + "\n" + fence
 		}
 	}
+	const attention = " ⚠️"
+	title, yes, no := "Approval required", "✅ Approve", "❌ Decline"
+	if s.languageFor(ctx, i) == "ru" {
+		title, yes, no = "Необходимо подтверждение", "✅ Подтвердить", "❌ Отклонить"
+	}
 	key := "approval:dialog-v1:" + keyboardPromptKey(a)
-	out := s.result(ctx, i, text, key)
+	out := s.result(ctx, i, "**"+title+"**"+attention+"\n\n"+text, key)
 	if len(out) == 0 {
 		return nil
 	}
 	var payload telegram.SendMessageRequest
 	_ = json.Unmarshal(out[len(out)-1].Payload, &payload)
-	yes, no := "Approve", "Reject"
-	if s.languageFor(ctx, i) == "ru" {
-		yes, no = "Подтвердить", "Отклонить"
+	// Only offer a decision when the approval body is visible after rendering.
+	if len(out) == 1 && strings.TrimSpace(payload.Text) == title+attention {
+		return nil
 	}
 	switch a.ReplyMode {
 	case loom.ReplyModeAgent:

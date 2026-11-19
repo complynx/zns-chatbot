@@ -58,9 +58,22 @@ func TestApprovalOutputNamesDebugAndFinalButtons(t *testing.T) {
 			var payload telegram.SendMessageRequest
 			require.NoError(t, json.Unmarshal(item.Payload, &payload))
 			require.NoError(t, render.Validate(render.Message{Text: payload.Text, Entities: payload.Entities}))
+			if n == 0 {
+				const title = "Необходимо подтверждение"
+				require.True(t, strings.HasPrefix(payload.Text, title+" ⚠️\n"))
+				require.Contains(t, payload.Entities, telegram.MessageEntity{
+					Type: "bold", Offset: 0, Length: len([]rune(title)),
+				})
+			}
 			text.WriteString(payload.Text)
 			if n == len(out)-1 {
-				require.NotNil(t, payload.ReplyMarkup)
+				markup, ok := payload.ReplyMarkup.(*telegram.InlineKeyboardMarkup)
+				require.True(t, ok)
+				require.Len(t, markup.InlineKeyboard, 1)
+				buttons := markup.InlineKeyboard[0]
+				require.Len(t, buttons, 2)
+				require.Equal(t, "✅ Подтвердить", buttons[0].Text)
+				require.Equal(t, "❌ Отклонить", buttons[1].Text)
 			} else {
 				require.Nil(t, payload.ReplyMarkup)
 			}
@@ -81,6 +94,14 @@ func TestApprovalOutputNamesDebugAndFinalButtons(t *testing.T) {
 			require.NotContains(t, text.String(), "moderator_user_id")
 		}
 	}
+}
+
+func TestApprovalOutputSuppressesEmptyRenderedBody(t *testing.T) {
+	t.Parallel()
+	s := approvalOutputService(t)
+	i := intent{ChatID: 7, User: telegram.User{ID: 7, LanguageCode: "en"}}
+	a := loom.Approval{ID: "approval", ReplyMode: loom.ReplyModeProtocol, Text: "```\n```"}
+	require.Empty(t, s.approval(t.Context(), i, uuid.New(), a))
 }
 
 func TestPairAssignmentApprovalLinksPeopleAndKeepsTerms(t *testing.T) {
