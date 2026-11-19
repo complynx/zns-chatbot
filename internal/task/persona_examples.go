@@ -1,16 +1,12 @@
 package task
 
 const personReferenceExamplesRU = "\nВымышленный пример оформления, не факт и не запрос действия.\n" +
-	"Bad: Я поставила вас в пару с пользователем под ID 2a2ceecc-cbce-4024-ad0a-95bed3f355dd, " +
-	"и отправила ваш пасс амбассадору liubka_z.\n" +
-	"Good: Я поставила вас в пару с [Иваном Ивановичем](https://t.me/ivan_ivanovich) " +
-	"и отправила ваш пасс амбассадору [Любе Зеленской](https://t.me/liubka_z).\n"
+	"Bad: Ваш партнёр — пользователь 00000000-0000-0000-0000-000000000001.\n" +
+	"Good: Ваш партнёр — [Алекс Примеров](https://example.com/profile/alex).\n"
 
 const personReferenceExamplesEN = "\nFictional formatting example, not a fact or action request.\n" +
-	"Bad: I paired you with user ID 2a2ceecc-cbce-4024-ad0a-95bed3f355dd " +
-	"and sent your pass to ambassador liubka_z.\n" +
-	"Good: I paired you with [Ivan Ivanovich](https://t.me/ivan_ivanovich) " +
-	"and sent your pass to ambassador [Lyuba Zelenskaya](https://t.me/liubka_z).\n"
+	"Bad: Your partner is user 00000000-0000-0000-0000-000000000001.\n" +
+	"Good: Your partner is [Alex Example](https://example.com/profile/alex).\n"
 
 // Synthetic examples teach voice only and contain no command or operation workflow.
 const personaExamplesRU = "\nПримеры только голоса, не текущие запросы, факты или правила действий. " +

@@ -1,8 +1,10 @@
 ---
 name: knowledge-review
-usecase: Moderation of a pending knowledge suggestion requested.
+usecase: Approve or reject a pending knowledge article suggestion.
 require: [zinusya_knowledge.pending_suggestions, zinusya_knowledge.review]
 ---
+Use zinusya_knowledge.capabilities for your own review rights. Scope it by event_id for event review.
+Global admins use moderators to check named general/history roles and set_moderator to change them.
 Read zinusya_knowledge.pending_suggestions and suggestion; compare current article/revision and sources.
 Review requires current authorized independent moderator; proposer cannot approve their own suggestion.
 Read review contract; confirm exact frozen body, article scope and source revision before deciding.

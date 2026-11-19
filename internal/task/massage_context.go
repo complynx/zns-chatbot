@@ -31,8 +31,9 @@ func (s *Service) appendMassageContext(ctx context.Context, text *strings.Builde
 	text.Write(raw)
 	text.WriteString(
 		"\nContinue only the user's explicit request. " +
-			"Use zinusya_massage.pending for current unexpired choices, and get/operation for current booking " +
-			"state or original receipts. To continue an existing proposal, pass its proposal_id as " +
+			"Use zinusya_massage.pending for unexpired proposals, get/list for current bookings, " +
+			"availability for free slots, and operation for an original receipt. " +
+			"To continue an existing proposal, pass its proposal_id as " +
 			"existing_proposal_id with its exact typed arguments: book/cancel preparation for " +
 			"booking/cancellation, or zinusya_massage_staff.instant preparation for instant. " +
 			"Never route an instant proposal through ordinary book. " +

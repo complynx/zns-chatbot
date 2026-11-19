@@ -133,10 +133,12 @@ func knowledgeActionMethods() []map[string]any {
 	return []map[string]any{
 		knowledgeMethod[knowledgeOperationArguments, knowledgeActionView](
 			"operation",
-			"Inspect your own original action using kind and operation_id. "+
-				"completed returns a bounded original receipt, not current article state. "+
-				"prepared/expired include exact original normalized verb arguments and proposal_id; "+
-				"this past consent is not current permission or a new request. "+
+			"Check the outcome or terms of a specific past knowledge action by kind and operation_id. "+
+				"completed returns the original receipt. For current state, use the relevant read. "+
+				"Use capabilities for your own rights, or moderators for named assignments as a global admin. "+
+				"Resolve live approval through Loom dialogue. "+
+				"prepared/expired include the exact original normalized arguments and proposal_id. "+
+				"Preparation alone grants no consent. "+
 				"To continue a prepared action, use its original operation_id and unchanged "+
 				"arguments and obtain fresh exact consent; "+
 				"confirmation still rechecks expiry, rights and versions. "+
@@ -146,7 +148,8 @@ func knowledgeActionMethods() []map[string]any {
 		),
 		knowledgeMethod[struct{}, knowledgeRecentActionsView](
 			"recent_actions",
-			"Read at most five recent actor-owned action locators, without content bodies. "+
+			"Find an operation ID for a past action the user refers to. "+
+				"Read at most five recent actor-owned action locators, without content bodies. "+
 				"This is a bounded continuation hint, not an exhaustive directory or paginated "+
 				"history. Use operation with a known kind/operation_id for exact original terms and "+
 				"result. Observed states may have different timestamps. "+
