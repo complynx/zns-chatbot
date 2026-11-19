@@ -106,7 +106,8 @@ func peopleError(err error) error {
 func peopleModule() map[string]any {
 	method := administrativeRead("search",
 		"Find people by full or partial name, username, transliteration, typos or previously observed names. "+
-			"If a full name misses, try a distinctive name fragment or known username. With no reliable match, ask for their @username. "+
+			"If a full name misses, try a distinctive name fragment or known username. "+
+			"With no reliable match, ask for their @username. "+
 			"Use 2..128 characters and at most six normalized name tokens. "+
 			"Anyone can search visible users by their current basic names and username. Hidden users and historical "+
 			"names require scoped authority. Global administrators may omit event_id to search the deployment. "+
