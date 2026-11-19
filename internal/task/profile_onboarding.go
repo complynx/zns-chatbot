@@ -14,8 +14,8 @@ const nameOnboardingInstructionsEN = "\nFor first-contact onboarding or an expli
 	"last names using zinusya_profile.request_name. " +
 	"After it succeeds, ask with Loom's native question tool: provide text, allow_text:true and " +
 	"choices as {id,label} with stable IDs, or choices:[] when there is no plausible suggestion. " +
-	"Keep free-text correction available. Use question for this interaction; " +
-	"final_answer completes the run without a reply keyboard. " +
+	"Keep free-text correction available. Use question to wait for the reply. " +
+	"Plain assistant text completes the run without a reply keyboard. " +
 	"Assess the Telegram names and username together: if they suggest a plausible real first and last " +
 	"name, offer that name as an ordinary reply-keyboard choice; " +
 	"otherwise ask without suggested choices. " +
@@ -36,7 +36,7 @@ const nameOnboardingInstructionsRU = "\nПри первом знакомстве
 	"zinusya_profile.request_name. После успеха задай вопрос нативным инструментом Loom question: " +
 	"передай text, allow_text:true и choices как {id,label} со стабильными ID, а если правдоподобных " +
 	"вариантов нет — choices:[]. Оставь возможность исправить имя свободным текстом. " +
-	"Для этого диалога используй question; final_answer завершает run без клавиатуры ответа. " +
+	"Чтобы дождаться ответа, используй question. Обычный ответ завершает запуск без клавиатуры ответа. " +
 	"Оцени имя, фамилию и username из Telegram вместе: если они похожи на настоящие имя и фамилию, " +
 	"предложи их обычной кнопкой клавиатуры ответа; иначе спроси без вариантов. " +
 	"Не сохраняй подсказки Telegram без явного подтверждения или исправления человеком. " +

@@ -70,9 +70,10 @@ func TestProfileContextKeepsUntrustedHintsSeparateFromServiceIdentity(t *testing
 			require.Contains(t, text.String(), `"telegram_language_code":"pt-BR"`)
 			require.Contains(t, text.String(), "zinusya_profile.request_name")
 			require.Contains(t, text.String(), "complete_name")
+			require.NotContains(t, text.String(), "final_answer", "Loom does not expose a tool with this name")
 			for _, contract := range []string{
 				"modules.help.read({module,method})", "next_cursor", "zinusya_profile.get", "expected_version", "module_call",
-				"question", "choices", "allow_text:true", "final_answer",
+				"question", "choices", "allow_text:true",
 			} {
 				require.Contains(
 					t, text.String(), contract,

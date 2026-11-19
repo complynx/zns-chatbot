@@ -32,13 +32,14 @@ func (s *Service) appendKnowledgeContext(ctx context.Context, text *strings.Buil
 	text.Write(raw)
 	text.WriteString(
 		"\nContinue only the user's explicit request. " +
-			"Use zinusya_knowledge.operation with the original kind and operation_id for exact normalized " +
-			"terms, expiry and original result; " +
+			"Use zinusya_knowledge.capabilities for your own rights. Global admins use moderators for current named roles. " +
+			"For the terms, expiry or receipt of a specific past action, use zinusya_knowledge.operation " +
+			"with its original kind and operation_id. " +
 			"zinusya_knowledge.recent_actions refreshes bounded locators and is not an exhaustive directory. " +
 			"completed describes a past effect, not a request to repeat it. " +
-			"prepared is not current consent: continuing requires fresh exact approval. " +
-			"Call module_call with resume_operation_id set to the original operation_id and arguments={} to " +
-			"adopt the original terms; never prepare a replacement. " +
+			"To continue a past prepared action on request, adopt the original terms and obtain fresh exact approval. " +
+			"Keep the original preparation while it is valid. " +
+			"Use module_call with the original operation_id as resume_operation_id and arguments={}. " +
 			"Only supported adoption methods can continue this way. " +
 			"Expired preparations require fresh preparation and consent. " +
 			"unknown is nonterminal, never proof that a replacement is safe. " +

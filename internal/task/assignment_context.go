@@ -42,8 +42,8 @@ func (s *Service) appendNativeAssignmentContext(ctx context.Context, text *strin
 	text.Write(raw)
 	text.WriteString(
 		"\nContinue only the user's explicit request. " +
-			"Read zinusya_administration.assignment_proposal for original terms/result, assignment_proposals " +
-			"for pending proposals, and the assign status endpoint to inspect a known operation. " +
+			"Read zinusya_administration.assignment_proposal with the known proposal_id for original terms/result. " +
+			"Use assignment_proposals to find pending proposals. Loom reconciles an uncertain assign call. " +
 			"To continue an unexpired pending proposal under a new Loom operation ID, call " +
 			"zinusya_administration.assign with exact original business arguments plus resume_proposal_id. " +
 			"Adoption preserves the original terms and expiry and still requires fresh exact human approval. " +
