@@ -40,9 +40,20 @@ type Telegram struct {
 	WebhookSecret  string `yaml:"webhook_secret"`
 }
 type Loom struct {
-	BaseURL         string                  `yaml:"base_url"`
-	SkillsEnabled   bool                    `yaml:"skills_enabled"`
-	Personalization PersonalizationIdentity `yaml:"personalization"`
+	ExternalAgentTokens  ExternalAgentTokens     `yaml:"external_agent_tokens"`
+	ExternalAgentEnabled bool                    `yaml:"external_agent_enabled"`
+	BaseURL              string                  `yaml:"base_url"`
+	SkillsEnabled        bool                    `yaml:"skills_enabled"`
+	Personalization      PersonalizationIdentity `yaml:"personalization"`
+}
+
+// ExternalAgentTokens configures the internal endpoint Loom uses for tool credentials.
+type ExternalAgentTokens struct {
+	Writes       bool   `yaml:"writes"`
+	Audience     string `yaml:"audience"`
+	ClientID     string `yaml:"client_id"`
+	ClientSecret string `yaml:"client_secret"`
+	Secret       string `yaml:"secret"`
 }
 
 // PersonalizationIdentity pays for rewrites without the user's delegation actor.
@@ -164,6 +175,10 @@ func Load(path string) (Config, error) {
 		"TELEGRAM_WEBHOOK_SECRET":              &c.Telegram.WebhookSecret,
 		"TELEGRAM_WEBHOOK_URL":                 &c.Telegram.WebhookURL,
 		"LOOM_BASE_URL":                        &c.Loom.BaseURL,
+		"LOOM_MCP_AUDIENCE":                    &c.Loom.ExternalAgentTokens.Audience,
+		"LOOM_MCP_CLIENT_ID":                   &c.Loom.ExternalAgentTokens.ClientID,
+		"LOOM_MCP_CLIENT_SECRET":               &c.Loom.ExternalAgentTokens.ClientSecret,
+		"LOOM_MCP_TOKEN_SECRET":                &c.Loom.ExternalAgentTokens.Secret,
 		"LOOM_PERSONALIZATION_CLIENT_SECRET":   &c.Loom.Personalization.ClientSecret,
 		"IDENTITY_ISSUER":                      &c.Identity.Issuer,
 		"IDENTITY_ORGANIZATION_ID":             &c.Identity.OrganizationID,
@@ -212,10 +227,35 @@ func (c Config) Validate() error {
 		c.validateRegistrationDetails,
 		c.validateDescriptor,
 		c.validatePersonalization,
+		c.validateExternalAgentTokens,
 		c.OTel.validate,
 	} {
 		if err := check(); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func (c Config) validateExternalAgentTokens() error {
+	p := c.Loom.ExternalAgentTokens
+	if p == (ExternalAgentTokens{}) {
+		return nil
+	}
+	if !c.Loom.ExternalAgentEnabled || p.Audience == c.Identity.Audience || p.Audience == c.Identity.APIAudience {
+		return errors.New("external agent token service requires MCP access and a separate audience")
+	}
+	for _, value := range []string{p.Audience, p.ClientID, p.ClientSecret} {
+		if strings.TrimSpace(value) == "" || len(value) > 4096 || strings.ContainsAny(value, "\r\n") {
+			return errors.New("external agent token service requires audience and introspection credentials")
+		}
+	}
+	if len(p.Secret) < 16 || len(p.Secret) > 512 {
+		return errors.New("external agent token service requires a 16 to 512 character secret")
+	}
+	for _, ch := range p.Secret {
+		if ch < '!' || ch > '~' {
+			return errors.New("external agent token service secret must use printable ASCII without spaces")
 		}
 	}
 	return nil
@@ -438,12 +478,8 @@ func applyTypedEnvironment(c *Config) error {
 	if err := applyWebhookEnvironment(c); err != nil {
 		return err
 	}
-	if value, ok := os.LookupEnv("ZNS_CHATBOT_LOOM_SKILLS_ENABLED"); ok {
-		parsed, parseErr := strconv.ParseBool(value)
-		if parseErr != nil {
-			return errors.New("invalid ZNS_CHATBOT_LOOM_SKILLS_ENABLED")
-		}
-		c.Loom.SkillsEnabled = parsed
+	if err := applyLoomEnvironment(&c.Loom); err != nil {
+		return err
 	}
 	for key, field := range map[string]*time.Duration{
 		"HTTP_TIMEOUT":     &c.HTTPTimeout,
@@ -478,6 +514,26 @@ func applyTypedEnvironment(c *Config) error {
 			return errors.New("invalid ZNS_CHATBOT_OTEL_MAX_QUEUE_SIZE")
 		}
 		c.OTel.MaxQueueSize = parsed
+	}
+	return nil
+}
+
+func applyLoomEnvironment(c *Loom) error {
+	for _, option := range []struct {
+		key   string
+		field *bool
+	}{
+		{"ZNS_CHATBOT_LOOM_SKILLS_ENABLED", &c.SkillsEnabled},
+		{"ZNS_CHATBOT_LOOM_EXTERNAL_AGENT_ENABLED", &c.ExternalAgentEnabled},
+		{"ZNS_CHATBOT_LOOM_MCP_WRITES", &c.ExternalAgentTokens.Writes},
+	} {
+		if value, ok := os.LookupEnv(option.key); ok {
+			parsed, err := strconv.ParseBool(value)
+			if err != nil {
+				return errors.New("invalid " + option.key)
+			}
+			*option.field = parsed
+		}
 	}
 	return nil
 }

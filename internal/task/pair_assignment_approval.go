@@ -21,7 +21,7 @@ import (
 // that pair's participants. Display names are context, never approval or legal identity.
 func (s *Service) pairAssignmentApprovalText(
 	ctx context.Context,
-	t db.Task,
+	userID uuid.UUID,
 	i intent,
 	a loom.Approval,
 ) (string, error) {
@@ -41,7 +41,7 @@ func (s *Service) pairAssignmentApprovalText(
 	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
 		return "", errors.New("trailing pair approval arguments")
 	}
-	user, err := s.store.GetUser(ctx, t.UserID)
+	user, err := s.store.GetUser(ctx, userID)
 	if err != nil {
 		return "", err
 	}

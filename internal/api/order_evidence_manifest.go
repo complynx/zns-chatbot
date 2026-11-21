@@ -5,7 +5,7 @@ const schemaOrderEvidenceSentAt = "sent_at"
 
 func orderEvidenceModule() map[string]any {
 	return map[string]any{
-		"id":                "zinusya_order_payments",
+		"id":                orderPaymentsModuleID,
 		manifestDescription: "Service and meal payment evidence, shared human review and original receipts",
 		manifestPermissions: []string{}, manifestDiscovery: discoveryDynamic,
 		manifestDiscoveryPath: orderEvidencePath + "discover", manifestCacheTTL: 0,

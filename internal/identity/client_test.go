@@ -142,6 +142,7 @@ func (f *iamFixture) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		id, secret, ok := r.BasicAuth()
 		subject, actor := "actor", ""
+		audience := []string{"loom", "api"}
 		if r.Form.Get("grant_type") == "client_credentials" {
 			if !ok || id != "machine" || secret != "machine-secret" {
 				w.WriteHeader(http.StatusUnauthorized)
@@ -157,11 +158,12 @@ func (f *iamFixture) handle(w http.ResponseWriter, r *http.Request) {
 			if !ok || id != "exchange" || secret != "exchange-secret" ||
 				r.Form.Get("subject_token_type") != "urn:zitadel:params:oauth:token-type:user_id" ||
 				r.Form.Get("actor_token") == "" ||
-				len(r.Form["audience"]) != 2 {
+				len(r.Form["audience"]) == 0 {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
 			subject, actor = r.Form.Get("subject_token"), "actor"
+			audience = r.Form["audience"]
 		}
 		expiry := time.Now().Add(time.Hour)
 		if actor != "" && !f.userTokenExpiry.IsZero() {
@@ -169,7 +171,7 @@ func (f *iamFixture) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		respond(
 			map[string]any{
-				"access_token": f.signed(subject, actor, "org", []string{"loom", "api"}, expiry),
+				"access_token": f.signed(subject, actor, "org", audience, expiry),
 				"expires_in":   3600,
 				"token_type":   "Bearer",
 			},
@@ -181,7 +183,9 @@ func (f *iamFixture) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		id, secret, ok := r.BasicAuth()
-		if !ok || id != "intro" || secret != "intro-secret" {
+		regular := id == "intro" && secret == "intro-secret"
+		external := id == "mcp-intro" && secret == "mcp-intro-secret"
+		if !ok || !regular && !external {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
@@ -200,6 +204,9 @@ func (f *iamFixture) handle(w http.ResponseWriter, r *http.Request) {
 		var info map[string]any
 		_ = json.Unmarshal(b, &info)
 		info["active"] = f.active
+		if external {
+			info["client_id"] = "fixture-agent"
+		}
 		if f.introRoleClaims == nil {
 			info["urn:zitadel:iam:org:project:api:roles"] = s.Roles
 		} else {

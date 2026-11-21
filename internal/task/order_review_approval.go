@@ -15,7 +15,12 @@ import (
 
 // Deliver the whole stored consent before the last-chunk reply keyboard, even
 // when Loom's human prompt was abbreviated. Arguments/expiry must match exactly.
-func (s *Service) orderReviewApprovalText(ctx context.Context, t db.Task, i intent, a loom.Approval) (string, error) {
+func (s *Service) orderReviewApprovalText(
+	ctx context.Context,
+	userID uuid.UUID,
+	i intent,
+	a loom.Approval,
+) (string, error) {
 	op, err := uuid.Parse(a.OperationID)
 	if err != nil || op == uuid.Nil {
 		return "", errors.New("invalid order review operation")
@@ -29,7 +34,7 @@ func (s *Service) orderReviewApprovalText(ctx context.Context, t db.Task, i inte
 	if err = decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
 		return "", errors.New("trailing order review arguments")
 	}
-	user, err := s.store.GetUser(ctx, t.UserID)
+	user, err := s.store.GetUser(ctx, userID)
 	if err != nil {
 		return "", err
 	}

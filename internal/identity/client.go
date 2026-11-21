@@ -39,6 +39,8 @@ const (
 
 type ClientCredentials struct{ ID, Secret string }
 type Options struct {
+	ExternalAgentAudience                                                             string
+	ExternalAgentIntrospectionCredentials                                             ClientCredentials
 	Issuer, OrganizationID, LoomAudience, APIAudience, ActorID                        string
 	TelegramProviderIssuer, TelegramProviderID                                        string
 	BotID                                                                             int64
@@ -66,6 +68,7 @@ type Principal struct {
 	Subject, Actor, OrganizationID string
 	ExpiresAt                      time.Time
 	Roles                          map[string]map[string]string
+	ExternalAgent                  bool
 }
 type positive struct {
 	principal Principal
@@ -115,6 +118,11 @@ func New(o Options, h *http.Client) (*Client, error) {
 		o.PositiveCacheTTL < 0 ||
 		o.PositiveCacheTTL > maxCacheTTL {
 		return nil, errors.New("identity org, audiences, actor, bot and bounded cache TTL required")
+	}
+	if o.ExternalAgentAudience != "" && (o.ExternalAgentAudience == o.LoomAudience ||
+		o.ExternalAgentAudience == o.APIAudience || o.ExternalAgentIntrospectionCredentials.ID == "" ||
+		o.ExternalAgentIntrospectionCredentials.Secret == "") {
+		return nil, errors.New("external agent requires a separate audience and introspection credentials")
 	}
 	for _, v := range []ClientCredentials{
 		o.ActorClientCredentials,
@@ -337,6 +345,9 @@ func (c *Client) signed(ctx context.Context, token string) (claims, error) {
 	if result.Subject == c.options.ActorID && result.Actor != nil {
 		return claims{}, ErrDenied
 	}
+	if c.options.ExternalAgentAudience != "" && result.Audience.Contains(c.options.ExternalAgentAudience) {
+		return claims{}, ErrDenied
+	}
 	return result, nil
 }
 
@@ -417,6 +428,9 @@ func (c *Client) Verify(ctx context.Context, token string) (Principal, error) {
 		OrganizationID: s.Org,
 		ExpiresAt:      expires,
 		Roles:          apiRoles,
+		// Regular delegated tokens always include Loom. The API restricts
+		// API-only delegated credentials to the enabled external routes.
+		ExternalAgent: s.Actor != nil && !s.Audience.Contains(c.options.LoomAudience),
 	}
 	until := time.Now().Add(ttl)
 	if expires.Before(until) {
@@ -476,13 +490,14 @@ func (c *Client) UserToken(ctx context.Context, subject string) (Credential, err
 	}
 	return c.token(ctx, subject, false)
 }
-func (c *Client) scopes(management bool) string {
+func (c *Client) scopes(management bool, audiences []string) string {
 	scopes := []string{
 		"openid",
 		"urn:zitadel:iam:user:resourceowner",
 		"urn:zitadel:iam:org:projects:roles",
-		"urn:zitadel:iam:org:project:id:" + c.options.LoomAudience + ":aud",
-		"urn:zitadel:iam:org:project:id:" + c.options.APIAudience + ":aud",
+	}
+	for _, audience := range audiences {
+		scopes = append(scopes, "urn:zitadel:iam:org:project:id:"+audience+":aud")
 	}
 	if management {
 		scopes = append(scopes, "urn:zitadel:iam:org:project:id:zitadel:aud")
@@ -505,7 +520,7 @@ func (c *Client) token(ctx context.Context, subject string, service bool) (Crede
 		if time.Until(cached.ExpiresAt) > 30*time.Second {
 			return cached, nil
 		}
-		result, e := c.issue(ctx, subject, service)
+		result, e := c.issue(ctx, subject, service, []string{c.options.LoomAudience, c.options.APIAudience})
 		if e != nil {
 			return c.fallback(cached, subject, generation, actorGeneration, e)
 		}
@@ -526,12 +541,12 @@ func (c *Client) token(ctx context.Context, subject string, service bool) (Crede
 	}
 	return result, nil
 }
-func (c *Client) issue(ctx context.Context, subject string, service bool) (Credential, error) {
+func (c *Client) issue(ctx context.Context, subject string, service bool, audiences []string) (Credential, error) {
 	d, err := c.discover(ctx)
 	if err != nil {
 		return Credential{}, err
 	}
-	form := url.Values{grantTypeKey: {"client_credentials"}, scopeKey: {c.scopes(true)}}
+	form := url.Values{grantTypeKey: {"client_credentials"}, scopeKey: {c.scopes(true, audiences)}}
 	creds := c.options.ActorClientCredentials
 	if !service {
 		actor, actorErr := c.ServiceToken(ctx)
@@ -546,8 +561,8 @@ func (c *Client) issue(ctx context.Context, subject string, service bool) (Crede
 			"actor_token":          {actor.Token},
 			"actor_token_type":     {"urn:ietf:params:oauth:token-type:access_token"},
 			"requested_token_type": {"urn:ietf:params:oauth:token-type:jwt"},
-			"audience":             {c.options.LoomAudience, c.options.APIAudience},
-			scopeKey:               {c.scopes(false)},
+			"audience":             audiences,
+			scopeKey:               {c.scopes(false, audiences)},
 		}
 	}
 	var response struct {
@@ -574,8 +589,15 @@ func (c *Client) issue(ctx context.Context, subject string, service bool) (Crede
 	if err != nil {
 		return Credential{}, err
 	}
-	if s.Subject != subject || !s.Audience.Contains(c.options.LoomAudience) ||
-		(!service && actorSubject(s) != c.options.ActorID) {
+	if s.Subject != subject || (!service && (s.Actor == nil || actorSubject(s) != c.options.ActorID)) {
+		return Credential{}, ErrDenied
+	}
+	for _, audience := range audiences {
+		if !s.Audience.Contains(audience) {
+			return Credential{}, ErrDenied
+		}
+	}
+	if len(audiences) == 1 && s.Audience.Contains(c.options.LoomAudience) {
 		return Credential{}, ErrDenied
 	}
 	expiry := s.Expiry.Time()

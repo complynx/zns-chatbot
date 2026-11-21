@@ -17,6 +17,9 @@ import (
 	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
+// River schedules snoozed jobs every five seconds, plus startup jitter and queue pickup.
+const approvalRetryObservationTimeout = 12 * time.Second
+
 func orderApprovalFixture(t *testing.T, p *peers, large bool) (paymentFixture, db.ProfileScope, db.OrderSubmission) {
 	t.Helper()
 	f, scope, draft := selectionFixtureWithPeers(t, p)
@@ -244,7 +247,7 @@ func TestOrderApprovalWaitsForExactReceiptInsteadOfDeliveringIncompletePrompt(t 
 	require.Eventually(
 		t,
 		func() bool { p.mu.Lock(); defer p.mu.Unlock(); return len(p.createAttempts)+p.runGets >= 2 },
-		5*time.Second,
+		approvalRetryObservationTimeout,
 		10*time.Millisecond,
 	)
 	p.mu.Lock()

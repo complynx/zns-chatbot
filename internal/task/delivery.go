@@ -174,12 +174,7 @@ func (s *Service) question(ctx context.Context, i intent, q loom.Question) []db.
 }
 func (s *Service) approval(ctx context.Context, i intent, id uuid.UUID, a loom.Approval) []db.Outbound {
 	text := a.Text
-	// Loom binds these complete service-generated human terms to the exact action.
-	completeServiceQuote := strings.TrimSpace(a.Text) != "" &&
-		(a.Method == "zinusya_massage.book" || a.Method == "zinusya_massage.cancel" ||
-			a.Method == "zinusya_massage_staff.instant" ||
-			a.Method == "zinusya_administration.set_massage_specialist_binding")
-	if approvalHasArguments(a) && !completeServiceQuote {
+	if approvalHasArguments(a) && !completeServiceApproval(a) {
 		if !json.Valid(a.Arguments) {
 			s.logger.WarnContext(ctx, "approval arguments invalid", "class", "approval_arguments")
 			return nil
@@ -187,6 +182,14 @@ func (s *Service) approval(ctx context.Context, i intent, id uuid.UUID, a loom.A
 		text += "\n\n" + approvalParameters(a.Arguments, s.languageFor(ctx, i))
 	}
 	return s.approvalContent(ctx, i, id, a, text)
+}
+
+// These preparations provide all human terms in the service description.
+func completeServiceApproval(a loom.Approval) bool {
+	return strings.TrimSpace(a.Text) != "" &&
+		(a.Method == "zinusya_massage.book" || a.Method == "zinusya_massage.cancel" ||
+			a.Method == "zinusya_massage_staff.instant" ||
+			a.Method == "zinusya_administration.set_massage_specialist_binding")
 }
 
 // Presentation can change without changing the pending action's identity.
