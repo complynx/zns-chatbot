@@ -17,18 +17,7 @@ func (s *Server) skillModules(modules []any) []any {
 			continue
 		}
 		module["visibility"] = agentskills.Visibility(id)
-		switch methods := module[manifestMethods].(type) {
-		case []map[string]any:
-			agentskills.Annotate(id, methods)
-		case []any:
-			cards := make([]map[string]any, 0, len(methods))
-			for _, method := range methods {
-				if card, valid := method.(map[string]any); valid {
-					cards = append(cards, card)
-				}
-			}
-			agentskills.Annotate(id, cards)
-		}
+		agentskills.Annotate(id, manifestMethodCards(module))
 	}
 	return modules
 }
@@ -40,6 +29,12 @@ func (s *Server) skillDiscoveryResult(
 ) (*agentDiscoveryResponse, error) {
 	if s.options.SkillsEnabled {
 		agentskills.Annotate(module, methods)
+	}
+	if s.options.ExternalAgentTokenSecret != "" {
+		markExternalAgentMethods(module, methods)
+		if s.options.ExternalAgentWrites {
+			markExternalAgentWriteMethods(module, methods)
+		}
 	}
 	return discoveryResult(methods)
 }

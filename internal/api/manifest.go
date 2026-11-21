@@ -1,6 +1,10 @@
 package api
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/complynx/zns-chatbot/internal/loom"
+)
 
 // manifest advertises account tools and user-scoped administrative discovery.
 const botDescription = "Zinusya (Зинуся) is the zns-chatbot assistant for Zouk Non Stop events. " +
@@ -101,21 +105,22 @@ func (s *Server) manifest(w http.ResponseWriter, _ *http.Request) {
 	if s.options.SkillsEnabled {
 		revision += "-skills-1"
 	}
+	callerPermissions := []string{
+		"runs.create", "runs.control", "chat.read", "chat.events.append", "artifacts.read", "artifacts.write",
+	}
+	if s.options.ExternalAgentEnabled {
+		callerPermissions = append(callerPermissions, loom.ExternalAgentProfilePermission)
+		revision += "-mcp-1"
+	}
 	w.Header().Set("Loom-Operation-Inspect-Path", operationInspectPath)
-	writeJSON(w, http.StatusOK, map[string]any{
+	modules := s.skillModules(s.manifestModules())
+	manifest := map[string]any{
 		"protocol_version":  1,
 		schemaServiceID:     agentServiceID,
 		"revision":          revision,
 		manifestDescription: botDescription,
 		"caller": map[string]any{
-			manifestPermissions: []string{
-				"runs.create",
-				"runs.control",
-				"chat.read",
-				"chat.events.append",
-				"artifacts.read",
-				"artifacts.write",
-			},
+			manifestPermissions: callerPermissions,
 			"auth": map[string]any{
 				manifestType: "zitadel",
 				"issuer":     s.options.Issuer,
@@ -123,77 +128,93 @@ func (s *Server) manifest(w http.ResponseWriter, _ *http.Request) {
 				"audience":   s.options.LoomAudience,
 			},
 		},
-		"modules": s.skillModules(s.withRegistrationDetails([]any{
-			knowledgeModule(),
-			profileModule(),
-			peopleModule(),
-			communicationsModule(),
-			historyModule(),
-			avatarModule(),
-			eventContextModule(),
-			fileModule(),
-			authorityModule(),
-			paymentModule(),
-			orderEvidenceModule(),
-			pairModule(),
-			ordersModule(),
-			mealsModule(),
-			massageModule(),
-			massageStaffModule(),
-			map[string]any{
-				"id":                "zinusya_registrations",
-				manifestDescription: "Solo owner registration and assigned-pass reads",
-				manifestPermissions: []string{},
-				manifestDiscovery:   discoveryStatic,
-				manifestMethods:     registrationMethods(),
-			},
-			map[string]any{
-				"id":                "zinusya_administration",
-				manifestDescription: "Operator diagnostics, event reads and exact-confirmation pass assignment",
-				manifestPermissions: []string{"zinusya.admin"},
-				manifestDiscovery:   "dynamic",
-				"discovery_path":    "/internal/agent/administration/discover",
-				"cache_ttl_seconds": 0,
-			},
-			map[string]any{
-				"id":                "zinusya_account",
-				manifestDescription: "Current authenticated account",
-				manifestPermissions: []string{},
-				manifestDiscovery:   discoveryStatic,
-				manifestMethods: []any{
-					map[string]any{
-						"id":                "me",
-						manifestDescription: "Read the current authenticated user's account. No user ID argument is accepted.",
-						manifestPermissions: []string{},
-						manifestPath:        "/internal/agent/account/me",
-						manifestEffect:      effectRead,
-						manifestTimeout:     toolTimeoutMillis,
-						manifestMaxResult:   toolResultLimit,
-						manifestInputSchema: map[string]any{
-							manifestType:               schemaObject,
-							schemaAdditionalProperties: false,
-							schemaProperties:           map[string]any{},
-						},
-						manifestOutputSchema: map[string]any{
-							manifestType:               schemaObject,
-							schemaAdditionalProperties: false,
-							schemaRequired:             []string{"id", "telegram_user_id", "profile"},
-							schemaProperties: map[string]any{
-								"id": map[string]any{
-									manifestType: schemaString,
-									schemaFormat: schemaUUID,
-								},
-								"telegram_user_id": map[string]any{manifestType: schemaInteger},
-								"profile":          map[string]any{manifestType: schemaObject},
-							},
-						},
-						manifestIdempotency:  false,
-						manifestConfirmation: map[string]any{confirmationMode: confirmationNone},
-						manifestMIMETypes:    []string{},
-						manifestDisclosure:   false,
+		"modules": modules,
+	}
+	if s.options.ExternalAgentTokenSecret != "" {
+		manifest["revision"] = revision + "-mcp-tools-1"
+		manifest["external_agent_tokens"] = map[string]any{manifestPath: externalAgentTokenPath}
+		markExternalAgentModules(modules, s.options.ExternalAgentWrites)
+		if s.options.ExternalAgentWrites {
+			manifest["revision"] = revision + "-mcp-writes-1"
+			manifest["external_agent_tokens"] = map[string]any{
+				manifestPath: externalAgentTokenPath, "approval_path": externalAgentApprovalPath,
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, manifest)
+}
+
+func (s *Server) manifestModules() []any {
+	return s.withRegistrationDetails([]any{
+		knowledgeModule(),
+		profileModule(),
+		peopleModule(),
+		communicationsModule(),
+		historyModule(),
+		avatarModule(),
+		eventContextModule(),
+		fileModule(),
+		authorityModule(),
+		paymentModule(),
+		orderEvidenceModule(),
+		pairModule(),
+		ordersModule(),
+		mealsModule(),
+		massageModule(),
+		massageStaffModule(),
+		map[string]any{
+			"id":                "zinusya_registrations",
+			manifestDescription: "Solo owner registration and assigned-pass reads",
+			manifestPermissions: []string{},
+			manifestDiscovery:   discoveryStatic,
+			manifestMethods:     registrationMethods(),
+		},
+		map[string]any{
+			"id":                administrationModuleID,
+			manifestDescription: "Operator diagnostics, event reads and exact-confirmation pass assignment",
+			manifestPermissions: []string{"zinusya.admin"},
+			manifestDiscovery:   "dynamic",
+			"discovery_path":    "/internal/agent/administration/discover",
+			"cache_ttl_seconds": 0,
+		},
+		map[string]any{
+			"id":                "zinusya_account",
+			manifestDescription: "Current authenticated account",
+			manifestPermissions: []string{},
+			manifestDiscovery:   discoveryStatic,
+			manifestMethods: []any{
+				map[string]any{
+					"id":                "me",
+					manifestDescription: "Read the current authenticated user's account. No user ID argument is accepted.",
+					manifestPermissions: []string{},
+					manifestPath:        "/internal/agent/account/me",
+					manifestEffect:      effectRead,
+					manifestTimeout:     toolTimeoutMillis,
+					manifestMaxResult:   toolResultLimit,
+					manifestInputSchema: map[string]any{
+						manifestType:               schemaObject,
+						schemaAdditionalProperties: false,
+						schemaProperties:           map[string]any{},
 					},
+					manifestOutputSchema: map[string]any{
+						manifestType:               schemaObject,
+						schemaAdditionalProperties: false,
+						schemaRequired:             []string{"id", "telegram_user_id", "profile"},
+						schemaProperties: map[string]any{
+							"id": map[string]any{
+								manifestType: schemaString,
+								schemaFormat: schemaUUID,
+							},
+							"telegram_user_id": map[string]any{manifestType: schemaInteger},
+							"profile":          map[string]any{manifestType: schemaObject},
+						},
+					},
+					manifestIdempotency:  false,
+					manifestConfirmation: map[string]any{confirmationMode: confirmationNone},
+					manifestMIMETypes:    []string{},
+					manifestDisclosure:   false,
 				},
 			},
-		})),
+		},
 	})
 }

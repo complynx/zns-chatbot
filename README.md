@@ -23,3 +23,5 @@ See [file access](docs/shuttle-files.md), [schema compatibility](docs/shuttle-sc
 and the [roadmap](docs/shuttle-roadmap.md).
 
 See [personal messages, broadcasts and delivery limits](docs/shuttle-communications.md).
+
+See [connecting external MCP agents](docs/shuttle-external-agents.md).

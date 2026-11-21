@@ -25,6 +25,8 @@ type intent struct {
 	CallbackMessageID    int64                   `json:"callback_message_id,omitempty"`
 	ReplyToMessageID     int64                   `json:"reply_to_message_id,omitempty"`
 	StructuredCommand    string                  `json:"structured_command,omitempty"`
+	ExternalAgentChange  *externalAgentChange    `json:"external_agent_change,omitempty"`
+	ExternalApproval     *externalApprovalChoice `json:"external_approval,omitempty"`
 	PartnerCode          *uuid.UUID              `json:"partner_code,omitempty"`
 	Attachments          []files.Incoming        `json:"attachments,omitempty"`
 	PreferredLanguage    string                  `json:"preferred_language,omitempty"`
@@ -144,6 +146,12 @@ func callbackIntent(i intent, cb *telegram.CallbackQuery) (intent, error) {
 		return normalized, err
 	}
 	if normalized, matched, err := registrationCallback(i, cb); matched {
+		return normalized, err
+	}
+	if normalized, matched, err := externalAgentCallback(i, cb.Data); matched {
+		return normalized, err
+	}
+	if normalized, matched, err := externalApprovalCallback(i, cb); matched {
 		return normalized, err
 	}
 	if cursor, ok := strings.CutPrefix(cb.Data, registrationPageCallback); ok {

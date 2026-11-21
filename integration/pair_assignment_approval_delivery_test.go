@@ -157,7 +157,7 @@ func TestPairAssignmentApprovalDoesNotFallbackWhenArgumentsDoNotMatchPreparation
 		f.H.peers.mu.Lock()
 		defer f.H.peers.mu.Unlock()
 		return len(f.H.peers.createAttempts)+f.H.peers.runGets >= 2
-	}, 5*time.Second, 10*time.Millisecond)
+	}, approvalRetryObservationTimeout, 10*time.Millisecond)
 	f.H.peers.mu.Lock()
 	for _, message := range f.H.peers.sent {
 		require.NotEqual(t, int64(12005), message.ChatID, "An unverifiable prompt must not offer consent")
@@ -215,7 +215,7 @@ func TestPairAssignmentApprovalRequiresCurrentEventAuthorityBeforeDisplay(t *tes
 		f.H.peers.mu.Lock()
 		defer f.H.peers.mu.Unlock()
 		return len(f.H.peers.createAttempts)+f.H.peers.runGets >= 2
-	}, 5*time.Second, 10*time.Millisecond)
+	}, approvalRetryObservationTimeout, 10*time.Millisecond)
 	f.H.peers.mu.Lock()
 	for _, message := range f.H.peers.sent {
 		require.NotEqual(

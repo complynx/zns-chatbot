@@ -38,6 +38,8 @@ const (
 )
 
 type Options struct {
+	ExternalAgentEnabled                        bool
+	ExternalAgentWrites                         bool
 	PersonalizationToken                        func(context.Context) (identity.Credential, error)
 	DebugApprovalJSON                           bool
 	AvatarRenderer                              avatar.Processor

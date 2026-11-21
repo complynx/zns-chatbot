@@ -35,33 +35,12 @@ func (s *Service) pendingApprovalMessages(
 	if !a.ExpiresAt.After(time.Now()) {
 		return nil, nil
 	}
-	if a.Method == "zinusya_pairs.assign" {
-		text, err := s.pairAssignmentApprovalText(ctx, *t, i, *a)
-		if err != nil {
-			return nil, err
-		}
-		return s.approvalContent(ctx, i, t.ID, *a, text), nil
-	}
-	if a.Method == "zinusya_payments.review_commit" {
-		text, err := s.paymentReviewApprovalText(ctx, *t, i, *a)
-		if err != nil {
-			return nil, err
-		}
-		return s.approvalContent(ctx, i, t.ID, *a, text), nil
-	}
-	if a.Method == "zinusya_order_payments.review_commit" {
-		text, err := s.orderReviewApprovalText(ctx, *t, i, *a)
-		if err != nil {
-			return nil, err
-		}
-		return s.approvalContent(ctx, i, t.ID, *a, text), nil
-	}
-	if a.Method != orderSubmitApprovalMethod && a.Method != mealSubmitApprovalMethod {
-		return s.approval(ctx, i, t.ID, *a), nil
-	}
-	text, nativeURL, err := s.orderApprovalText(ctx, *t, i, *a)
+	text, nativeURL, err := s.detailedApprovalText(ctx, t.UserID, i, *a)
 	if err != nil {
 		return nil, err
+	}
+	if text == "" {
+		return s.approval(ctx, i, t.ID, *a), nil
 	}
 	out := s.approvalContent(ctx, i, t.ID, *a, text)
 	if nativeURL == "" || len(out) == 0 {
@@ -89,9 +68,32 @@ func (s *Service) pendingApprovalMessages(
 	return append(form, out...), nil
 }
 
+// These methods require the full terms from an immutable service receipt.
+func (s *Service) detailedApprovalText(
+	ctx context.Context, userID uuid.UUID, i intent, a loom.Approval,
+) (string, string, error) {
+	switch a.Method {
+	case "zinusya_pairs.assign":
+		text, err := s.pairAssignmentApprovalText(ctx, userID, i, a)
+		return text, "", err
+	case "zinusya_payments.review_commit":
+		text, err := s.paymentReviewApprovalText(ctx, userID, i, a)
+		return text, "", err
+	case "zinusya_order_payments.review_commit":
+		text, err := s.orderReviewApprovalText(ctx, userID, i, a)
+		return text, "", err
+	case orderSubmitApprovalMethod, mealSubmitApprovalMethod:
+		return s.orderApprovalText(ctx, userID, i, a)
+	default:
+		return "", "", nil
+	}
+}
+
 // Order approval uses the immutable preparation receipt, not the mutable draft
 // or Loom's bounded description. The normal outbox splits all lines before consent.
-func (s *Service) orderApprovalText(ctx context.Context, t db.Task, i intent, a loom.Approval) (string, string, error) {
+func (s *Service) orderApprovalText(
+	ctx context.Context, userID uuid.UUID, i intent, a loom.Approval,
+) (string, string, error) {
 	operationID := a.BackendOperationID
 	if operationID == "" {
 		operationID = a.OperationID
@@ -109,7 +111,7 @@ func (s *Service) orderApprovalText(ctx context.Context, t db.Task, i intent, a 
 	if err = decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
 		return "", "", errors.New("trailing order approval arguments")
 	}
-	user, err := s.store.GetUser(ctx, t.UserID)
+	user, err := s.store.GetUser(ctx, userID)
 	if err != nil {
 		return "", "", err
 	}

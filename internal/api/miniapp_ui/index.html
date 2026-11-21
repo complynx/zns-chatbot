@@ -57,15 +57,19 @@
       <h1 id="details-title">Registration details</h1>
       <p id="details-note">Saved values are hidden. Filling these fields does not register you for an event.</p>
       <p id="details-status" role="status" aria-live="polite"></p>
-      <form id="details-name-form" autocomplete="off">
-        <label id="details-name-label" for="details-name">Legal full name</label>
-        <p id="details-name-presence"></p>
+      <form id="details-name-form" class="details-field" autocomplete="off">
+        <div class="details-field-head">
+          <label id="details-name-label" for="details-name">Legal full name</label>
+          <p id="details-name-presence"></p>
+        </div>
         <input id="details-name" name="legal_name" aria-describedby="details-name-presence details-note" autocomplete="off" spellcheck="false" autocapitalize="off" maxlength="256" required>
         <button id="details-save-name" type="submit">Save legal name</button>
       </form>
-      <form id="details-passport-form" autocomplete="off">
-        <label id="details-passport-label" for="details-passport">Passport number</label>
-        <p id="details-passport-presence"></p>
+      <form id="details-passport-form" class="details-field" autocomplete="off">
+        <div class="details-field-head">
+          <label id="details-passport-label" for="details-passport">Passport number</label>
+          <p id="details-passport-presence"></p>
+        </div>
         <input id="details-passport" name="passport_number" aria-describedby="details-passport-presence details-note" autocomplete="off" spellcheck="false" autocapitalize="off" maxlength="128" required>
         <button id="details-save-passport" type="submit">Save passport number</button>
       </form>

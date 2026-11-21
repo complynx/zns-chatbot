@@ -63,7 +63,7 @@ func baselineFreshDownUpAndPartialLegacyRefusal(t *testing.T) {
 		var version int64
 		require.NoError(t, s.Pool().QueryRow(t.Context(),
 			"SELECT max(version_id) FROM goose_db_version WHERE is_applied").Scan(&version))
-		require.EqualValues(t, 82, version)
+		require.EqualValues(t, 83, version)
 		_, err := provider.DownTo(t.Context(), 0)
 		require.NoError(t, err)
 		var tables int
@@ -149,6 +149,7 @@ SELECT user_id,1,'Анна Иванова','Анна','Иванова','user' FR
 	var objects string
 	const objectQuery = "SELECT array_agg(oid ORDER BY oid)::text FROM pg_class WHERE " +
 		"relnamespace=current_schema()::regnamespace " +
+		"AND NOT starts_with(relname,'shuttle_external_approval_') " +
 		"AND NOT starts_with(relname,'shuttle_telegram_availability') " +
 		"AND NOT starts_with(relname,'shuttle_user_names') " +
 		"AND NOT starts_with(relname,'shuttle_communication') " +

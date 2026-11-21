@@ -22,6 +22,7 @@ import (
 
 const (
 	maxUnits      = 4096
+	maxRuneUnits  = 2
 	bold          = "bold"
 	italic        = "italic"
 	strikethrough = "strikethrough"
@@ -33,8 +34,8 @@ const (
 
 // Message is a sendable chunk. Text is also the fallback after a formatting rejection.
 type Message struct {
-	Text     string
-	Entities []telegram.MessageEntity
+	Text     string                   `json:"text"`
+	Entities []telegram.MessageEntity `json:"entities,omitempty"`
 }
 
 type renderer struct {
@@ -53,6 +54,20 @@ func Render(markdown string, mentions map[int64]telegram.User) []Message {
 
 // People replaces verified account references with literal names and mentions.
 func People(markdown string, mentions map[int64]telegram.User, people map[string]telegram.User) []Message {
+	return renderPeople(markdown, mentions, people, maxUnits)
+}
+
+// MarkdownWithReserve renders Markdown and leaves space per chunk for a UTF-16 prefix.
+func MarkdownWithReserve(markdown string, reserve int) []Message {
+	return renderPeople(markdown, nil, nil, chunkLimit(reserve))
+}
+
+func renderPeople(
+	markdown string,
+	mentions map[int64]telegram.User,
+	people map[string]telegram.User,
+	limit int,
+) []Message {
 	source := []byte(strings.ToValidUTF8(markdown, "�"))
 	document := parser.New(parser.WithExtensions(extension.StrikethroughParser)).Parse(source)
 	r := renderer{source: source, mentions: mentions, people: people}
@@ -63,12 +78,22 @@ func People(markdown string, mentions map[int64]telegram.User, people map[string
 		}
 		return cmp.Compare(b.Length, a.Length)
 	})
-	return split(r.output.String(), r.entities)
+	return split(r.output.String(), r.entities, limit)
 }
 
 // Plain splits text without interpreting Markdown or adding entities.
 func Plain(value string) []Message {
-	return split(strings.ToValidUTF8(value, "�"), nil)
+	return PlainWithReserve(value, 0)
+}
+
+// PlainWithReserve leaves space per chunk for a UTF-16 prefix.
+func PlainWithReserve(value string, reserve int) []Message {
+	return split(strings.ToValidUTF8(value, "�"), nil, chunkLimit(reserve))
+}
+
+func chunkLimit(reserve int) int {
+	// Keep space for at least one rune even at the largest reservation.
+	return maxUnits - min(max(reserve, 0), maxUnits-maxRuneUnits)
 }
 
 var accountReference = regexp.MustCompile(`(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`)
@@ -289,7 +314,7 @@ func unitLen(value string) int {
 	return units
 }
 
-func split(value string, entities []telegram.MessageEntity) []Message {
+func split(value string, entities []telegram.MessageEntity, limit int) []Message {
 	var messages []Message
 	startByte, startUnit := 0, 0
 	for startByte < len(value) {
@@ -297,7 +322,7 @@ func split(value string, entities []telegram.MessageEntity) []Message {
 		for endByte < len(value) {
 			char, size := utf8.DecodeRuneInString(value[endByte:])
 			units := utf16.RuneLen(char)
-			if endUnit-startUnit+units > maxUnits {
+			if endUnit-startUnit+units > limit {
 				break
 			}
 			endByte += size
@@ -308,7 +333,7 @@ func split(value string, entities []telegram.MessageEntity) []Message {
 			if next < 0 {
 				break
 			}
-			keptStart := paddingStart(value, startByte, endByte+next)
+			keptStart := paddingStart(value, startByte, endByte+next, limit)
 			startUnit += unitLen(value[startByte:keptStart])
 			startByte = keptStart
 			continue
@@ -331,12 +356,12 @@ func split(value string, entities []telegram.MessageEntity) []Message {
 }
 
 // Keep as much indentation as fits with the next visible character. Telegram rejects blank chunks.
-func paddingStart(value string, start, content int) int {
+func paddingStart(value string, start, content, limit int) int {
 	char, _ := utf8.DecodeRuneInString(value[content:])
 	units := utf16.RuneLen(char)
 	for content > start {
 		previous, size := utf8.DecodeLastRuneInString(value[start:content])
-		if units+utf16.RuneLen(previous) > maxUnits {
+		if units+utf16.RuneLen(previous) > limit {
 			break
 		}
 		content -= size

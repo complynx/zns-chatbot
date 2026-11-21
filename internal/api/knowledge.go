@@ -81,5 +81,5 @@ func (s *Server) discoverKnowledge(ctx context.Context, in *AuthInput) (*agentDi
 	if err != nil {
 		return nil, knowledgeError(err)
 	}
-	return s.skillDiscoveryResult("zinusya_knowledge", knowledgeMethods(capabilities))
+	return s.skillDiscoveryResult(knowledgeModuleID, knowledgeMethods(capabilities))
 }

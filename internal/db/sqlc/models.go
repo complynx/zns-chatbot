@@ -253,6 +253,17 @@ type ShuttleEventRegistrationRule struct {
 	Document []byte    `json:"document"`
 }
 
+type ShuttleExternalApprovalMessage struct {
+	OperationID      uuid.UUID          `json:"operation_id"`
+	UserID           uuid.UUID          `json:"user_id"`
+	MessageID        pgtype.Int8        `json:"message_id"`
+	PresentationHash []byte             `json:"presentation_hash"`
+	NextPart         int32              `json:"next_part"`
+	DeliveryAttempt  uuid.UUID          `json:"delivery_attempt"`
+	LeaseUntil       pgtype.Timestamptz `json:"lease_until"`
+	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
+}
+
 type ShuttleFile struct {
 	ID         uuid.UUID          `json:"id"`
 	UserID     uuid.UUID          `json:"user_id"`

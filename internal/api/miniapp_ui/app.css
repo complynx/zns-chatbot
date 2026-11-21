@@ -35,7 +35,68 @@ label { display: block; margin: 16px 0 6px; }
 input, select { box-sizing: border-box; width: 100%; padding: 8px; border: 1px solid GrayText; border-radius: 4px; font: inherit; color: FieldText; background: Field; }
 form button, select + .actions { margin-top: 12px; }
 
-#details > .actions { margin-top: 12px; }
+/* Registration details. Telegram sets the --tg-theme-* variables and updates
+   them on theme change. Newer parameters fall back to Bot API 6.0 ones, then to
+   CSS system colors. */
+#details {
+  --details-text: var(--tg-theme-text-color, CanvasText);
+  --details-hint: var(--tg-theme-hint-color, GrayText);
+  --details-separator: var(--tg-theme-section-separator-color, var(--details-hint));
+  --details-accent: var(--tg-theme-accent-text-color, var(--tg-theme-link-color, LinkText));
+  --details-alert: var(--tg-theme-destructive-text-color, var(--details-text));
+  --details-field-bg: var(--tg-theme-bg-color, Field);
+  --details-field-text: var(--tg-theme-text-color, FieldText);
+  --details-button: var(--tg-theme-button-color, CanvasText);
+  --details-button-text: var(--tg-theme-button-text-color, Canvas);
+  /* Telegram device and content safe-area insets. The section adds only what
+     main's 24px gutter and centering margin do not cover, so zero insets add no padding. */
+  --details-gutter: calc(24px + max(0px, (100vw - 32rem - 48px) / 2));
+  padding-left: max(0px, var(--tg-safe-area-inset-left, 0px) + var(--tg-content-safe-area-inset-left, 0px) - var(--details-gutter));
+  padding-right: max(0px, var(--tg-safe-area-inset-right, 0px) + var(--tg-content-safe-area-inset-right, 0px) - var(--details-gutter));
+}
+/* Only the last visible section reaches main's 24px bottom gutter. */
+#details:not(:has(~ section:not([hidden]))) {
+  padding-bottom: max(0px, var(--tg-safe-area-inset-bottom, 0px) + var(--tg-content-safe-area-inset-bottom, 0px) - 24px);
+}
+#details-note { margin: 0 0 16px; font-size: 14px; line-height: 1.4; }
+#details-status { margin: 0 0 16px; }
+#details-status:empty { display: none; }
+/* Hint and destructive colors can fall under 4.5:1, so the text keeps the text color and the border marks the alert. */
+#details-status.details-alert { padding-left: 12px; border-left: 2px solid var(--details-alert); }
+#details .details-field { padding: 16px 0; border-top: 1px solid var(--details-separator); }
+#details .details-field-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 12px; margin-bottom: 8px; }
+#details .details-field-head label { margin: 0; font-weight: 500; }
+#details .details-field-head p { margin: 0; font-size: 14px; }
+/* 16px text keeps iOS from zooming on focus; 44px keeps touch targets usable. */
+#details input {
+  -webkit-appearance: none;
+  appearance: none;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--details-text);
+  border-radius: 8px;
+  background: var(--details-field-bg);
+  color: var(--details-field-text);
+  font-size: 16px;
+}
+#details input:focus { outline: 2px solid var(--details-accent); outline-offset: -1px; border-color: transparent; }
+#details input:disabled { opacity: .6; }
+#details button { min-height: 44px; padding: 10px 16px; border-radius: 8px; font-weight: 500; -webkit-tap-highlight-color: transparent; }
+/* The global focus ring uses currentColor, which is invisible around a filled button. */
+#details button:focus-visible { outline: 2px solid var(--details-accent); outline-offset: 2px; }
+#details button:not(:disabled):active { opacity: .7; }
+#details .details-field button {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  border: 0;
+  background: var(--details-button);
+  color: var(--details-button-text);
+  font-size: 19px;
+  font-weight: 700;
+}
+#details > .actions { margin: 0; padding-top: 16px; border-top: 1px solid var(--details-separator); }
+#details-refresh { width: 100%; border: 1px solid var(--details-hint); background: transparent; color: var(--details-text); }
 
 #orders > .actions { margin-top: 12px; }
 #orders-items input { max-width: 8rem; }

@@ -110,5 +110,5 @@ func (s *Service) registrationDetailsEntry(
 			},
 		},
 	)
-	return s.finishRegistration(ctx, t, c, i, text, keyboard, ru)
+	return s.finishStructuredKeyboard(ctx, t, c, i, text, keyboard, ru)
 }

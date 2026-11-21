@@ -4,7 +4,7 @@ import "github.com/complynx/zns-chatbot/internal/payments"
 
 func paymentModule() map[string]any {
 	return map[string]any{
-		"id":                "zinusya_payments",
+		"id":                paymentsModuleID,
 		manifestDescription: "Pending evidence and human-confirmed pass deposits/top-ups",
 		manifestPermissions: []string{},
 		manifestDiscovery:   "dynamic",
