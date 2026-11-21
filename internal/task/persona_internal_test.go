@@ -14,9 +14,9 @@ import (
 func TestPersonaPromptSelectsOneLocaleAndFallsBackToEnglish(t *testing.T) {
 	t.Parallel()
 	ru, en := personaPrompt("ru"), personaPrompt("en")
-	require.Contains(t, ru, "Ты — ЗиНуСя (ZiNuSya)")
+	require.Contains(t, ru, "Инструкции сервиса:")
 	require.NotContains(t, ru, "Service instructions:")
-	require.Contains(t, en, "You are ZiNuSya (ЗиНуСя)")
+	require.Contains(t, en, "Service instructions:")
 	require.NotContains(t, en, "Инструкции сервиса:")
 	require.Equal(t, en, personaPrompt("de"))
 	for _, text := range []string{ru, en} {
