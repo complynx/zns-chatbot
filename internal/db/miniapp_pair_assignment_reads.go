@@ -29,6 +29,12 @@ type MiniAppPairAssignmentCandidates struct {
 func (s *Store) beginPairAssignmentRead(ctx context.Context, scope PaymentScope,
 	event uuid.UUID, session MiniAppPairAssignmentSession,
 ) (pgx.Tx, *sqlc.Queries, error) {
+	return s.beginPassAdminRead(ctx, scope, event, &session)
+}
+
+func (s *Store) beginPassAdminRead(ctx context.Context, scope PaymentScope, event uuid.UUID,
+	session *MiniAppPairAssignmentSession,
+) (pgx.Tx, *sqlc.Queries, error) {
 	if !paymentScopeValid(scope, "read") {
 		return nil, nil, registrations.ErrInvalid
 	}
@@ -41,7 +47,7 @@ func (s *Store) beginPairAssignmentRead(ctx context.Context, scope PaymentScope,
 		err = lockPairAssignmentAuthority(ctx, q, scope, event)
 	}
 	if err == nil {
-		err = authorizePairAssignmentMiniApp(ctx, q, scope, &session)
+		err = authorizePairAssignmentMiniApp(ctx, q, scope, session)
 	}
 	if err != nil {
 		_ = tx.Rollback(ctx)
@@ -61,6 +67,8 @@ func (s *Store) MiniAppPairAssignmentEvents(ctx context.Context, scope PaymentSc
 	rows, err := q.ListPairAssignmentEvents(ctx, sqlc.ListPairAssignmentEventsParams{
 		UserID: scope.UserID, Subject: scope.Subject, BotID: scope.BotID, OrganizationID: scope.Organization,
 		AfterID: after, GlobalAdmin: scope.GlobalAdmin, PageLimit: pairReadPageLimit + 1,
+		// The same picker opens the pass roster for historical returns and refunds.
+		IncludeRegistrationHistory: true,
 	})
 	if err != nil {
 		return MiniAppAssignmentEvents{}, err

@@ -309,7 +309,7 @@ func TestPairConsentPreservesSoloHistoryAndBlocksSingletonAssignment(t *testing.
 	require.Nil(t, a.Pass)
 	require.Nil(t, b.Pass)
 	require.Equal(t, f.Entry.RequestedAt, a.RequestedAt)
-	require.Equal(t, b.RequestedAt, accepted.Pair.QueuedAt)
+	require.Equal(t, a.RequestedAt, accepted.Pair.QueuedAt)
 	require.Equal(t, b.ID, accepted.Pair.FollowerRegistrationID)
 	soloArgs.ExpectedVersion = a.Version
 	_, err = f.H.store.PrepareAssignment(ctx, f.A.EventScope, "registration-admin", "paired-solo", soloArgs)

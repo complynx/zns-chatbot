@@ -4,6 +4,7 @@ window.createZinusyaPairAssignments = env => {
   const names = ["title", "note", "status", "event-label", "event", "events-first", "events-next", "target-label", "target", "targets-first", "targets-next", "prepare", "preview", "consent", "consent-label", "confirm", "close", "recover", "retry", "receipt", "pending-title", "pending", "reload", "recent", "first", "next"];
   const el = Object.fromEntries(names.map(n => [n, document.getElementById("ppa-" + n)]));
   const section = document.getElementById("pair-assignments");
+  const passAdmin = window.createZinusyaPassAdmin?.(env);
   const words = {
     en: { title: "Assign passes to a pair", note: "Administrator tools. Select a waiting-list pair, review the exact terms and confirm. No payment is recorded.", "event-label": "Event", "target-label": "Pair", chooseEvent: "Select an event", chooseTarget: "Select a pair", "events-first": "Refresh events", "events-next": "Next events", "targets-first": "Refresh pairs", "targets-next": "Next pairs", prepare: "Review pair assignment", "consent-label": "I approve this exact pair assignment and its terms", confirm: "Assign both passes", retryConfirm: "Retry this exact confirmation", close: "Close local preview", recover: "Check earlier request", retry: "Retry the same preparation", "pending-title": "Unfinished assignments", reload: "Reload unfinished assignments", recent: "Recent form operations", recentEmpty: "No recent form operations.", first: "First proposals", next: "Next proposals", choose: "Review proposal", empty: "No unfinished assignments on this page.", prepared: "Review the original terms before confirming.", completed: "This earlier operation completed. The receipt is historical.", expired: "This proposal expired. It cannot authorize another assignment.", historical: "Earlier assignment result", expiry: "Confirm before", closeNote: "Closing removes this local preview. It does not cancel the proposal on the server.", unavailable: "Could not read data. Retry the same read.", unknown: "Result unknown. Check the same operation before starting another assignment.", notArrived: "No saved proposal was found. You may retry the same preparation with its original identifiers and versions.", conflict: "The registration or proposal changed. Check the earlier operation and review its result.", storage: "Recovery identifiers could not be saved. You can inspect server proposals and receipts; new changes are blocked.", blocked: "Saved recovery identifiers cannot be read. You can inspect server proposals and receipts; new changes are blocked.", price: "Price", tier: "Tier", deposit: "Required deposit", minimum: "Minimum amount", share: "Minimum share", leader: "Leader", follower: "Follower", role: "Role", version: "Version", recipient: "Recipient", event: "Event", window: "Payment evidence window after assignment", cap: "No later than", registration: "Registration", final: "Final payment deadline", due: "Evidence deadline", timezone: "Event timezone", noTarget: "No waiting-list pairs on this page." },
     ru: { title: "Назначить пассы паре", note: "Инструменты администратора. Выбери пару из очереди, проверь точные условия и подтверди. Оплата не фиксируется.", "event-label": "Эвент", "target-label": "Пара", chooseEvent: "Выбери эвент", chooseTarget: "Выбери пару", "events-first": "Обновить эвенты", "events-next": "Следующие эвенты", "targets-first": "Обновить пары", "targets-next": "Следующие пары", prepare: "Проверить назначение пассов паре", "consent-label": "Подтверждаю назначение обоих пассов этой паре на указанных условиях", confirm: "Назначить оба пасса", retryConfirm: "Повторить именно это подтверждение", close: "Закрыть локальный предпросмотр", recover: "Проверить прежний запрос", retry: "Повторить ту же подготовку", "pending-title": "Незавершённые назначения", reload: "Обновить незавершённые назначения", recent: "Недавние операции формы", recentEmpty: "Недавних операций формы нет.", first: "Первая страница предложений", next: "Следующие предложения", choose: "Проверить предложение", empty: "На этой странице нет незавершённых назначений.", prepared: "Проверь исходные условия перед подтверждением.", completed: "Прежняя операция завершена. Квитанция показывает исторический результат.", expired: "Предложение истекло и не разрешает новое назначение.", historical: "Результат прежнего назначения", expiry: "Подтвердить до", closeNote: "Закрытие убирает только локальный предпросмотр. Предложение на сервере не отменяется.", unavailable: "Не удалось прочитать данные. Повтори чтение.", unknown: "Результат неизвестен. Проверь ту же операцию перед новым назначением.", notArrived: "Сохранённое предложение не найдено. Можно повторить ту же подготовку с исходными идентификаторами и версиями.", conflict: "Регистрация или предложение изменились. Проверь прежнюю операцию и её результат.", storage: "Не удалось сохранить идентификаторы восстановления. Предложения и квитанции сервера доступны для просмотра. Новые изменения заблокированы.", blocked: "Не удалось прочитать сохранённые идентификаторы восстановления. Предложения и квитанции сервера доступны для просмотра. Новые изменения заблокированы.", price: "Цена", tier: "Тариф", deposit: "Требуемая предоплата", minimum: "Минимальная сумма", share: "Минимальная доля", leader: "Лидер", follower: "Фолловер", role: "Роль", version: "Версия", recipient: "Получатель", event: "Эвент", window: "Срок отправки подтверждения после назначения", cap: "Не позднее", registration: "Регистрация", final: "Срок доплаты", due: "Срок отправки подтверждения", timezone: "Таймзона эвента", noTarget: "На этой странице нет пар в очереди." }
@@ -44,19 +45,25 @@ window.createZinusyaPairAssignments = env => {
     record = r;
   }
   function clear() {
+    passAdmin?.clear();
     epoch++; owner = record = view = eventsAfter = eventsNext = targetsAfter = targetsNext = after = next = undefined;
     storageIssue = undefined; events = []; targets = []; proposals = []; eventCache.clear(); ready = working = blocked = missing = recentMode = false;
     for (const n of ["preview", "receipt", "pending", "event", "target"]) el[n].replaceChildren();
     el.event.value = el.target.value = el.status.textContent = ""; el.consent.checked = false; section.hidden = true; controls();
   }
   const selectedEvent = () => eventCache.get(el.event.value);
+  const assignmentEnabled = () => {
+    const modules = selectedEvent()?.document.modules;
+    return Array.isArray(modules) && modules.includes("registrations");
+  };
   const selectedTarget = () => targets.find(t => t.pair.id === el.target.value);
   const pending = () => view?.state === "pending" && Date.parse(view.preparation.expires_at) > Date.now();
   const canClose = () => record && (record.phase !== "confirm" || ["completed", "expired"].includes(view?.state));
   function controls() {
     const busy = locked || working || !owner;
-    el.event.disabled = el.target.disabled = busy || blocked || !!record || !ready;
-    el.prepare.disabled = busy || blocked || !!record || !ready || !selectedEvent() || !selectedTarget() || selectedTarget().pair.state !== "waitlisted";
+    el.event.disabled = busy || blocked || !!record || !ready;
+    el.target.disabled = el.event.disabled || !assignmentEnabled();
+    el.prepare.disabled = el.target.disabled || !selectedTarget() || selectedTarget().pair.state !== "waitlisted";
     el.consent.hidden = el["consent-label"].hidden = blocked || !pending();
     el.consent.disabled = busy || blocked || !pending();
     el.confirm.hidden = !view || view.state !== "pending";
@@ -71,7 +78,7 @@ window.createZinusyaPairAssignments = env => {
     for (const b of el.pending.querySelectorAll("button")) b.disabled = busy || (!!record && !blocked);
     for (const [first, more, previous, following] of [["events-first", "events-next", eventsAfter, eventsNext], ["targets-first", "targets-next", targetsAfter, targetsNext], ["first", "next", after, next]]) {
       el[first].hidden = !["events-first", "targets-first"].includes(first) && !previous; el[more].hidden = !following;
-      el[first].disabled = el[more].disabled = busy || (!!record && !blocked) || (first === "targets-first" && !selectedEvent());
+      el[first].disabled = el[more].disabled = busy || (!!record && !blocked) || (first === "targets-first" && !assignmentEnabled());
     }
   }
   function money(q) {
@@ -155,6 +162,7 @@ window.createZinusyaPairAssignments = env => {
     el.target.value = targets.some(t => t.pair.id === target) ? target : "";
   }
   function labels() {
+    passAdmin?.language(locale);
     for (const n of ["title", "note", "event-label", "target-label", "events-first", "events-next", "targets-first", "targets-next", "prepare", "consent-label", "confirm", "close", "recover", "retry", "pending-title", "reload", "recent", "first", "next"]) el[n].textContent = w()[n];
     options(); render();
   }
@@ -175,13 +183,15 @@ window.createZinusyaPairAssignments = env => {
   }
   const cursorValid = p => p.next == null || uuid(p.next);
   async function loadEvents(e, cursor) {
+    passAdmin?.clear();
     const p = await call(e, "events" + (cursor ? "?after=" + encodeURIComponent(cursor) : ""));
     if (!Array.isArray(p.events) || p.events.length > 20 || p.events.some(v => !validEvent(v)) || !cursorValid(p)) throw new Error("Invalid events");
     events = p.events; for (const event of events) eventCache.set(event.id, event);
     eventsAfter = cursor; eventsNext = p.next; targets = []; targetsAfter = targetsNext = undefined; el.event.value = el.target.value = ""; options(); controls();
   }
   async function loadTargets(e, cursor) {
-    const event = selectedEvent(); if (!event) return;
+    if (!assignmentEnabled()) return;
+    const event = selectedEvent();
     const p = await call(e, "events/" + event.id + "/candidates" + (cursor ? "?after=" + encodeURIComponent(cursor) : ""));
     if (!Array.isArray(p.candidates) || p.candidates.length > 20 || p.candidates.some(v => !validTarget(v) || v.pair.event_id !== event.id) || !cursorValid(p)) throw new Error("Invalid pairs");
     targets = p.candidates; targetsAfter = cursor; targetsNext = p.next; el.target.value = ""; options();
@@ -222,11 +232,17 @@ window.createZinusyaPairAssignments = env => {
     persist({ ...record, proposal_id: p.proposal_id, phase: "prepared" });
     await recover(e);
   }
-  el.event.addEventListener("change", () => run(async e => { targets = []; el.target.value = ""; options(); await loadTargets(e); }));
+  el.event.addEventListener("change", () => run(async e => {
+    targets = []; targetsAfter = targetsNext = undefined;
+    el.target.value = el.status.textContent = "";
+    options();
+    await passAdmin?.select(el.event.value, locale);
+    await loadTargets(e);
+  }));
   el.target.addEventListener("change", controls); el.consent.addEventListener("change", controls);
   el.prepare.addEventListener("click", () => run(async e => {
-    const event = selectedEvent(), target = selectedTarget();
-    if (blocked || record || !ready || !event || !target || target.pair.state !== "waitlisted") return;
+    const target = selectedTarget();
+    if (blocked || record || !ready || !assignmentEnabled() || !target || target.pair.state !== "waitlisted") return;
     persist({ owner, operation_id: crypto.randomUUID(), phase: "prepare", arguments: { ...target.arguments } });
     await prepare(e);
   }));
@@ -253,7 +269,7 @@ window.createZinusyaPairAssignments = env => {
   el["targets-next"].addEventListener("click", () => run(e => loadTargets(e, targetsNext)));
   el.first.addEventListener("click", () => run(e => loadPending(e)));
   el.next.addEventListener("click", () => run(e => loadPending(e, next)));
-  return { clear, setBusy(v) { locked = v; controls(); }, setLanguage(value) { locale = /^(ru|be|uk)(-|$)/i.test(value) ? "ru" : "en"; labels(); },
+  return { clear, setBusy(v) { locked = v; passAdmin?.setBusy(v); controls(); }, setLanguage(value) { locale = /^(ru|be|uk)(-|$)/i.test(value) ? "ru" : "en"; labels(); },
     async start(value, language) {
       clear(); if (!uuid(value)) return; owner = value; section.hidden = false; working = true; env.setBusy(true); locale = /^(ru|be|uk)(-|$)/i.test(language) ? "ru" : "en"; labels(); const e = epoch;
       try {

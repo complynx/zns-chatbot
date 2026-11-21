@@ -51,7 +51,12 @@ func detailsMissingSchema() map[string]any {
 		manifestType: schemaArray,
 		schemaItems: map[string]any{
 			manifestType: schemaString,
-			schemaEnum:   []string{string(registrationdetails.LegalName), string(registrationdetails.PassportNumber)},
+			schemaEnum: []registrationdetails.Field{
+				registrationdetails.LegalName,
+				registrationdetails.PassportNumber,
+				registrationdetails.PassportCountry,
+				registrationdetails.PassportPhoto,
+			},
 		},
 	}
 }

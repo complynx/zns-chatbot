@@ -58,6 +58,18 @@ function browser(api, { storage = new Map(), failSet = false, failRemove = false
     checkbox: () => get("pairs-list").querySelectorAll().find(v => v.tag === "input") };
 }
 const writes = b => b.calls.filter(v => v.method === "POST");
+test("a pass sale shows its pair command while existing invitations keep their decision controls", async () => {
+  const api = backend(), b = browser(api);
+  api.context = { event_id: eventID, pass_command: "/passes summer --pair" };
+  await b.start(); await b.invite();
+  assert.equal(b.get("pairs-context").textContent, api.context.pass_command);
+  for (const id of ["code", "target", "invite"]) assert.equal(b.get("pairs-" + id).hidden, true);
+  assert.equal(writes(b).length, 0);
+  await b.buttons()[1].listeners.click();
+  assert.equal(writes(b)[0].path, "./pairs/decline");
+  assert.equal(b.get("pairs-context").textContent, api.context.pass_command);
+  assert.equal(b.get("pairs-invite").hidden, true);
+});
 test("native invitation loads fresh role, holds only after explicit send and keeps text inert", async () => {
   const api = backend(), b = browser(api); await b.start(); assert.equal(writes(b).length, 0);
   assert.equal(b.get("pairs-code").textContent, owner);

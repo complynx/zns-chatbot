@@ -14,6 +14,8 @@ import (
 
 // RegistrationEntry is an immutable event/version choice presented to one owner.
 type RegistrationEntry struct {
+	IssueInvite     bool   `json:"issue_invite,omitempty"`
+	ClaimInviteCode string `json:"claim_invite_code,omitempty"`
 	// DetailsOperation binds a native task to an atomic missing-details outcome.
 	// It is a transport guard, not part of the canonical registration receipt.
 	DetailsOperation uuid.UUID `json:"-"`

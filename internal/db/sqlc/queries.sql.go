@@ -918,8 +918,8 @@ func (q *Queries) CountOwnPartyMassages(ctx context.Context, arg CountOwnPartyMa
 }
 
 const createEvent = `-- name: CreateEvent :one
-INSERT INTO shuttle_events(id,bot_id,organization_id,name,timezone,starts_at,ends_at,modules)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(id) DO NOTHING RETURNING id, bot_id, organization_id, name, timezone, starts_at, ends_at, modules, version
+INSERT INTO shuttle_events(id,bot_id,organization_id,name,timezone,starts_at,ends_at,modules,slug)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(id) DO NOTHING RETURNING id, bot_id, organization_id, name, timezone, starts_at, ends_at, modules, version, slug
 `
 
 type CreateEventParams struct {
@@ -931,6 +931,7 @@ type CreateEventParams struct {
 	StartsAt       pgtype.Timestamptz `json:"starts_at"`
 	EndsAt         pgtype.Timestamptz `json:"ends_at"`
 	Modules        []string           `json:"modules"`
+	Slug           string             `json:"slug"`
 }
 
 func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) (ShuttleEvent, error) {
@@ -943,6 +944,7 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) (Shutt
 		arg.StartsAt,
 		arg.EndsAt,
 		arg.Modules,
+		arg.Slug,
 	)
 	var i ShuttleEvent
 	err := row.Scan(
@@ -955,6 +957,7 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) (Shutt
 		&i.EndsAt,
 		&i.Modules,
 		&i.Version,
+		&i.Slug,
 	)
 	return i, err
 }
@@ -1033,6 +1036,15 @@ func (q *Queries) CreatePass(ctx context.Context, arg CreatePassParams) (Shuttle
 	return i, err
 }
 
+const createPassAssignmentNotice = `-- name: CreatePassAssignmentNotice :exec
+INSERT INTO shuttle_pass_assignment_notices(pass_id) VALUES($1)
+`
+
+func (q *Queries) CreatePassAssignmentNotice(ctx context.Context, passID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, createPassAssignmentNotice, passID)
+	return err
+}
+
 const createPassDepositPolicy = `-- name: CreatePassDepositPolicy :exec
 INSERT INTO shuttle_pass_deposit_policy(pass_id,document) VALUES($1,$2)
 `
@@ -1048,17 +1060,25 @@ func (q *Queries) CreatePassDepositPolicy(ctx context.Context, arg CreatePassDep
 }
 
 const createPassTier = `-- name: CreatePassTier :exec
-INSERT INTO shuttle_pass_tiers(pass_id,tier_id,tier_number) VALUES($1,$2,$3)
+INSERT INTO shuttle_pass_tiers(pass_id,tier_id,tier_number,promo)
+SELECT p.id,$1::text,$2::int,
+    COALESCE(e.document#>'{pricing,tiers}' @> jsonb_build_array(
+        jsonb_build_object('id',$1::text,'promo',true)),false)
+    OR EXISTS(SELECT FROM shuttle_pass_promo_choices c WHERE c.event_id=r.event_id AND c.user_id=r.user_id
+        AND c.tier_id=$1::text AND c.awarded_role=r.role)
+FROM shuttle_passes p JOIN shuttle_registrations r ON r.id=p.registration_id
+LEFT JOIN shuttle_event_registration_rules e ON e.event_id=r.event_id
+WHERE p.id=$3
 `
 
 type CreatePassTierParams struct {
-	PassID     uuid.UUID `json:"pass_id"`
 	TierID     string    `json:"tier_id"`
 	TierNumber int32     `json:"tier_number"`
+	PassID     uuid.UUID `json:"pass_id"`
 }
 
 func (q *Queries) CreatePassTier(ctx context.Context, arg CreatePassTierParams) error {
-	_, err := q.db.Exec(ctx, createPassTier, arg.PassID, arg.TierID, arg.TierNumber)
+	_, err := q.db.Exec(ctx, createPassTier, arg.TierID, arg.TierNumber, arg.PassID)
 	return err
 }
 
@@ -2135,7 +2155,7 @@ func (q *Queries) GetDeployment(ctx context.Context) (GetDeploymentRow, error) {
 }
 
 const getEvent = `-- name: GetEvent :one
-SELECT id, bot_id, organization_id, name, timezone, starts_at, ends_at, modules, version FROM shuttle_events WHERE id=$1 AND bot_id=$2 AND organization_id=$3
+SELECT id, bot_id, organization_id, name, timezone, starts_at, ends_at, modules, version, slug FROM shuttle_events WHERE id=$1 AND bot_id=$2 AND organization_id=$3
 `
 
 type GetEventParams struct {
@@ -2157,6 +2177,7 @@ func (q *Queries) GetEvent(ctx context.Context, arg GetEventParams) (ShuttleEven
 		&i.EndsAt,
 		&i.Modules,
 		&i.Version,
+		&i.Slug,
 	)
 	return i, err
 }
@@ -2196,7 +2217,7 @@ func (q *Queries) GetEventChangeProposal(ctx context.Context, arg GetEventChange
 }
 
 const getEventConfiguration = `-- name: GetEventConfiguration :one
-SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version,r.document AS registration_rules,d.document AS deposit_policy FROM shuttle_events e
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version, e.slug,r.document AS registration_rules,d.document AS deposit_policy FROM shuttle_events e
 LEFT JOIN shuttle_event_registration_rules r ON r.event_id=e.id
 LEFT JOIN shuttle_event_deposit_policy d ON d.event_id=e.id
 WHERE e.id=$1 AND e.bot_id=$2 AND e.organization_id=$3
@@ -2227,6 +2248,7 @@ func (q *Queries) GetEventConfiguration(ctx context.Context, arg GetEventConfigu
 		&i.ShuttleEvent.EndsAt,
 		&i.ShuttleEvent.Modules,
 		&i.ShuttleEvent.Version,
+		&i.ShuttleEvent.Slug,
 		&i.RegistrationRules,
 		&i.DepositPolicy,
 	)
@@ -2770,6 +2792,43 @@ func (q *Queries) GetPairAssignmentProposal(ctx context.Context, arg GetPairAssi
 	return i, err
 }
 
+const getPairForAssignment = `-- name: GetPairForAssignment :one
+SELECT p.id, p.event_id, p.leader_registration_id, p.follower_registration_id, p.state, p.version, p.queued_at, p.created_at, p.assigned_at, p.dissolved_at, EXISTS(
+  SELECT 1 FROM shuttle_pass_invites i WHERE i.pair_id=p.id
+  AND i.inviter_registration_id IN (p.leader_registration_id,p.follower_registration_id)
+) AS from_pass_invite
+FROM shuttle_pairs p WHERE p.id=$1 AND p.event_id=$2
+`
+
+type GetPairForAssignmentParams struct {
+	ID      uuid.UUID `json:"id"`
+	EventID uuid.UUID `json:"event_id"`
+}
+
+type GetPairForAssignmentRow struct {
+	ShuttlePair    ShuttlePair `json:"shuttle_pair"`
+	FromPassInvite bool        `json:"from_pass_invite"`
+}
+
+func (q *Queries) GetPairForAssignment(ctx context.Context, arg GetPairForAssignmentParams) (GetPairForAssignmentRow, error) {
+	row := q.db.QueryRow(ctx, getPairForAssignment, arg.ID, arg.EventID)
+	var i GetPairForAssignmentRow
+	err := row.Scan(
+		&i.ShuttlePair.ID,
+		&i.ShuttlePair.EventID,
+		&i.ShuttlePair.LeaderRegistrationID,
+		&i.ShuttlePair.FollowerRegistrationID,
+		&i.ShuttlePair.State,
+		&i.ShuttlePair.Version,
+		&i.ShuttlePair.QueuedAt,
+		&i.ShuttlePair.CreatedAt,
+		&i.ShuttlePair.AssignedAt,
+		&i.ShuttlePair.DissolvedAt,
+		&i.FromPassInvite,
+	)
+	return i, err
+}
+
 const getPairInvitation = `-- name: GetPairInvitation :one
 SELECT id, event_id, inviter_registration_id, target_user_id, state, version, created_at, expires_at, decided_at, pair_id FROM shuttle_pair_invitations WHERE id=$1 AND event_id=$2
 `
@@ -2952,13 +3011,18 @@ func (q *Queries) GetPass(ctx context.Context, registrationID uuid.UUID) (Shuttl
 }
 
 const getPassTier = `-- name: GetPassTier :one
-SELECT pass_id, tier_id, tier_number FROM shuttle_pass_tiers WHERE pass_id=$1
+SELECT pass_id, tier_id, tier_number, promo FROM shuttle_pass_tiers WHERE pass_id=$1
 `
 
 func (q *Queries) GetPassTier(ctx context.Context, passID uuid.UUID) (ShuttlePassTier, error) {
 	row := q.db.QueryRow(ctx, getPassTier, passID)
 	var i ShuttlePassTier
-	err := row.Scan(&i.PassID, &i.TierID, &i.TierNumber)
+	err := row.Scan(
+		&i.PassID,
+		&i.TierID,
+		&i.TierNumber,
+		&i.Promo,
+	)
 	return i, err
 }
 
@@ -3137,7 +3201,7 @@ func (q *Queries) GetRegistrationByID(ctx context.Context, arg GetRegistrationBy
 }
 
 const getRegistrationDetails = `-- name: GetRegistrationDetails :one
-SELECT user_id, version, encrypted_record, legal_name_present, passport_number_present FROM shuttle_registration_details WHERE user_id=$1
+SELECT user_id, version, encrypted_record, legal_name_present, passport_number_present, passport_country_present, passport_photo_present FROM shuttle_registration_details WHERE user_id=$1
 `
 
 func (q *Queries) GetRegistrationDetails(ctx context.Context, userID uuid.UUID) (ShuttleRegistrationDetail, error) {
@@ -3149,12 +3213,14 @@ func (q *Queries) GetRegistrationDetails(ctx context.Context, userID uuid.UUID) 
 		&i.EncryptedRecord,
 		&i.LegalNamePresent,
 		&i.PassportNumberPresent,
+		&i.PassportCountryPresent,
+		&i.PassportPhotoPresent,
 	)
 	return i, err
 }
 
 const getRegistrationDetailsRequest = `-- name: GetRegistrationDetailsRequest :one
-SELECT id, user_id, event_id, event_version, event_timezone, legal_name_required, passport_number_required, created_at, expires_at, completed_at, completed_details_version, superseded_at FROM shuttle_registration_details_requests WHERE id=$1 AND user_id=$2
+SELECT id, user_id, event_id, event_version, event_timezone, legal_name_required, passport_number_required, created_at, expires_at, completed_at, completed_details_version, superseded_at, passport_countries, passport_photo_required FROM shuttle_registration_details_requests WHERE id=$1 AND user_id=$2
 `
 
 type GetRegistrationDetailsRequestParams struct {
@@ -3178,6 +3244,34 @@ func (q *Queries) GetRegistrationDetailsRequest(ctx context.Context, arg GetRegi
 		&i.CompletedAt,
 		&i.CompletedDetailsVersion,
 		&i.SupersededAt,
+		&i.PassportCountries,
+		&i.PassportPhotoRequired,
+	)
+	return i, err
+}
+
+const getRegistrationDetailsStatus = `-- name: GetRegistrationDetailsStatus :one
+SELECT version, legal_name_present, passport_number_present, passport_country_present, passport_photo_present
+FROM shuttle_registration_details WHERE user_id=$1
+`
+
+type GetRegistrationDetailsStatusRow struct {
+	Version                int64 `json:"version"`
+	LegalNamePresent       bool  `json:"legal_name_present"`
+	PassportNumberPresent  bool  `json:"passport_number_present"`
+	PassportCountryPresent bool  `json:"passport_country_present"`
+	PassportPhotoPresent   bool  `json:"passport_photo_present"`
+}
+
+func (q *Queries) GetRegistrationDetailsStatus(ctx context.Context, userID uuid.UUID) (GetRegistrationDetailsStatusRow, error) {
+	row := q.db.QueryRow(ctx, getRegistrationDetailsStatus, userID)
+	var i GetRegistrationDetailsStatusRow
+	err := row.Scan(
+		&i.Version,
+		&i.LegalNamePresent,
+		&i.PassportNumberPresent,
+		&i.PassportCountryPresent,
+		&i.PassportPhotoPresent,
 	)
 	return i, err
 }
@@ -6625,7 +6719,7 @@ func (q *Queries) LatestOrderReviewRevision(ctx context.Context, arg LatestOrder
 }
 
 const latestRegistrationDetailsRequest = `-- name: LatestRegistrationDetailsRequest :one
-SELECT id, user_id, event_id, event_version, event_timezone, legal_name_required, passport_number_required, created_at, expires_at, completed_at, completed_details_version, superseded_at FROM shuttle_registration_details_requests WHERE user_id=$1 AND event_id=$2 AND superseded_at IS NULL
+SELECT id, user_id, event_id, event_version, event_timezone, legal_name_required, passport_number_required, created_at, expires_at, completed_at, completed_details_version, superseded_at, passport_countries, passport_photo_required FROM shuttle_registration_details_requests WHERE user_id=$1 AND event_id=$2 AND superseded_at IS NULL
 ORDER BY created_at DESC,id DESC LIMIT 1
 `
 
@@ -6650,6 +6744,8 @@ func (q *Queries) LatestRegistrationDetailsRequest(ctx context.Context, arg Late
 		&i.CompletedAt,
 		&i.CompletedDetailsVersion,
 		&i.SupersededAt,
+		&i.PassportCountries,
+		&i.PassportPhotoRequired,
 	)
 	return i, err
 }
@@ -7084,7 +7180,7 @@ func (q *Queries) ListAdminTasks(ctx context.Context, arg ListAdminTasksParams) 
 }
 
 const listContextEvents = `-- name: ListContextEvents :many
-SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version,rules.document AS registration_rules,d.document AS deposit_policy FROM shuttle_events e
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version, e.slug,rules.document AS registration_rules,d.document AS deposit_policy FROM shuttle_events e
 LEFT JOIN shuttle_event_registration_rules rules ON rules.event_id=e.id
 LEFT JOIN shuttle_event_deposit_policy d ON d.event_id=e.id
 WHERE e.bot_id=$1 AND e.organization_id=$2
@@ -7147,6 +7243,7 @@ func (q *Queries) ListContextEvents(ctx context.Context, arg ListContextEventsPa
 			&i.ShuttleEvent.EndsAt,
 			&i.ShuttleEvent.Modules,
 			&i.ShuttleEvent.Version,
+			&i.ShuttleEvent.Slug,
 			&i.RegistrationRules,
 			&i.DepositPolicy,
 		); err != nil {
@@ -7206,7 +7303,7 @@ func (q *Queries) ListEventAuthorities(ctx context.Context, arg ListEventAuthori
 }
 
 const listEventConfigurations = `-- name: ListEventConfigurations :many
-SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version,r.document AS registration_rules,d.document AS deposit_policy FROM shuttle_events e
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version, e.slug,r.document AS registration_rules,d.document AS deposit_policy FROM shuttle_events e
 LEFT JOIN shuttle_event_registration_rules r ON r.event_id=e.id
 LEFT JOIN shuttle_event_deposit_policy d ON d.event_id=e.id
 WHERE e.bot_id=$1 AND e.organization_id=$2 AND e.id>$3 ORDER BY e.id LIMIT $4
@@ -7249,6 +7346,7 @@ func (q *Queries) ListEventConfigurations(ctx context.Context, arg ListEventConf
 			&i.ShuttleEvent.EndsAt,
 			&i.ShuttleEvent.Modules,
 			&i.ShuttleEvent.Version,
+			&i.ShuttleEvent.Slug,
 			&i.RegistrationRules,
 			&i.DepositPolicy,
 		); err != nil {
@@ -7361,7 +7459,7 @@ func (q *Queries) ListEventRegistrations(ctx context.Context, arg ListEventRegis
 }
 
 const listEvents = `-- name: ListEvents :many
-SELECT id, bot_id, organization_id, name, timezone, starts_at, ends_at, modules, version FROM shuttle_events WHERE bot_id=$1 AND organization_id=$2 AND id>$3 ORDER BY id LIMIT $4
+SELECT id, bot_id, organization_id, name, timezone, starts_at, ends_at, modules, version, slug FROM shuttle_events WHERE bot_id=$1 AND organization_id=$2 AND id>$3 ORDER BY id LIMIT $4
 `
 
 type ListEventsParams struct {
@@ -7395,6 +7493,7 @@ func (q *Queries) ListEvents(ctx context.Context, arg ListEventsParams) ([]Shutt
 			&i.EndsAt,
 			&i.Modules,
 			&i.Version,
+			&i.Slug,
 		); err != nil {
 			return nil, err
 		}
@@ -7731,7 +7830,7 @@ func (q *Queries) ListKnowledgeSuggestions(ctx context.Context, arg ListKnowledg
 }
 
 const listMassageBindingEvents = `-- name: ListMassageBindingEvents :many
-SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version FROM shuttle_events e
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version, e.slug FROM shuttle_events e
 WHERE e.bot_id=$1 AND e.organization_id=$2
 AND e.id>$3::uuid
 AND EXISTS(SELECT 1 FROM shuttle_massage_schedules s WHERE s.event_id=e.id)
@@ -7769,6 +7868,7 @@ func (q *Queries) ListMassageBindingEvents(ctx context.Context, arg ListMassageB
 			&i.EndsAt,
 			&i.Modules,
 			&i.Version,
+			&i.Slug,
 		); err != nil {
 			return nil, err
 		}
@@ -7914,7 +8014,7 @@ func (q *Queries) ListMassageStaffBookings(ctx context.Context, arg ListMassageS
 }
 
 const listMassageStaffEvents = `-- name: ListMassageStaffEvents :many
-SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version FROM shuttle_events e
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version, e.slug FROM shuttle_events e
 WHERE e.bot_id=$1 AND e.organization_id=$2
 AND e.id>$3::uuid
 AND EXISTS(SELECT 1 FROM shuttle_massage_specialist_bindings a
@@ -7955,6 +8055,7 @@ func (q *Queries) ListMassageStaffEvents(ctx context.Context, arg ListMassageSta
 			&i.EndsAt,
 			&i.Modules,
 			&i.Version,
+			&i.Slug,
 		); err != nil {
 			return nil, err
 		}
@@ -8158,7 +8259,7 @@ func (q *Queries) ListOrderEvidence(ctx context.Context, arg ListOrderEvidencePa
 }
 
 const listOrderReviewEvents = `-- name: ListOrderReviewEvents :many
-SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version FROM shuttle_events e
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version, e.slug FROM shuttle_events e
 JOIN shuttle_users actor ON actor.id=$1 AND actor.bot_id=e.bot_id
 AND actor.zitadel_org=e.organization_id AND actor.zitadel_subject=$2 AND NOT actor.revoked
 LEFT JOIN shuttle_event_authorities a ON a.event_id=e.id AND a.user_id=actor.id
@@ -8205,6 +8306,7 @@ func (q *Queries) ListOrderReviewEvents(ctx context.Context, arg ListOrderReview
 			&i.EndsAt,
 			&i.Modules,
 			&i.Version,
+			&i.Slug,
 		); err != nil {
 			return nil, err
 		}
@@ -8251,7 +8353,7 @@ func (q *Queries) ListOutbox(ctx context.Context, taskID uuid.UUID) ([]ShuttleOu
 }
 
 const listOwnAccountEvents = `-- name: ListOwnAccountEvents :many
-SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version,r.id, r.event_id, r.user_id, r.role, r.state, r.version, r.requested_at
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version, e.slug,r.id, r.event_id, r.user_id, r.role, r.state, r.version, r.requested_at
 FROM shuttle_registrations r JOIN shuttle_events e ON e.id=r.event_id
 JOIN shuttle_users u ON u.id=r.user_id AND u.bot_id=e.bot_id AND u.zitadel_org=e.organization_id
 WHERE u.id=$1 AND u.zitadel_subject=$2 AND NOT u.revoked
@@ -8299,6 +8401,7 @@ func (q *Queries) ListOwnAccountEvents(ctx context.Context, arg ListOwnAccountEv
 			&i.ShuttleEvent.EndsAt,
 			&i.ShuttleEvent.Modules,
 			&i.ShuttleEvent.Version,
+			&i.ShuttleEvent.Slug,
 			&i.ShuttleRegistration.ID,
 			&i.ShuttleRegistration.EventID,
 			&i.ShuttleRegistration.UserID,
@@ -8375,7 +8478,7 @@ func (q *Queries) ListOwnMassageBookings(ctx context.Context, arg ListOwnMassage
 }
 
 const listOwnMassageEvents = `-- name: ListOwnMassageEvents :many
-SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version FROM shuttle_events e
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version, e.slug FROM shuttle_events e
 WHERE e.bot_id=$1 AND e.organization_id=$2
 AND e.id>$3::uuid
 AND (EXISTS(SELECT 1 FROM shuttle_massage_bookings b WHERE b.event_id=e.id AND b.user_id=$4)
@@ -8419,6 +8522,7 @@ func (q *Queries) ListOwnMassageEvents(ctx context.Context, arg ListOwnMassageEv
 			&i.EndsAt,
 			&i.Modules,
 			&i.Version,
+			&i.Slug,
 		); err != nil {
 			return nil, err
 		}
@@ -8431,7 +8535,7 @@ func (q *Queries) ListOwnMassageEvents(ctx context.Context, arg ListOwnMassageEv
 }
 
 const listOwnMealDraftEvents = `-- name: ListOwnMealDraftEvents :many
-SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version FROM shuttle_events e
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version, e.slug FROM shuttle_events e
 JOIN shuttle_registrations r ON r.event_id=e.id AND r.user_id=$1 AND r.state='assigned'
 JOIN shuttle_passes p ON p.registration_id=r.id
 WHERE e.bot_id=$2 AND e.organization_id=$3 AND 'meals'=ANY(e.modules) AND e.id>$4
@@ -8471,6 +8575,7 @@ func (q *Queries) ListOwnMealDraftEvents(ctx context.Context, arg ListOwnMealDra
 			&i.EndsAt,
 			&i.Modules,
 			&i.Version,
+			&i.Slug,
 		); err != nil {
 			return nil, err
 		}
@@ -8483,7 +8588,7 @@ func (q *Queries) ListOwnMealDraftEvents(ctx context.Context, arg ListOwnMealDra
 }
 
 const listOwnOrdersSelectionEvents = `-- name: ListOwnOrdersSelectionEvents :many
-SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version FROM shuttle_events e
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version, e.slug FROM shuttle_events e
 JOIN shuttle_registrations r ON r.event_id=e.id AND r.user_id=$1 AND r.state='assigned'
 JOIN shuttle_passes p ON p.registration_id=r.id
 WHERE e.bot_id=$2 AND e.organization_id=$3 AND 'orders'=ANY(e.modules) AND e.id>$4
@@ -8523,6 +8628,7 @@ func (q *Queries) ListOwnOrdersSelectionEvents(ctx context.Context, arg ListOwnO
 			&i.EndsAt,
 			&i.Modules,
 			&i.Version,
+			&i.Slug,
 		); err != nil {
 			return nil, err
 		}
@@ -8535,7 +8641,7 @@ func (q *Queries) ListOwnOrdersSelectionEvents(ctx context.Context, arg ListOwnO
 }
 
 const listOwnPaymentExpectations = `-- name: ListOwnPaymentExpectations :many
-SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version,r.id, r.event_id, r.user_id, r.role, r.state, r.version, r.requested_at
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version, e.slug,r.id, r.event_id, r.user_id, r.role, r.state, r.version, r.requested_at
 FROM shuttle_registrations r JOIN shuttle_passes p ON p.registration_id=r.id
 JOIN shuttle_events e ON e.id=r.event_id
 WHERE r.user_id=$1 AND r.state='assigned'
@@ -8584,6 +8690,7 @@ func (q *Queries) ListOwnPaymentExpectations(ctx context.Context, arg ListOwnPay
 			&i.ShuttleEvent.EndsAt,
 			&i.ShuttleEvent.Modules,
 			&i.ShuttleEvent.Version,
+			&i.ShuttleEvent.Slug,
 			&i.ShuttleRegistration.ID,
 			&i.ShuttleRegistration.EventID,
 			&i.ShuttleRegistration.UserID,
@@ -8793,6 +8900,7 @@ AND lu.zitadel_org=e.organization_id AND NOT lu.revoked
 JOIN shuttle_users fu ON fu.id=f.user_id AND fu.bot_id=e.bot_id
 AND fu.zitadel_org=e.organization_id AND NOT fu.revoked
 WHERE p.event_id=$1 AND p.state='waitlisted' AND p.id>$2::uuid
+AND NOT EXISTS(SELECT 1 FROM shuttle_pass_invites i WHERE i.replace_pair_id=p.id AND i.pair_id IS NULL AND NOT i.revoked)
 ORDER BY p.id LIMIT $3
 `
 
@@ -8846,23 +8954,26 @@ func (q *Queries) ListPairAssignmentCandidates(ctx context.Context, arg ListPair
 }
 
 const listPairAssignmentEvents = `-- name: ListPairAssignmentEvents :many
-SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version FROM shuttle_events e JOIN shuttle_users u ON u.id=$1
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version, e.slug FROM shuttle_events e JOIN shuttle_users u ON u.id=$1
 AND u.bot_id=e.bot_id AND u.zitadel_org=e.organization_id AND u.zitadel_subject=$2 AND NOT u.revoked
 WHERE e.bot_id=$3 AND e.organization_id=$4
-AND 'registrations'=ANY(e.modules) AND e.id>$5::uuid
-AND ($6::boolean OR EXISTS(SELECT 1 FROM shuttle_event_authorities a
+AND ('registrations'=ANY(e.modules) OR ($5::boolean AND EXISTS(
+SELECT 1 FROM shuttle_registrations r WHERE r.event_id=e.id)))
+AND e.id>$6::uuid
+AND ($7::boolean OR EXISTS(SELECT 1 FROM shuttle_event_authorities a
 WHERE a.event_id=e.id AND a.user_id=u.id AND a.role='administrator'))
-ORDER BY e.id LIMIT $7
+ORDER BY e.id LIMIT $8
 `
 
 type ListPairAssignmentEventsParams struct {
-	UserID         uuid.UUID `json:"user_id"`
-	Subject        string    `json:"subject"`
-	BotID          int64     `json:"bot_id"`
-	OrganizationID string    `json:"organization_id"`
-	AfterID        uuid.UUID `json:"after_id"`
-	GlobalAdmin    bool      `json:"global_admin"`
-	PageLimit      int32     `json:"page_limit"`
+	UserID                     uuid.UUID `json:"user_id"`
+	Subject                    string    `json:"subject"`
+	BotID                      int64     `json:"bot_id"`
+	OrganizationID             string    `json:"organization_id"`
+	IncludeRegistrationHistory bool      `json:"include_registration_history"`
+	AfterID                    uuid.UUID `json:"after_id"`
+	GlobalAdmin                bool      `json:"global_admin"`
+	PageLimit                  int32     `json:"page_limit"`
 }
 
 func (q *Queries) ListPairAssignmentEvents(ctx context.Context, arg ListPairAssignmentEventsParams) ([]ShuttleEvent, error) {
@@ -8871,6 +8982,7 @@ func (q *Queries) ListPairAssignmentEvents(ctx context.Context, arg ListPairAssi
 		arg.Subject,
 		arg.BotID,
 		arg.OrganizationID,
+		arg.IncludeRegistrationHistory,
 		arg.AfterID,
 		arg.GlobalAdmin,
 		arg.PageLimit,
@@ -8892,6 +9004,7 @@ func (q *Queries) ListPairAssignmentEvents(ctx context.Context, arg ListPairAssi
 			&i.EndsAt,
 			&i.Modules,
 			&i.Version,
+			&i.Slug,
 		); err != nil {
 			return nil, err
 		}
@@ -8992,7 +9105,7 @@ func (q *Queries) ListPairInvitations(ctx context.Context, arg ListPairInvitatio
 }
 
 const listPaymentEvents = `-- name: ListPaymentEvents :many
-SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version,coalesce(p.id,'00000000-0000-0000-0000-000000000000'::uuid)::uuid AS own_pass_id
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version, e.slug,coalesce(p.id,'00000000-0000-0000-0000-000000000000'::uuid)::uuid AS own_pass_id
 FROM shuttle_events e
 JOIN shuttle_users actor ON actor.id=$1 AND actor.bot_id=e.bot_id
 AND actor.zitadel_org=e.organization_id AND actor.zitadel_subject=$2 AND NOT actor.revoked
@@ -9047,6 +9160,7 @@ func (q *Queries) ListPaymentEvents(ctx context.Context, arg ListPaymentEventsPa
 			&i.ShuttleEvent.EndsAt,
 			&i.ShuttleEvent.Modules,
 			&i.ShuttleEvent.Version,
+			&i.ShuttleEvent.Slug,
 			&i.OwnPassID,
 		); err != nil {
 			return nil, err
@@ -9154,7 +9268,7 @@ func (q *Queries) ListPaymentNotificationRecipients(ctx context.Context, arg Lis
 }
 
 const listPaymentReviewEvents = `-- name: ListPaymentReviewEvents :many
-SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version FROM shuttle_events e
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version, e.slug FROM shuttle_events e
 JOIN shuttle_users actor ON actor.id=$1 AND actor.bot_id=e.bot_id
 AND actor.zitadel_org=e.organization_id AND actor.zitadel_subject=$2 AND NOT actor.revoked
 LEFT JOIN shuttle_event_authorities a ON a.event_id=e.id AND a.user_id=actor.id
@@ -9201,6 +9315,7 @@ func (q *Queries) ListPaymentReviewEvents(ctx context.Context, arg ListPaymentRe
 			&i.EndsAt,
 			&i.Modules,
 			&i.Version,
+			&i.Slug,
 		); err != nil {
 			return nil, err
 		}
@@ -9433,7 +9548,7 @@ func (q *Queries) ListPendingPairAssignmentProposals(ctx context.Context, arg Li
 }
 
 const listRegistrationDetailsRequests = `-- name: ListRegistrationDetailsRequests :many
-SELECT id, user_id, event_id, event_version, event_timezone, legal_name_required, passport_number_required, created_at, expires_at, completed_at, completed_details_version, superseded_at FROM shuttle_registration_details_requests WHERE user_id=$1 AND id>$2 AND superseded_at IS NULL
+SELECT id, user_id, event_id, event_version, event_timezone, legal_name_required, passport_number_required, created_at, expires_at, completed_at, completed_details_version, superseded_at, passport_countries, passport_photo_required FROM shuttle_registration_details_requests WHERE user_id=$1 AND id>$2 AND superseded_at IS NULL
 ORDER BY id LIMIT $3
 `
 
@@ -9465,6 +9580,8 @@ func (q *Queries) ListRegistrationDetailsRequests(ctx context.Context, arg ListR
 			&i.CompletedAt,
 			&i.CompletedDetailsVersion,
 			&i.SupersededAt,
+			&i.PassportCountries,
+			&i.PassportPhotoRequired,
 		); err != nil {
 			return nil, err
 		}
@@ -9789,12 +9906,12 @@ func (q *Queries) ListTaskResolutions(ctx context.Context, taskID uuid.UUID) ([]
 }
 
 const listTierUsage = `-- name: ListTierUsage :many
-SELECT r.role,COALESCE(t.tier_id,'')::text AS tier_id,count(*) AS count
-FROM shuttle_registrations r JOIN shuttle_passes p ON p.registration_id=r.id
+SELECT coalesce(c.awarded_role,r.role)::text AS role,coalesce(c.tier_id,t.tier_id,'')::text AS tier_id,count(*) AS count
+FROM shuttle_registrations r LEFT JOIN shuttle_passes p ON p.registration_id=r.id
 LEFT JOIN shuttle_pass_tiers t ON t.pass_id=p.id
-WHERE r.event_id=$1 AND r.state='assigned'
-GROUP BY r.role,COALESCE(t.tier_id,'')
-ORDER BY r.role,tier_id
+LEFT JOIN shuttle_pass_promo_choices c ON c.event_id=r.event_id AND c.user_id=r.user_id AND c.awarded_role IS NOT NULL
+WHERE r.event_id=$1 AND (c.user_id IS NOT NULL OR (p.id IS NOT NULL AND (r.state='assigned' OR t.promo IS TRUE)))
+GROUP BY 1,2 ORDER BY 1,2
 `
 
 type ListTierUsageRow struct {
@@ -10075,7 +10192,7 @@ func (q *Queries) LockAvatarDeliveryResolutionTarget(ctx context.Context, arg Lo
 }
 
 const lockContextEvent = `-- name: LockContextEvent :one
-SELECT id, bot_id, organization_id, name, timezone, starts_at, ends_at, modules, version FROM shuttle_events WHERE id=$1 AND bot_id=$2 AND organization_id=$3 FOR SHARE
+SELECT id, bot_id, organization_id, name, timezone, starts_at, ends_at, modules, version, slug FROM shuttle_events WHERE id=$1 AND bot_id=$2 AND organization_id=$3 FOR SHARE
 `
 
 type LockContextEventParams struct {
@@ -10097,6 +10214,7 @@ func (q *Queries) LockContextEvent(ctx context.Context, arg LockContextEventPara
 		&i.EndsAt,
 		&i.Modules,
 		&i.Version,
+		&i.Slug,
 	)
 	return i, err
 }
@@ -10371,7 +10489,7 @@ func (q *Queries) LockPairAssignmentProposal(ctx context.Context, arg LockPairAs
 }
 
 const lockRegistrationEvent = `-- name: LockRegistrationEvent :one
-SELECT id, bot_id, organization_id, name, timezone, starts_at, ends_at, modules, version FROM shuttle_events WHERE id=$1 AND bot_id=$2 AND organization_id=$3 FOR UPDATE
+SELECT id, bot_id, organization_id, name, timezone, starts_at, ends_at, modules, version, slug FROM shuttle_events WHERE id=$1 AND bot_id=$2 AND organization_id=$3 FOR UPDATE
 `
 
 type LockRegistrationEventParams struct {
@@ -10393,6 +10511,7 @@ func (q *Queries) LockRegistrationEvent(ctx context.Context, arg LockRegistratio
 		&i.EndsAt,
 		&i.Modules,
 		&i.Version,
+		&i.Slug,
 	)
 	return i, err
 }
@@ -11199,8 +11318,9 @@ func (q *Queries) PairInvitationNotificationAllowed(ctx context.Context, arg Pai
 }
 
 const pairMemberMatches = `-- name: PairMemberMatches :one
-SELECT EXISTS(SELECT 1 FROM shuttle_active_pair_members
-WHERE pair_id=$1 AND event_id=$2 AND registration_id=$3 AND role=$4) AS matches
+SELECT EXISTS(SELECT 1 FROM shuttle_active_pair_members m
+WHERE m.pair_id=$1 AND m.event_id=$2 AND m.registration_id=$3 AND m.role=$4 AND NOT EXISTS (
+ SELECT 1 FROM shuttle_pass_invites i WHERE i.replace_pair_id=$1 AND i.pair_id IS NULL AND NOT i.revoked)) AS matches
 `
 
 type PairMemberMatchesParams struct {
@@ -11224,7 +11344,10 @@ func (q *Queries) PairMemberMatches(ctx context.Context, arg PairMemberMatchesPa
 
 const pairRegistrationHeld = `-- name: PairRegistrationHeld :one
 SELECT EXISTS(SELECT 1 FROM shuttle_active_pair_members WHERE registration_id=$1)
-OR EXISTS(SELECT 1 FROM shuttle_pair_invitations WHERE inviter_registration_id=$1 AND state='pending') AS held
+OR EXISTS(SELECT 1 FROM shuttle_pair_invitations WHERE inviter_registration_id=$1 AND state='pending')
+OR EXISTS(SELECT 1 FROM shuttle_registrations r JOIN shuttle_pass_invites i ON i.event_id=r.event_id
+ WHERE r.id=$1 AND NOT i.revoked AND i.pair_id IS NULL
+ AND (i.inviter_registration_id=r.id OR i.claimant_user_id=r.user_id)) AS held
 `
 
 func (q *Queries) PairRegistrationHeld(ctx context.Context, registrationID uuid.UUID) (pgtype.Bool, error) {
@@ -13851,7 +13974,7 @@ func (q *Queries) RecentNativePairAssignmentProposals(ctx context.Context, arg R
 }
 
 const recentRegistrationDetailsRequests = `-- name: RecentRegistrationDetailsRequests :many
-SELECT r.id, r.user_id, r.event_id, r.event_version, r.event_timezone, r.legal_name_required, r.passport_number_required, r.created_at, r.expires_at, r.completed_at, r.completed_details_version, r.superseded_at FROM shuttle_registration_details_requests r JOIN shuttle_tasks t ON t.user_id=r.user_id
+SELECT r.id, r.user_id, r.event_id, r.event_version, r.event_timezone, r.legal_name_required, r.passport_number_required, r.created_at, r.expires_at, r.completed_at, r.completed_details_version, r.superseded_at, r.passport_countries, r.passport_photo_required FROM shuttle_registration_details_requests r JOIN shuttle_tasks t ON t.user_id=r.user_id
 WHERE t.id=$1 AND r.user_id=$2 AND r.created_at<t.created_at AND r.superseded_at IS NULL
 ORDER BY r.created_at DESC,r.id DESC LIMIT 5
 `
@@ -13883,6 +14006,8 @@ func (q *Queries) RecentRegistrationDetailsRequests(ctx context.Context, arg Rec
 			&i.CompletedAt,
 			&i.CompletedDetailsVersion,
 			&i.SupersededAt,
+			&i.PassportCountries,
+			&i.PassportPhotoRequired,
 		); err != nil {
 			return nil, err
 		}
@@ -13892,6 +14017,30 @@ func (q *Queries) RecentRegistrationDetailsRequests(ctx context.Context, arg Rec
 		return nil, err
 	}
 	return items, nil
+}
+
+const recordRegistrationIdentityFields = `-- name: RecordRegistrationIdentityFields :exec
+INSERT INTO shuttle_registration_identity_fields(registration_id,legal_name,passport_number,passport_country,passport_photo)
+VALUES($1,$2,$3,$4,$5)
+`
+
+type RecordRegistrationIdentityFieldsParams struct {
+	RegistrationID  uuid.UUID `json:"registration_id"`
+	LegalName       bool      `json:"legal_name"`
+	PassportNumber  bool      `json:"passport_number"`
+	PassportCountry bool      `json:"passport_country"`
+	PassportPhoto   bool      `json:"passport_photo"`
+}
+
+func (q *Queries) RecordRegistrationIdentityFields(ctx context.Context, arg RecordRegistrationIdentityFieldsParams) error {
+	_, err := q.db.Exec(ctx, recordRegistrationIdentityFields,
+		arg.RegistrationID,
+		arg.LegalName,
+		arg.PassportNumber,
+		arg.PassportCountry,
+		arg.PassportPhoto,
+	)
+	return err
 }
 
 const recoverAvatarDeliveries = `-- name: RecoverAvatarDeliveries :execrows
@@ -15109,19 +15258,32 @@ func (q *Queries) SetEventDepositPolicy(ctx context.Context, arg SetEventDeposit
 	return err
 }
 
-const setEventRegistrationRules = `-- name: SetEventRegistrationRules :exec
-INSERT INTO shuttle_event_registration_rules(event_id,document) VALUES($1,$2)
+const setEventRegistrationRules = `-- name: SetEventRegistrationRules :execrows
+INSERT INTO shuttle_event_registration_rules AS current_rules(event_id,document) VALUES($1,$2)
 ON CONFLICT(event_id) DO UPDATE SET document=EXCLUDED.document
+WHERE NOT EXISTS (
+    SELECT 1 FROM shuttle_pass_promo_choices c
+    JOIN shuttle_registrations r ON r.event_id=c.event_id AND r.user_id=c.user_id
+    WHERE c.event_id=current_rules.event_id AND c.awarded_role IS NOT NULL AND r.state='waitlisted'
+      AND ((current_rules.document->'currency', current_rules.document->'currency_scale')
+           IS DISTINCT FROM (EXCLUDED.document->'currency', EXCLUDED.document->'currency_scale')
+           OR c.price_minor < $3::bigint)
+)
 `
 
 type SetEventRegistrationRulesParams struct {
-	EventID  uuid.UUID `json:"event_id"`
-	Document []byte    `json:"document"`
+	EventID             uuid.UUID `json:"event_id"`
+	Document            []byte    `json:"document"`
+	MinimumDepositMinor int64     `json:"minimum_deposit_minor"`
 }
 
-func (q *Queries) SetEventRegistrationRules(ctx context.Context, arg SetEventRegistrationRulesParams) error {
-	_, err := q.db.Exec(ctx, setEventRegistrationRules, arg.EventID, arg.Document)
-	return err
+// A waiting award must stay payable in its original unit and at its frozen price.
+func (q *Queries) SetEventRegistrationRules(ctx context.Context, arg SetEventRegistrationRulesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setEventRegistrationRules, arg.EventID, arg.Document, arg.MinimumDepositMinor)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setKnowledgeModerator = `-- name: SetKnowledgeModerator :one
@@ -15327,8 +15489,8 @@ func (q *Queries) UpdateConversationRun(ctx context.Context, arg UpdateConversat
 }
 
 const updateEvent = `-- name: UpdateEvent :one
-UPDATE shuttle_events SET name=$5,timezone=$6,starts_at=$7,ends_at=$8,modules=$9,version=version+1
-WHERE id=$1 AND bot_id=$2 AND organization_id=$3 AND version=$4 RETURNING id, bot_id, organization_id, name, timezone, starts_at, ends_at, modules, version
+UPDATE shuttle_events SET name=$5,timezone=$6,starts_at=$7,ends_at=$8,modules=$9,slug=$10,version=version+1
+WHERE id=$1 AND bot_id=$2 AND organization_id=$3 AND version=$4 RETURNING id, bot_id, organization_id, name, timezone, starts_at, ends_at, modules, version, slug
 `
 
 type UpdateEventParams struct {
@@ -15341,6 +15503,7 @@ type UpdateEventParams struct {
 	StartsAt       pgtype.Timestamptz `json:"starts_at"`
 	EndsAt         pgtype.Timestamptz `json:"ends_at"`
 	Modules        []string           `json:"modules"`
+	Slug           string             `json:"slug"`
 }
 
 func (q *Queries) UpdateEvent(ctx context.Context, arg UpdateEventParams) (ShuttleEvent, error) {
@@ -15354,6 +15517,7 @@ func (q *Queries) UpdateEvent(ctx context.Context, arg UpdateEventParams) (Shutt
 		arg.StartsAt,
 		arg.EndsAt,
 		arg.Modules,
+		arg.Slug,
 	)
 	var i ShuttleEvent
 	err := row.Scan(
@@ -15366,6 +15530,7 @@ func (q *Queries) UpdateEvent(ctx context.Context, arg UpdateEventParams) (Shutt
 		&i.EndsAt,
 		&i.Modules,
 		&i.Version,
+		&i.Slug,
 	)
 	return i, err
 }

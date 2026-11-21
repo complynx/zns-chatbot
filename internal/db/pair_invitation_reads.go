@@ -174,12 +174,13 @@ func (s *Store) PairInvitationOperation(
 }
 
 type PairInvitationContext struct {
+	PassCommand     string    `json:"pass_command,omitempty"`
 	EventID         uuid.UUID `json:"event_id"`
 	EventName       string    `json:"event_name"`
 	Timezone        string    `json:"timezone"`
-	RegistrationID  uuid.UUID `json:"registration_id"`
-	ExpectedVersion int64     `json:"expected_version"`
-	Role            string    `json:"role"`
+	RegistrationID  uuid.UUID `json:"registration_id,omitzero"`
+	ExpectedVersion int64     `json:"expected_version,omitempty"`
+	Role            string    `json:"role,omitempty"`
 	ExpiresAt       time.Time `json:"expires_at"`
 }
 
@@ -206,6 +207,16 @@ func (s *Store) PairInvitationContext(
 	if err != nil {
 		return PairInvitationContext{}, err
 	}
+	result := PairInvitationContext{EventID: eventID, EventName: event.Document.Name,
+		Timezone: event.Document.Timezone, ExpiresAt: event.Document.Registration.ClosesAt.UTC()}
+	if event.Document.Registration.UsesPassInvites() {
+		selector := event.Document.Slug
+		if selector == "" {
+			selector = eventID.String()
+		}
+		result.PassCommand = "/passes " + selector + " --pair"
+		return result, nil
+	}
 	entry, err := q.GetRegistration(ctx, sqlc.GetRegistrationParams{EventID: eventID, UserID: scope.UserID})
 	if err != nil {
 		return PairInvitationContext{}, err
@@ -213,13 +224,6 @@ func (s *Store) PairInvitationContext(
 	if entry.State != registrations.Waitlisted {
 		return PairInvitationContext{}, ErrConflict
 	}
-	return PairInvitationContext{
-		EventID:         eventID,
-		EventName:       event.Document.Name,
-		Timezone:        event.Document.Timezone,
-		RegistrationID:  entry.ID,
-		ExpectedVersion: entry.Version,
-		Role:            entry.Role,
-		ExpiresAt:       event.Document.Registration.ClosesAt.UTC(),
-	}, nil
+	result.RegistrationID, result.ExpectedVersion, result.Role = entry.ID, entry.Version, entry.Role
+	return result, nil
 }

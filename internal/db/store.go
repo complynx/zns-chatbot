@@ -133,15 +133,12 @@ func (s *Store) Intake(
 	if !errors.Is(e, pgx.ErrNoRows) {
 		return Task{}, false, e
 	}
-	u, e := q.UpsertUser(
-		ctx,
-		sqlc.UpsertUserParams{ID: uuid.New(), BotID: r.BotID, TgUserID: r.TelegramUserID, Profile: r.Profile},
-	)
-	if e != nil {
+	if e = r.PassSlug.resolve(ctx, tx, &r); e != nil {
 		return Task{}, false, e
 	}
-	if u.Revoked {
-		return Task{}, false, &UserRevokedError{PublicReason: u.BanPublicReason}
+	u, e := s.intakeUser(ctx, tx, r)
+	if e != nil {
+		return Task{}, false, e
 	}
 	c, e := q.EnsureConversation(ctx, sqlc.EnsureConversationParams{ID: uuid.New(), UserID: u.ID, ChatID: r.ChatID})
 	if e != nil {

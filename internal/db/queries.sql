@@ -251,10 +251,10 @@ SELECT * FROM shuttle_events WHERE id=$1 AND bot_id=$2 AND organization_id=$3;
 -- name: ListEvents :many
 SELECT * FROM shuttle_events WHERE bot_id=$1 AND organization_id=$2 AND id>$3 ORDER BY id LIMIT $4;
 -- name: CreateEvent :one
-INSERT INTO shuttle_events(id,bot_id,organization_id,name,timezone,starts_at,ends_at,modules)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(id) DO NOTHING RETURNING *;
+INSERT INTO shuttle_events(id,bot_id,organization_id,name,timezone,starts_at,ends_at,modules,slug)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(id) DO NOTHING RETURNING *;
 -- name: UpdateEvent :one
-UPDATE shuttle_events SET name=$5,timezone=$6,starts_at=$7,ends_at=$8,modules=$9,version=version+1
+UPDATE shuttle_events SET name=$5,timezone=$6,starts_at=$7,ends_at=$8,modules=$9,slug=$10,version=version+1
 WHERE id=$1 AND bot_id=$2 AND organization_id=$3 AND version=$4 RETURNING *;
 -- name: LockEventOperation :exec
 SELECT pg_advisory_xact_lock(hashtextextended($1::text,0));
@@ -285,9 +285,18 @@ LEFT JOIN shuttle_event_registration_rules r ON r.event_id=e.id
 LEFT JOIN shuttle_event_deposit_policy d ON d.event_id=e.id
 WHERE e.bot_id=$1 AND e.organization_id=$2 AND e.id>$3 ORDER BY e.id LIMIT $4;
 
--- name: SetEventRegistrationRules :exec
-INSERT INTO shuttle_event_registration_rules(event_id,document) VALUES($1,$2)
-ON CONFLICT(event_id) DO UPDATE SET document=EXCLUDED.document;
+-- name: SetEventRegistrationRules :execrows
+INSERT INTO shuttle_event_registration_rules AS current_rules(event_id,document) VALUES($1,$2)
+ON CONFLICT(event_id) DO UPDATE SET document=EXCLUDED.document
+-- A waiting award must stay payable in its original unit and at its frozen price.
+WHERE NOT EXISTS (
+    SELECT 1 FROM shuttle_pass_promo_choices c
+    JOIN shuttle_registrations r ON r.event_id=c.event_id AND r.user_id=c.user_id
+    WHERE c.event_id=current_rules.event_id AND c.awarded_role IS NOT NULL AND r.state='waitlisted'
+      AND ((current_rules.document->'currency', current_rules.document->'currency_scale')
+           IS DISTINCT FROM (EXCLUDED.document->'currency', EXCLUDED.document->'currency_scale')
+           OR c.price_minor < sqlc.arg(minimum_deposit_minor)::bigint)
+);
 
 -- name: LockRegistrationEvent :one
 SELECT * FROM shuttle_events WHERE id=$1 AND bot_id=$2 AND organization_id=$3 FOR UPDATE;
@@ -303,6 +312,9 @@ SELECT * FROM shuttle_registrations WHERE event_id=$1 AND user_id=$2;
 SELECT * FROM shuttle_registrations WHERE id=$1 AND event_id=$2;
 -- name: CreateRegistration :one
 INSERT INTO shuttle_registrations(id,event_id,user_id,role,requested_at) VALUES($1,$2,$3,$4,$5) RETURNING *;
+-- name: RecordRegistrationIdentityFields :exec
+INSERT INTO shuttle_registration_identity_fields(registration_id,legal_name,passport_number,passport_country,passport_photo)
+VALUES($1,$2,$3,$4,$5);
 -- name: AssignRegistration :one
 UPDATE shuttle_registrations SET state='assigned',version=version+1 WHERE id=$1 AND version=$2 AND state='waitlisted' RETURNING *;
 -- name: CountAssignedRole :one
@@ -312,17 +324,27 @@ INSERT INTO shuttle_passes(id,registration_id,price_minor,currency,currency_scal
 VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *;
 -- name: GetPass :one
 SELECT * FROM shuttle_passes WHERE registration_id=$1;
+-- name: CreatePassAssignmentNotice :exec
+INSERT INTO shuttle_pass_assignment_notices(pass_id) VALUES($1);
 -- name: CreatePassTier :exec
-INSERT INTO shuttle_pass_tiers(pass_id,tier_id,tier_number) VALUES($1,$2,$3);
+INSERT INTO shuttle_pass_tiers(pass_id,tier_id,tier_number,promo)
+SELECT p.id,sqlc.arg(tier_id)::text,sqlc.arg(tier_number)::int,
+    COALESCE(e.document#>'{pricing,tiers}' @> jsonb_build_array(
+        jsonb_build_object('id',sqlc.arg(tier_id)::text,'promo',true)),false)
+    OR EXISTS(SELECT FROM shuttle_pass_promo_choices c WHERE c.event_id=r.event_id AND c.user_id=r.user_id
+        AND c.tier_id=sqlc.arg(tier_id)::text AND c.awarded_role=r.role)
+FROM shuttle_passes p JOIN shuttle_registrations r ON r.id=p.registration_id
+LEFT JOIN shuttle_event_registration_rules e ON e.event_id=r.event_id
+WHERE p.id=sqlc.arg(pass_id);
 -- name: GetPassTier :one
 SELECT * FROM shuttle_pass_tiers WHERE pass_id=$1;
 -- name: ListTierUsage :many
-SELECT r.role,COALESCE(t.tier_id,'')::text AS tier_id,count(*) AS count
-FROM shuttle_registrations r JOIN shuttle_passes p ON p.registration_id=r.id
+SELECT coalesce(c.awarded_role,r.role)::text AS role,coalesce(c.tier_id,t.tier_id,'')::text AS tier_id,count(*) AS count
+FROM shuttle_registrations r LEFT JOIN shuttle_passes p ON p.registration_id=r.id
 LEFT JOIN shuttle_pass_tiers t ON t.pass_id=p.id
-WHERE r.event_id=$1 AND r.state='assigned'
-GROUP BY r.role,COALESCE(t.tier_id,'')
-ORDER BY r.role,tier_id;
+LEFT JOIN shuttle_pass_promo_choices c ON c.event_id=r.event_id AND c.user_id=r.user_id AND c.awarded_role IS NOT NULL
+WHERE r.event_id=$1 AND (c.user_id IS NOT NULL OR (p.id IS NOT NULL AND (r.state='assigned' OR t.promo IS TRUE)))
+GROUP BY 1,2 ORDER BY 1,2;
 -- name: GetRegistrationOperation :one
 SELECT * FROM shuttle_registration_operations WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4;
 -- name: InsertRegistrationOperation :exec
@@ -573,7 +595,10 @@ UPDATE shuttle_pair_invitations SET state=$3,version=version+1,decided_at=$4,pai
 WHERE id=$1 AND version=$2 AND state='pending' RETURNING *;
 -- name: PairRegistrationHeld :one
 SELECT EXISTS(SELECT 1 FROM shuttle_active_pair_members WHERE registration_id=$1)
-OR EXISTS(SELECT 1 FROM shuttle_pair_invitations WHERE inviter_registration_id=$1 AND state='pending') AS held;
+OR EXISTS(SELECT 1 FROM shuttle_pair_invitations WHERE inviter_registration_id=$1 AND state='pending')
+OR EXISTS(SELECT 1 FROM shuttle_registrations r JOIN shuttle_pass_invites i ON i.event_id=r.event_id
+ WHERE r.id=$1 AND NOT i.revoked AND i.pair_id IS NULL
+ AND (i.inviter_registration_id=r.id OR i.claimant_user_id=r.user_id)) AS held;
 -- name: AdvancePairRegistration :one
 UPDATE shuttle_registrations SET version=version+1 WHERE id=$1 AND event_id=$2 RETURNING *;
 -- name: InsertPair :one
@@ -586,6 +611,12 @@ UNION ALL
 SELECT p.id,p.event_id,p.follower_registration_id,'follower' FROM shuttle_pairs p WHERE p.id=$1 AND p.event_id=$2;
 -- name: GetPair :one
 SELECT * FROM shuttle_pairs WHERE id=$1 AND event_id=$2;
+-- name: GetPairForAssignment :one
+SELECT sqlc.embed(p), EXISTS(
+  SELECT 1 FROM shuttle_pass_invites i WHERE i.pair_id=p.id
+  AND i.inviter_registration_id IN (p.leader_registration_id,p.follower_registration_id)
+) AS from_pass_invite
+FROM shuttle_pairs p WHERE p.id=$1 AND p.event_id=$2;
 -- name: DissolvePair :one
 UPDATE shuttle_pairs SET state='dissolved',version=version+1,dissolved_at=$3
 WHERE id=$1 AND version=$2 AND state IN ('waitlisted','assigned') RETURNING *;
@@ -611,8 +642,9 @@ VALUES($1,$2,$3,$4,$5,$6,$7,$8);
 UPDATE shuttle_pairs SET state='assigned',version=version+1,assigned_at=$3
 WHERE id=$1 AND version=$2 AND state='waitlisted' RETURNING *;
 -- name: PairMemberMatches :one
-SELECT EXISTS(SELECT 1 FROM shuttle_active_pair_members
-WHERE pair_id=$1 AND event_id=$2 AND registration_id=$3 AND role=$4) AS matches;
+SELECT EXISTS(SELECT 1 FROM shuttle_active_pair_members m
+WHERE m.pair_id=$1 AND m.event_id=$2 AND m.registration_id=$3 AND m.role=$4 AND NOT EXISTS (
+ SELECT 1 FROM shuttle_pass_invites i WHERE i.replace_pair_id=$1 AND i.pair_id IS NULL AND NOT i.revoked)) AS matches;
 
 -- name: HasPairAssignmentAuthority :one
 SELECT EXISTS(SELECT 1 FROM shuttle_users u
@@ -626,7 +658,9 @@ AND e.bot_id=u.bot_id AND e.organization_id=u.zitadel_org AND 'registrations'=AN
 SELECT e.* FROM shuttle_events e JOIN shuttle_users u ON u.id=sqlc.arg(user_id)
 AND u.bot_id=e.bot_id AND u.zitadel_org=e.organization_id AND u.zitadel_subject=sqlc.arg(subject) AND NOT u.revoked
 WHERE e.bot_id=sqlc.arg(bot_id) AND e.organization_id=sqlc.arg(organization_id)
-AND 'registrations'=ANY(e.modules) AND e.id>sqlc.arg(after_id)::uuid
+AND ('registrations'=ANY(e.modules) OR (sqlc.arg(include_registration_history)::boolean AND EXISTS(
+SELECT 1 FROM shuttle_registrations r WHERE r.event_id=e.id)))
+AND e.id>sqlc.arg(after_id)::uuid
 AND (sqlc.arg(global_admin)::boolean OR EXISTS(SELECT 1 FROM shuttle_event_authorities a
 WHERE a.event_id=e.id AND a.user_id=u.id AND a.role='administrator'))
 ORDER BY e.id LIMIT sqlc.arg(page_limit);
@@ -642,6 +676,7 @@ AND lu.zitadel_org=e.organization_id AND NOT lu.revoked
 JOIN shuttle_users fu ON fu.id=f.user_id AND fu.bot_id=e.bot_id
 AND fu.zitadel_org=e.organization_id AND NOT fu.revoked
 WHERE p.event_id=$1 AND p.state='waitlisted' AND p.id>sqlc.arg(after_id)::uuid
+AND NOT EXISTS(SELECT 1 FROM shuttle_pass_invites i WHERE i.replace_pair_id=p.id AND i.pair_id IS NULL AND NOT i.revoked)
 ORDER BY p.id LIMIT sqlc.arg(page_limit);
 
 -- name: ListOwnedPairs :many
@@ -892,6 +927,10 @@ WHERE id=$1 AND state='pending' AND expires_at>clock_timestamp() RETURNING *;
 
 -- name: GetRegistrationDetails :one
 SELECT * FROM shuttle_registration_details WHERE user_id=$1;
+
+-- name: GetRegistrationDetailsStatus :one
+SELECT version, legal_name_present, passport_number_present, passport_country_present, passport_photo_present
+FROM shuttle_registration_details WHERE user_id=$1;
 
 -- name: GetRegistrationDetailsRequest :one
 SELECT * FROM shuttle_registration_details_requests WHERE id=$1 AND user_id=$2;

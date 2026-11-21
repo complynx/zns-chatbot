@@ -204,6 +204,7 @@ type ShuttleEvent struct {
 	EndsAt         pgtype.Timestamptz `json:"ends_at"`
 	Modules        []string           `json:"modules"`
 	Version        int64              `json:"version"`
+	Slug           string             `json:"slug"`
 }
 
 type ShuttleEventAuthority struct {
@@ -1114,15 +1115,81 @@ type ShuttlePass struct {
 	PaymentDueAt   pgtype.Timestamptz `json:"payment_due_at"`
 }
 
+type ShuttlePassAssignmentNotice struct {
+	PassID        uuid.UUID          `json:"pass_id"`
+	State         string             `json:"state"`
+	Version       int64              `json:"version"`
+	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
+	Receipt       []byte             `json:"receipt"`
+}
+
 type ShuttlePassDepositPolicy struct {
 	PassID   uuid.UUID `json:"pass_id"`
 	Document []byte    `json:"document"`
 }
 
+type ShuttlePassIdentityDelivery struct {
+	UserID       uuid.UUID          `json:"user_id"`
+	OperationID  string             `json:"operation_id"`
+	EventID      uuid.UUID          `json:"event_id"`
+	EventVersion int64              `json:"event_version"`
+	ProposalID   uuid.UUID          `json:"proposal_id"`
+	Recipient    int64              `json:"recipient"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	State        string             `json:"state"`
+}
+
+type ShuttlePassInvite struct {
+	Code                  string      `json:"code"`
+	EventID               uuid.UUID   `json:"event_id"`
+	InviterRegistrationID uuid.UUID   `json:"inviter_registration_id"`
+	IssueOperation        string      `json:"issue_operation"`
+	ClaimantUserID        pgtype.UUID `json:"claimant_user_id"`
+	ReplacePairID         pgtype.UUID `json:"replace_pair_id"`
+	PairID                pgtype.UUID `json:"pair_id"`
+	Revoked               bool        `json:"revoked"`
+}
+
+type ShuttlePassPromoChoice struct {
+	EventID      uuid.UUID          `json:"event_id"`
+	UserID       uuid.UUID          `json:"user_id"`
+	TierID       string             `json:"tier_id"`
+	SelectedAt   pgtype.Timestamptz `json:"selected_at"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	Sequence     pgtype.Int8        `json:"sequence"`
+	Forfeited    bool               `json:"forfeited"`
+	AwardedRole  pgtype.Text        `json:"awarded_role"`
+	TierNumber   pgtype.Int4        `json:"tier_number"`
+	PriceMinor   pgtype.Int8        `json:"price_minor"`
+	EligibleRole pgtype.Text        `json:"eligible_role"`
+}
+
+type ShuttlePassRefund struct {
+	RegistrationID  uuid.UUID          `json:"registration_id"`
+	ActorID         uuid.UUID          `json:"actor_id"`
+	OperationID     uuid.UUID          `json:"operation_id"`
+	AmountMinor     int64              `json:"amount_minor"`
+	ExpectedVersion int64              `json:"expected_version"`
+	Reason          string             `json:"reason"`
+	RecordedAt      pgtype.Timestamptz `json:"recorded_at"`
+}
+
+type ShuttlePassReturn struct {
+	RegistrationID  uuid.UUID          `json:"registration_id"`
+	ActorID         uuid.UUID          `json:"actor_id"`
+	OperationID     uuid.UUID          `json:"operation_id"`
+	Reason          string             `json:"reason"`
+	ReturnedAt      pgtype.Timestamptz `json:"returned_at"`
+	ExpectedVersion int64              `json:"expected_version"`
+	ConfirmedMinor  int64              `json:"confirmed_minor"`
+	RefundDueMinor  int64              `json:"refund_due_minor"`
+}
+
 type ShuttlePassTier struct {
-	PassID     uuid.UUID `json:"pass_id"`
-	TierID     string    `json:"tier_id"`
-	TierNumber int32     `json:"tier_number"`
+	PassID     uuid.UUID   `json:"pass_id"`
+	TierID     string      `json:"tier_id"`
+	TierNumber int32       `json:"tier_number"`
+	Promo      pgtype.Bool `json:"promo"`
 }
 
 type ShuttlePaymentEvidence struct {
@@ -1255,11 +1322,13 @@ type ShuttleRegistration struct {
 }
 
 type ShuttleRegistrationDetail struct {
-	UserID                uuid.UUID `json:"user_id"`
-	Version               int64     `json:"version"`
-	EncryptedRecord       []byte    `json:"encrypted_record"`
-	LegalNamePresent      bool      `json:"legal_name_present"`
-	PassportNumberPresent bool      `json:"passport_number_present"`
+	UserID                 uuid.UUID `json:"user_id"`
+	Version                int64     `json:"version"`
+	EncryptedRecord        []byte    `json:"encrypted_record"`
+	LegalNamePresent       bool      `json:"legal_name_present"`
+	PassportNumberPresent  bool      `json:"passport_number_present"`
+	PassportCountryPresent bool      `json:"passport_country_present"`
+	PassportPhotoPresent   bool      `json:"passport_photo_present"`
 }
 
 type ShuttleRegistrationDetailsOperation struct {
@@ -1282,6 +1351,8 @@ type ShuttleRegistrationDetailsRequest struct {
 	CompletedAt             pgtype.Timestamptz `json:"completed_at"`
 	CompletedDetailsVersion pgtype.Int8        `json:"completed_details_version"`
 	SupersededAt            pgtype.Timestamptz `json:"superseded_at"`
+	PassportCountries       []string           `json:"passport_countries"`
+	PassportPhotoRequired   bool               `json:"passport_photo_required"`
 }
 
 type ShuttleRegistrationDetailsRequestOperation struct {
@@ -1289,6 +1360,14 @@ type ShuttleRegistrationDetailsRequestOperation struct {
 	OperationID uuid.UUID `json:"operation_id"`
 	RequestHash []byte    `json:"request_hash"`
 	Result      []byte    `json:"result"`
+}
+
+type ShuttleRegistrationIdentityField struct {
+	RegistrationID  uuid.UUID `json:"registration_id"`
+	LegalName       bool      `json:"legal_name"`
+	PassportNumber  bool      `json:"passport_number"`
+	PassportCountry bool      `json:"passport_country"`
+	PassportPhoto   bool      `json:"passport_photo"`
 }
 
 type ShuttleRegistrationOperation struct {

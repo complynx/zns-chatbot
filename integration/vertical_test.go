@@ -736,9 +736,10 @@ func (h *harness) start(t *testing.T) {
 			PersonalizationToken: func(context.Context) (identity.Credential, error) {
 				return identity.Credential{Token: "personalization-service"}, nil
 			},
-			AvatarRenderer:             p.avatarProcessor,
-			BotID:                      123,
-			RegistrationDetailsEnabled: p.registrationDetails != nil,
+			AvatarRenderer:               p.avatarProcessor,
+			BotID:                        123,
+			RegistrationDetailsEnabled:   p.registrationDetails != nil,
+			RegistrationDetailsProtector: p.registrationDetails,
 			MiniAppURL: func() string {
 				if p.miniAppLaunchURL != "" {
 					return p.miniAppLaunchURL

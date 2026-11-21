@@ -25,15 +25,19 @@ const (
 	Follower         = "follower"
 	Waitlisted       = "waitlisted"
 	Assigned         = "assigned"
+	Returned         = "returned"
 	maxCurrencyScale = 4
 	maxJSONInteger   = 1<<53 - 1
 )
 
 var currencyCode = regexp.MustCompile(`^[A-Z]{3}$`)
 
-// Rules are explicit event configuration; price units use the declared scale.
-// No currency conversion, expiry cancellation or automatic allocation is implied.
+// Rules configure an event's sales window, allocation and payment terms.
+// Prices use minor units at the declared currency scale.
 type Rules struct {
+	PassQueueRules
+
+	SalesOpensAt         *time.Time                        `json:"sales_opens_at,omitempty"`
 	DetailsRequirements  *registrationdetails.Requirements `json:"details_requirements,omitempty"`
 	Pricing              *TierPolicy                       `json:"pricing,omitempty"`
 	LeaderCapacity       int32                             `json:"leader_capacity"`
@@ -81,6 +85,16 @@ func (r *Rules) UnmarshalJSON(data []byte) error {
 }
 
 func (r Rules) Normalize() (Rules, error) {
+	if !r.PassQueueRules.Valid() {
+		return Rules{}, ErrInvalid
+	}
+	if r.SalesOpensAt != nil {
+		open := r.SalesOpensAt.UTC()
+		if open.IsZero() || open.Nanosecond()%1000 != 0 || !open.Before(r.ClosesAt) {
+			return Rules{}, ErrInvalid
+		}
+		r.SalesOpensAt = &open
+	}
 	r.Currency = strings.TrimSpace(r.Currency)
 	if r.LeaderCapacity < 0 || r.FollowerCapacity < 0 ||
 		r.PriceMinor < 0 || r.PriceMinor > maxJSONInteger || !currencyCode.MatchString(r.Currency) ||
@@ -90,8 +104,17 @@ func (r Rules) Normalize() (Rules, error) {
 		r.PaymentWindowSeconds < 1 {
 		return Rules{}, ErrInvalid
 	}
-	if r.DetailsRequirements != nil {
+	if r.DetailsRequirements != nil || r.SalesOpensAt != nil || r.AutoAssign {
+		if r.DetailsRequirements == nil {
+			r.DetailsRequirements = &registrationdetails.Requirements{}
+		}
 		requirements := r.DetailsRequirements.Normalize()
+		if r.SalesOpensAt != nil || r.AutoAssign {
+			requirements.LegalName = true
+		}
+		if err := requirements.Validate(); err != nil {
+			return Rules{}, ErrInvalid
+		}
 		r.DetailsRequirements = &requirements
 	}
 	r.ClosesAt = r.ClosesAt.UTC()

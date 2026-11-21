@@ -19,6 +19,7 @@ type pairInvitationArguments struct {
 }
 
 func (s *Server) registerPairReads(api huma.API) {
+	s.registerPassInvites(api)
 	huma.Register(api, huma.Operation{
 		OperationID:  "agent-pair-invitation",
 		Method:       http.MethodPost,

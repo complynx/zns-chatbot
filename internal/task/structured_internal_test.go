@@ -116,7 +116,19 @@ func TestMenuCommandsFollowAvailability(t *testing.T) {
 		)
 		require.Equal(
 			t,
-			[]string{"menu", "profile", "name", "registrations", "register", "orders", "massage", "avatar", "pairs", "payments"},
+			[]string{
+				"menu",
+				"profile",
+				"name",
+				"registrations",
+				"register",
+				"passes",
+				"orders",
+				"massage",
+				"avatar",
+				"pairs",
+				"payments",
+			},
 			commandNames(all),
 		)
 		for _, c := range all {

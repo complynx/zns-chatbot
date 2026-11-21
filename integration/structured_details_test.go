@@ -38,7 +38,6 @@ func TestStructuredRegistrationDetailsFormRestartAndExplicitContinuation(t *test
 	form := p.sent[1].ReplyMarkup.(*telegram.InlineKeyboardMarkup)
 	text := p.sent[1].Text
 	p.mu.Unlock()
-	require.Equal(t, appTestOrigin+"/app/", form.InlineKeyboard[0][0].WebApp.URL)
 	require.Empty(t, form.InlineKeyboard[0][0].CallbackData)
 	require.Contains(t, text, "legal full name")
 	require.Contains(t, text, "passport number")
@@ -46,6 +45,11 @@ func TestStructuredRegistrationDetailsFormRestartAndExplicitContinuation(t *test
 	resume := form.InlineKeyboard[1][0].CallbackData
 	request, err := h.store.DetailsRequestOperation(t.Context(), scope, click)
 	require.NoError(t, err)
+	require.Equal(
+		t,
+		appTestOrigin+"/app/?details_request="+request.Request.ID.String(),
+		form.InlineKeyboard[0][0].WebApp.URL,
+	)
 	require.Equal(t, "pending", request.State)
 	require.Equal(t, event.Document.Registration.ClosesAt, request.Request.ExpiresAt)
 	_, err = h.store.Registration(t.Context(), db.EventScope{BotID: 123, Organization: "org"}, event.ID, session.UserID)

@@ -389,6 +389,10 @@ func contextEventSchema() map[string]any {
 				schemaMaximum: agentCurrencyScaleMax,
 			},
 			"closes_at":              instant,
+			mealSchemaSalesOpens:     instant,
+			"auto_assign":            map[string]any{manifestType: schemaBoolean},
+			"max_leader_percent":     map[string]any{manifestType: schemaInteger},
+			"max_follower_percent":   map[string]any{manifestType: schemaInteger},
 			"payment_window_seconds": map[string]any{manifestType: schemaInteger, schemaMinimum: 1},
 			"pricing":                eventTierPolicySchema(),
 			"details_requirements":   eventDetailsRequirementsSchema(),
@@ -399,8 +403,9 @@ func contextEventSchema() map[string]any {
 		schemaAdditionalProperties: false,
 		schemaRequired:             []string{"id", schemaVersion, "name", schemaTimezone, "starts_at", "ends_at"},
 		schemaProperties: map[string]any{
-			"id":          uuidField,
-			schemaVersion: map[string]any{manifestType: schemaInteger, schemaMinimum: 1},
+			"id":            uuidField,
+			eventSchemaSlug: eventSlugSchema(),
+			schemaVersion:   map[string]any{manifestType: schemaInteger, schemaMinimum: 1},
 			"name": map[string]any{
 				manifestType:    schemaString,
 				schemaMinLength: 1,

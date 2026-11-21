@@ -32,14 +32,16 @@ func registrationDetailsStatus(
 	q *sqlc.Queries,
 	userID uuid.UUID,
 ) (registrationdetails.Status, error) {
-	row, err := q.GetRegistrationDetails(ctx, userID)
+	row, err := q.GetRegistrationDetailsStatus(ctx, userID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return registrationdetails.Status{}, nil
 	}
 	return registrationdetails.Status{
-		Version:               row.Version,
-		LegalNamePresent:      row.LegalNamePresent,
-		PassportNumberPresent: row.PassportNumberPresent,
+		Version:                row.Version,
+		LegalNamePresent:       row.LegalNamePresent,
+		PassportNumberPresent:  row.PassportNumberPresent,
+		PassportCountryPresent: row.PassportCountryPresent,
+		PassportPhotoPresent:   row.PassportPhotoPresent,
 	}, err
 }
 
@@ -144,6 +146,14 @@ func readRegistrationDetails(
 	if err != nil {
 		return registrationdetails.Record{}, registrationdetails.Status{}, err
 	}
+	return openRegistrationDetails(owner, row, protector)
+}
+
+func openRegistrationDetails(
+	owner uuid.UUID,
+	row sqlc.ShuttleRegistrationDetail,
+	protector *registrationdetails.Protector,
+) (registrationdetails.Record, registrationdetails.Status, error) {
 	raw, err := protector.Open(owner, row.EncryptedRecord)
 	if err != nil {
 		return registrationdetails.Record{}, registrationdetails.Status{}, err
@@ -158,7 +168,9 @@ func readRegistrationDetails(
 		return registrationdetails.Record{}, registrationdetails.Status{}, registrationdetails.ErrProtection
 	}
 	status := record.Status(row.Version)
-	if status.LegalNamePresent != row.LegalNamePresent || status.PassportNumberPresent != row.PassportNumberPresent {
+	if status.LegalNamePresent != row.LegalNamePresent || status.PassportNumberPresent != row.PassportNumberPresent ||
+		status.PassportCountryPresent != row.PassportCountryPresent ||
+		status.PassportPhotoPresent != row.PassportPhotoPresent {
 		return registrationdetails.Record{}, registrationdetails.Status{}, registrationdetails.ErrProtection
 	}
 	return record, status, nil
@@ -183,16 +195,21 @@ func saveRegistrationDetails(
 	_, err = tx.Exec(
 		ctx,
 		"INSERT INTO shuttle_registration_details(user_id,version,encrypted_record,"+
-			"legal_name_present,passport_number_present) VALUES($1,$2,$3,$4,$5) ON "+
+			"legal_name_present,passport_number_present,passport_country_present,passport_photo_present) "+
+			"VALUES($1,$2,$3,$4,$5,$6,$7) ON "+
 			"CONFLICT(user_id) DO UPDATE SET version=EXCLUDED.version,"+
 			"encrypted_record=EXCLUDED.encrypted_record,"+
 			"legal_name_present=EXCLUDED.legal_name_present,"+
-			"passport_number_present=EXCLUDED.passport_number_present",
+			"passport_number_present=EXCLUDED.passport_number_present,"+
+			"passport_country_present=EXCLUDED.passport_country_present,"+
+			"passport_photo_present=EXCLUDED.passport_photo_present",
 		owner,
 		status.Version,
 		encrypted,
 		status.LegalNamePresent,
 		status.PassportNumberPresent,
+		status.PassportCountryPresent,
+		status.PassportPhotoPresent,
 	)
 	return err
 }

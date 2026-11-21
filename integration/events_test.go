@@ -25,6 +25,7 @@ func TestEventCatalogIsScopedDurableAndIdempotent(t *testing.T) {
 	path := "/internal/admin/events/" + id.String()
 	start := time.Date(2026, time.November, 10, 12, 0, 0, 0, time.UTC)
 	doc := events.Document{
+		Slug:     "grodno-26",
 		Name:     "Grodno",
 		Timezone: "Europe/Minsk",
 		StartsAt: start,
@@ -44,6 +45,14 @@ func TestEventCatalogIsScopedDurableAndIdempotent(t *testing.T) {
 	var replay events.Event
 	require.NoError(t, json.Unmarshal(data, &replay))
 	require.Equal(t, created, replay)
+	duplicate := map[string]any{"operation_id": "duplicate-slug", "expected_version": 0, "document": doc}
+	code, _ = adminRequest(t, h, operator, http.MethodPut, "/internal/admin/events/"+uuid.NewString(), duplicate)
+	require.Equal(t, http.StatusConflict, code)
+	ambiguous := doc
+	ambiguous.Slug = created.ID.String()
+	code, _ = adminRequest(t, h, operator, http.MethodPut, "/internal/admin/events/"+uuid.NewString(),
+		map[string]any{"operation_id": "reserved-event-id", "expected_version": 0, "document": ambiguous})
+	require.Equal(t, http.StatusBadRequest, code)
 	doc.Name = "Changed"
 	doc.Timezone = "Asia/Yekaterinburg"
 	doc.Modules = []string{"massage"}

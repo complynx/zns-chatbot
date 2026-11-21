@@ -48,6 +48,7 @@ type AccountEvent struct {
 	Registration        AccountRegistration `json:"registration"`
 	RegistrationEnabled bool                `json:"registration_enabled"`
 	Pass                *AccountPass        `json:"pass,omitempty"`
+	PassReturn          *AccountPassReturn  `json:"pass_return,omitempty"`
 }
 
 type AccountEvents struct {
@@ -102,7 +103,7 @@ func (s *Store) OwnAccountEvents(
 			result.HasMore = true
 			break
 		}
-		item, readErr := accountEvent(ctx, q, row, result.ObservedAt)
+		item, readErr := ownAccountEvent(ctx, tx, q, row, result.ObservedAt)
 		if readErr != nil {
 			return result, readErr
 		}
@@ -125,6 +126,20 @@ func (s *Store) OwnAccountEvents(
 		result.Next = &last
 	}
 	return result, nil
+}
+
+func ownAccountEvent(
+	ctx context.Context,
+	tx pgx.Tx,
+	q *sqlc.Queries,
+	row sqlc.ListOwnAccountEventsRow,
+	observed time.Time,
+) (AccountEvent, error) {
+	item, err := accountEvent(ctx, q, row, observed)
+	if err == nil && item.RegistrationEnabled && item.Registration.State == registrations.Returned {
+		item.PassReturn, err = readAccountPassReturn(ctx, tx, item.Registration.ID)
+	}
+	return item, err
 }
 
 func accountEvent(

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -63,7 +64,7 @@ func baselineFreshDownUpAndPartialLegacyRefusal(t *testing.T) {
 		var version int64
 		require.NoError(t, s.Pool().QueryRow(t.Context(),
 			"SELECT max(version_id) FROM goose_db_version WHERE is_applied").Scan(&version))
-		require.EqualValues(t, 82, version)
+		require.EqualValues(t, 92, version)
 		_, err := provider.DownTo(t.Context(), 0)
 		require.NoError(t, err)
 		var tables int
@@ -146,20 +147,15 @@ SELECT user_id,1,'Анна Иванова','Анна','Иванова','user' FR
 		t,
 		s.Pool().QueryRow(t.Context(), "SELECT to_jsonb(p)::text FROM shuttle_user_profiles p").Scan(&originalProfile),
 	)
+	// Capture every legacy relation. Later migrations may add relations of their own.
+	var originalNames []string
+	const namesQuery = "SELECT array_agg(relname::text ORDER BY relname) FROM pg_class " +
+		"WHERE relnamespace=current_schema()::regnamespace"
+	require.NoError(t, s.Pool().QueryRow(t.Context(), namesQuery).Scan(&originalNames))
+	const objectQuery = "SELECT array_agg(oid ORDER BY relname)::text FROM pg_class " +
+		"WHERE relnamespace=current_schema()::regnamespace AND relname::text=ANY($1::text[])"
 	var objects string
-	const objectQuery = "SELECT array_agg(oid ORDER BY oid)::text FROM pg_class WHERE " +
-		"relnamespace=current_schema()::regnamespace " +
-		"AND NOT starts_with(relname,'shuttle_telegram_availability') " +
-		"AND NOT starts_with(relname,'shuttle_user_names') " +
-		"AND NOT starts_with(relname,'shuttle_communication') " +
-		"AND NOT starts_with(relname,'shuttle_broadcast_subscriptions') " +
-		"AND relname<>'shuttle_tasks_user_activity_idx' " +
-		"AND NOT starts_with(relname,'shuttle_reaction') " +
-		"AND NOT starts_with(relname,'shuttle_telegram_reactions') AND relname NOT IN " +
-		"('shuttle_user_bans','shuttle_user_bans_pkey','shuttle_user_bans_user_id_request_hash_key') AND relname NOT IN " +
-		"('shuttle_symbols','shuttle_symbols_pkey','shuttle_symbols_pending','shuttle_tasks_symbols'," +
-		"'shuttle_symbol_decay','shuttle_symbol_decay_pkey')"
-	require.NoError(t, s.Pool().QueryRow(t.Context(), objectQuery).Scan(&objects))
+	require.NoError(t, s.Pool().QueryRow(t.Context(), objectQuery, originalNames).Scan(&objects))
 	require.NoError(t, s.Migrate(t.Context()))
 	var retainedHistory, retainedProfile string
 	require.NoError(
@@ -195,7 +191,7 @@ SELECT user_id,1,'Анна Иванова','Анна','Иванова','user' FR
 	require.ErrorContains(t, err, "legacy migration history must be preserved")
 	require.Equal(t, upgradedHistory, migrationHistory(t, s))
 	var after string
-	require.NoError(t, s.Pool().QueryRow(t.Context(), objectQuery).Scan(&after))
+	require.NoError(t, s.Pool().QueryRow(t.Context(), objectQuery, originalNames).Scan(&after))
 	require.Equal(t, objects, after)
 	retained, err := s.GetTask(t.Context(), task.ID)
 	require.NoError(t, err)
@@ -288,4 +284,41 @@ func baselineRollbackRefusesEvenUnapplied73History(t *testing.T) {
 		s.Pool().QueryRow(t.Context(), `SELECT to_regclass('shuttle_user_profiles') IS NOT NULL`).Scan(&exists),
 	)
 	require.True(t, exists)
+}
+
+func TestEventSlugDowngradeWaitsForConcurrentEdit(t *testing.T) {
+	t.Parallel()
+	s := testStore(t)
+	ctx, pool := t.Context(), s.Pool()
+	provider := baselineProvider(t, s)
+	_, err := provider.DownTo(ctx, 88)
+	require.NoError(t, err)
+	id := uuid.New()
+	_, err = pool.Exec(ctx, `INSERT INTO shuttle_events(id,bot_id,organization_id,name,timezone,starts_at,ends_at)
+		VALUES ($1,1,'org','Summer','UTC',now(),now()+interval '1 day')`, id)
+	require.NoError(t, err)
+	edit, err := pool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = edit.Rollback(ctx) }()
+	_, err = edit.Exec(ctx, "UPDATE shuttle_events SET slug='summer' WHERE id=$1", id)
+	require.NoError(t, err)
+
+	done := make(chan error, 1)
+	go func() {
+		_, downErr := provider.ApplyVersion(ctx, 88, false)
+		done <- downErr
+	}()
+	require.Eventually(t, func() bool {
+		var waiting bool
+		waitErr := pool.QueryRow(ctx, "SELECT EXISTS(SELECT FROM pg_stat_activity "+
+			"WHERE datname=current_database() AND $1::integer=ANY(pg_blocking_pids(pid)))",
+			edit.Conn().PgConn().PID()).Scan(&waiting)
+		return waitErr == nil && waiting
+	}, 5*time.Second, 10*time.Millisecond)
+	require.NoError(t, edit.Commit(ctx))
+	require.ErrorContains(t, <-done, "event slugs must be exported and cleared before downgrade")
+
+	var slug string
+	require.NoError(t, pool.QueryRow(ctx, "SELECT slug FROM shuttle_events WHERE id=$1", id).Scan(&slug))
+	require.Equal(t, "summer", slug)
 }
