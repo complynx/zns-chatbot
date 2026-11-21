@@ -342,6 +342,15 @@ func (c *Client) signed(ctx context.Context, token string) (claims, error) {
 
 // Verify checks JWT trust before using a bounded positive introspection result.
 func (c *Client) Verify(ctx context.Context, token string) (Principal, error) {
+	return c.verify(ctx, token, true)
+}
+
+// VerifyFresh obtains current roles directly from IAM before a sensitive release.
+func (c *Client) VerifyFresh(ctx context.Context, token string) (Principal, error) {
+	return c.verify(ctx, token, false)
+}
+
+func (c *Client) verify(ctx context.Context, token string, useCached bool) (Principal, error) {
 	s, err := c.signed(ctx, token)
 	if err != nil {
 		return Principal{}, err
@@ -353,7 +362,7 @@ func (c *Client) Verify(ctx context.Context, token string) (Principal, error) {
 	epoch := c.cacheEpoch
 	ttl := c.options.PositiveCacheTTL
 	c.mu.Unlock()
-	if hit {
+	if useCached && hit {
 		return clonePrincipal(cached.principal), nil
 	}
 	d, err := c.discover(ctx)

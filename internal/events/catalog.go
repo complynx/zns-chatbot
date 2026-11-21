@@ -3,6 +3,7 @@ package events
 
 import (
 	"errors"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -19,7 +20,14 @@ const MaxNameLength = 256
 
 var ErrInvalid = errors.New("invalid event configuration")
 
+const SlugPattern = "^[a-z0-9][a-z0-9_-]{0,63}$"
+const EventIDPattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+
+var eventSlug = regexp.MustCompile(SlugPattern)
+var reservedEventID = regexp.MustCompile(EventIDPattern)
+
 type Document struct {
+	Slug         string                       `json:"slug,omitempty" maxLength:"64" pattern:"^[a-z0-9][a-z0-9_-]{0,63}$"`
 	Deposit      *registrations.DepositPolicy `json:"deposit,omitempty"`
 	Registration *registrations.Rules         `json:"registration,omitempty"`
 	Name         string                       `json:"name" minLength:"1" maxLength:"256"`
@@ -37,6 +45,9 @@ type Event struct {
 
 // Normalize validates absolute instants and a named zone; it never guesses a local UTC offset.
 func Normalize(document Document) (Document, error) {
+	if document.Slug != "" && (!eventSlug.MatchString(document.Slug) || reservedEventID.MatchString(document.Slug)) {
+		return Document{}, ErrInvalid
+	}
 	document.Name = strings.TrimSpace(document.Name)
 	if document.Name == "" || len([]rune(document.Name)) > MaxNameLength ||
 		document.Timezone == "" || document.Timezone == "Local" || len(document.Timezone) > MaxModuleIDLength ||

@@ -94,6 +94,18 @@ type TierUsage struct {
 // ResolvePrices quotes one owner or an opposite-role pair in input order.
 // The caller supplies one database instant and all assigned owner-pass counts.
 func ResolvePrices(rules Rules, now time.Time, usage []TierUsage, roles []string) ([]PriceQuote, error) {
+	return ResolveAssignmentPrices(rules, now, usage, roles, rules.UsesPassInvites())
+}
+
+// ResolveAssignmentPrices accepts the pairing policy captured under the event lock.
+// Code partners take successive ordinary owner quotes, even if the sale settings later change.
+func ResolveAssignmentPrices(
+	rules Rules,
+	now time.Time,
+	usage []TierUsage,
+	roles []string,
+	individualPrices bool,
+) ([]PriceQuote, error) {
 	if !validPricingRoles(roles) || now.IsZero() {
 		return nil, ErrInvalid
 	}
@@ -108,10 +120,12 @@ func ResolvePrices(rules Rules, now time.Time, usage []TierUsage, roles []string
 		}
 		return quotes, nil
 	}
-	resolver, err := newTierResolver(*rules.Pricing, now, usage, len(roles) == pricingPairSize)
+	pair := len(roles) == pricingPairSize
+	resolver, err := newTierResolver(*rules.Pricing, now, usage, pair && !individualPrices)
 	if err != nil {
 		return nil, err
 	}
+	resolver.skipPromo = rules.AutoAssign || pair
 	return resolver.quotes(roles)
 }
 
@@ -122,22 +136,24 @@ func validPricingRoles(roles []string) bool {
 	return len(roles) == 1 || (ValidRole(roles[1]) && roles[0] != roles[1])
 }
 
-// tierResolver holds one immutable policy, instant and assigned-pass view.
+// tierResolver quotes against a fixed policy and instant. A successive owner
+// quote includes the earlier owner's place in this assignment.
 // The empty role key contains totals across both roles for distributed pricing.
 type tierResolver struct {
-	policy   TierPolicy
-	now      time.Time
-	pair     bool
-	counts   map[string]int64
-	explicit map[string]map[string]int64
-	prior    []int64
-	numbers  []int32
-	floor    int
+	policy    TierPolicy
+	now       time.Time
+	batchPair bool
+	skipPromo bool
+	counts    map[string]int64
+	explicit  map[string]map[string]int64
+	prior     []int64
+	numbers   []int32
+	floor     int
 }
 
-func newTierResolver(policy TierPolicy, now time.Time, usage []TierUsage, pair bool) (tierResolver, error) {
+func newTierResolver(policy TierPolicy, now time.Time, usage []TierUsage, batchPair bool) (tierResolver, error) {
 	r := tierResolver{
-		policy: policy, now: now, pair: pair,
+		policy: policy, now: now, batchPair: batchPair,
 		counts:   map[string]int64{},
 		explicit: map[string]map[string]int64{"": {}, Leader: {}, Follower: {}},
 		prior:    make([]int64, len(policy.Tiers)),
@@ -222,7 +238,7 @@ func (r tierResolver) hasFollowingAssignable(i int) bool {
 }
 
 func (r tierResolver) permitsOverflow(i int, used int64) bool {
-	return r.policy.Mode == PricingDistributed && r.pair && used+1 == r.capacity(i) && r.hasFollowingAssignable(i)
+	return r.policy.Mode == PricingDistributed && r.batchPair && used+1 == r.capacity(i) && r.hasFollowingAssignable(i)
 }
 
 func (r tierResolver) pick(role string, increment int64) int {
@@ -230,7 +246,7 @@ func (r tierResolver) pick(role string, increment int64) int {
 		if r.blocked(i) {
 			break
 		}
-		if (r.pair && r.policy.Tiers[i].Promo) || r.capacity(i) == 0 {
+		if (r.skipPromo && r.policy.Tiers[i].Promo) || r.capacity(i) == 0 {
 			continue
 		}
 		if !r.effective(i, role, increment) {
@@ -250,7 +266,9 @@ func (r tierResolver) quotes(roles []string) ([]PriceQuote, error) {
 		increment := int64(1)
 		if r.policy.Mode == PricingDistributed {
 			role = ""
-			increment = int64(len(roles))
+			if r.batchPair {
+				increment = pricingPairSize
+			}
 		}
 		index := r.pick(role, increment)
 		if index < 0 {
@@ -259,6 +277,10 @@ func (r tierResolver) quotes(roles []string) ([]PriceQuote, error) {
 		quotes[i] = PriceQuote{
 			PriceMinor: r.policy.Tiers[index].PriceMinor,
 			Tier:       &TierSnapshot{ID: r.policy.Tiers[index].ID, Number: r.numbers[index]},
+		}
+		if !r.batchPair && i+1 < len(roles) {
+			r.counts[role]++
+			r.explicit[role][r.policy.Tiers[index].ID]++
 		}
 	}
 	return quotes, nil

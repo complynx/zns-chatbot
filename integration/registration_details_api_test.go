@@ -17,7 +17,8 @@ const detailsAPI = "/internal/agent/registration_details/"
 func detailsRequest(t *testing.T, h *harness, token, method string, operation uuid.UUID, args any) (int, []byte) {
 	t.Helper()
 	body := map[string]any{"protocol_version": 1, "operation_id": operation, "arguments": args}
-	if method == "set_legal_name" || method == "set_passport_number" || method == "begin_request" {
+	switch method {
+	case "set_legal_name", "set_passport_number", "set_passport_country", "begin_request":
 		body["idempotency_key"] = operation
 		body["confirmation"] = map[string]any{"mode": "none"}
 	}
@@ -50,7 +51,7 @@ func detailsSchemas(t *testing.T, h *harness, token string) map[string]*huma.Sch
 			schemas[method.ID] = &schema
 		}
 	}
-	require.Len(t, schemas, 9)
+	require.Len(t, schemas, 10)
 	return schemas
 }
 
@@ -127,6 +128,11 @@ func TestRegistrationDetailsAgentAPIUsesRedactedSchemasAndHistoricalReplay(t *te
 	)
 	require.Equal(t, http.StatusOK, code, string(raw))
 	require.EqualValues(t, 3, validDetailsReceipt(t, raw, schemas["set_legal_name"]).Version)
+	code, raw = detailsRequest(t, h, token, "set_passport_country", uuid.New(),
+		map[string]any{"expected_version": 3, "passport_country": "BY"})
+	require.Equal(t, http.StatusOK, code, string(raw))
+	require.True(t, validDetailsReceipt(t, raw, schemas["set_passport_country"]).PassportCountryPresent)
+	require.NotContains(t, string(raw), `"BY"`)
 	code, raw = detailsRequest(t, h, token, "set_passport_number", passportOperation, passportArgs)
 	require.Equal(t, http.StatusOK, code, string(raw))
 	require.Equal(t, completed, validDetailsReceipt(t, raw, schemas["set_passport_number"]))

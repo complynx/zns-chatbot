@@ -32,7 +32,9 @@ func (s *Store) RecentMiniAppDetailsActions(
 		return nil, err
 	}
 	rows, err := tx.Query(ctx, `SELECT a.operation_id,a.field,(op.result->>'version')::bigint,
-(op.result->>'legal_name_present')::boolean,(op.result->>'passport_number_present')::boolean,a.completed_at
+(op.result->>'legal_name_present')::boolean,(op.result->>'passport_number_present')::boolean,
+COALESCE((op.result->>'passport_country_present')::boolean,false),
+COALESCE((op.result->>'passport_photo_present')::boolean,false),a.completed_at
 FROM shuttle_tasks current_task JOIN shuttle_miniapp_details_actions a ON a.user_id=current_task.user_id
 JOIN shuttle_registration_details_operations op ON op.user_id=a.user_id AND op.operation_id=a.operation_id
 WHERE current_task.id=$1 AND current_task.user_id=$2 AND a.completed_at<current_task.created_at
@@ -50,6 +52,8 @@ ORDER BY a.completed_at DESC,a.operation_id LIMIT 5`, taskID, scope.UserID)
 			&action.Status.Version,
 			&action.Status.LegalNamePresent,
 			&action.Status.PassportNumberPresent,
+			&action.Status.PassportCountryPresent,
+			&action.Status.PassportPhotoPresent,
 			&action.CompletedAt,
 		); err != nil {
 			return nil, err

@@ -14,6 +14,8 @@ type Field string
 const (
 	LegalName          Field = "legal_name"
 	PassportNumber     Field = "passport_number"
+	PassportCountry    Field = "passport_country"
+	PassportPhoto      Field = "passport_photo"
 	maxLegalNameLength       = 256
 	maxPassportLength        = 128
 )
@@ -22,15 +24,19 @@ var ErrInvalid = errors.New("invalid registration details")
 
 // Record is private legal data, never a general profile or agent-context value.
 type Record struct {
-	LegalName      string `json:"legal_name"`
-	PassportNumber string `json:"passport_number"`
+	LegalName       string `json:"legal_name"`
+	PassportNumber  string `json:"passport_number"`
+	PassportCountry string `json:"passport_country,omitempty"`
+	PassportPhoto   string `json:"passport_photo,omitempty"`
 }
 
 // Status is safe to persist in receipts and automatic agent context.
 type Status struct {
-	Version               int64 `json:"version"`
-	LegalNamePresent      bool  `json:"legal_name_present"`
-	PassportNumberPresent bool  `json:"passport_number_present"`
+	Version                int64 `json:"version"`
+	LegalNamePresent       bool  `json:"legal_name_present"`
+	PassportNumberPresent  bool  `json:"passport_number_present"`
+	PassportCountryPresent bool  `json:"passport_country_present,omitempty"`
+	PassportPhotoPresent   bool  `json:"passport_photo_present,omitempty"`
 }
 
 type Mutation struct {
@@ -50,6 +56,16 @@ func (m Mutation) Normalize() (Mutation, error) {
 	case LegalName:
 	case PassportNumber:
 		limit = maxPassportLength
+	case PassportCountry:
+		m.Value = strings.ToUpper(m.Value)
+		if !validCountry(m.Value) {
+			return Mutation{}, ErrInvalid
+		}
+	case PassportPhoto:
+		if !validPhoto(m.Value) {
+			return Mutation{}, ErrInvalid
+		}
+		return m, nil
 	default:
 		return Mutation{}, ErrInvalid
 	}
@@ -69,14 +85,20 @@ func (r Record) Apply(m Mutation) (Record, error) {
 	if err != nil {
 		return Record{}, err
 	}
-	if normalized.Field == LegalName {
+	switch normalized.Field {
+	case LegalName:
 		r.LegalName = normalized.Value
-	} else {
+	case PassportNumber:
 		r.PassportNumber = normalized.Value
+	case PassportCountry:
+		r.PassportCountry = normalized.Value
+	case PassportPhoto:
+		r.PassportPhoto = normalized.Value
 	}
 	return r, nil
 }
 
 func (r Record) Status(version int64) Status {
-	return Status{Version: version, LegalNamePresent: r.LegalName != "", PassportNumberPresent: r.PassportNumber != ""}
+	return Status{Version: version, LegalNamePresent: r.LegalName != "", PassportNumberPresent: r.PassportNumber != "",
+		PassportCountryPresent: r.PassportCountry != "", PassportPhotoPresent: r.PassportPhoto != ""}
 }

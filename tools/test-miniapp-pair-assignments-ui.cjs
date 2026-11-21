@@ -6,16 +6,19 @@ const { resolve } = require("node:path");
 const { test } = require("node:test");
 const { runInNewContext } = require("node:vm");
 const source = readFileSync(resolve(__dirname, "../internal/api/miniapp_ui/pair-assignments.js"), "utf8");
+const passAdminSource = readFileSync(resolve(__dirname, "../internal/api/miniapp_ui/pass-admin.js"), "utf8");
 class Element {
   constructor(tag = "div") { this.tagName = tag; this.children = []; this.listeners = {}; this.textContent = ""; this.value = ""; this.hidden = false; this.disabled = false; this.checked = false; }
   append(...nodes) { this.children.push(...nodes); }
   replaceChildren(...nodes) { this.children = nodes; this.textContent = ""; }
   addEventListener(event, action) { this.listeners[event] = action; }
+  setAttribute(name, value) { this[name] = value; }
+  querySelector(selector) { return this.querySelectorAll("p").find(n => selector === "[role=status]" && n.role === "status"); }
   querySelectorAll(tag) { return this.children.flatMap(n => [...(n.tagName === tag ? [n] : []), ...n.querySelectorAll(tag)]); }
 }
 function backend() {
   const b = { owner: randomUUID(), events: [], targets: [], proposals: new Map(), native: new Set(), writes: [], effects: 0, active: true, admin: true, pageSize: 20 };
-  b.event = () => { const e = { id: randomUUID(), version: 3, document: { name: "Dance event <img>", timezone: "Europe/Minsk" } }; b.events.push(e); return e; };
+  b.event = () => { const e = { id: randomUUID(), version: 3, document: { name: "Dance event <img>", timezone: "Europe/Minsk", modules: ["registrations"] } }; b.events.push(e); return e; };
   b.target = e => {
     const pair = { id: randomUUID(), event_id: e.id, leader_registration_id: randomUUID(), follower_registration_id: randomUUID(), state: "waitlisted", version: 2 };
     const t = { pair, arguments: { event_id: e.id, pair_id: pair.id, expected_event_version: e.version, expected_pair_version: pair.version, expected_leader_version: 4, expected_follower_version: 5 }, leader: { user_id: randomUUID(), telegram_user_id: 123456, display_name: "Alex <script>" }, follower: { user_id: randomUUID(), telegram_user_id: 654321, display_name: "Sam" } }; b.targets.push(t); return t;
@@ -62,10 +65,12 @@ function harness(b = backend(), store = new Map()) {
   const elements = new Map(), get = id => { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); };
   let ui, denied = 0, failWrite = false, failRead = false;
   const storage = { getItem: key => { if (failRead) throw Error("Storage unavailable"); return store.get(key) || null; }, setItem: (key, value) => { if (failWrite) throw Error("Storage unavailable"); store.set(key, value); }, removeItem: key => { if (failWrite) throw Error("Storage unavailable"); store.delete(key); } };
-  const window = {};
-  runInNewContext(source, { window, document: { getElementById: get, createElement: tag => new Element(tag) }, sessionStorage: storage, crypto: { randomUUID }, Date: class extends Date { static now() { return b.now ?? Date.now(); } }, Intl, console });
-  ui = window.createZinusyaPairAssignments({ request: b.request, setBusy: v => ui.setBusy(v), denied: () => { denied++; } });
-  const h = { b, ui, store, get: id => get(id === "pair-assignments" ? id : "ppa-" + id), text: id => { const flatten = n => n.textContent + n.children.map(flatten).join(" "); return flatten(h.get(id)); }, denied: () => denied, failStorage: () => { failWrite = true; }, failRead: () => { failRead = true; }, start: (owner = b.owner, locale = "en") => ui.start(owner, locale),
+  const context = { window: { passCopy: (_, key) => key }, document: { getElementById: get, createElement: tag => new Element(tag) }, sessionStorage: storage, crypto: { randomUUID }, Date: class extends Date { static now() { return b.now ?? Date.now(); } }, Intl, console };
+  if (b.passAdmin) runInNewContext(passAdminSource, context);
+  runInNewContext(source, context);
+  const window = context.window;
+  ui = window.createZinusyaPairAssignments({ request: b.request, readBlob: b.readBlob, setBusy: v => ui.setBusy(v), denied: () => { denied++; } });
+  const h = { b, ui, store, get: id => get(["pair-assignments", "pass-admin"].includes(id) ? id : "ppa-" + id), text: id => { const flatten = n => n.textContent + n.children.map(flatten).join(" "); return flatten(h.get(id)); }, denied: () => denied, failStorage: () => { failWrite = true; }, failRead: () => { failRead = true; }, start: (owner = b.owner, locale = "en") => ui.start(owner, locale),
     click: async id => { const n = h.get(id); assert.equal(n.disabled, false, id + " disabled"); assert.equal(n.hidden, false, id + " hidden"); await n.listeners.click(); },
     select: async (id, value) => { const n = h.get(id); assert.equal(n.disabled, false, id + " disabled"); n.value = value; await n.listeners.change(); },
     consent: () => { h.get("consent").checked = true; h.get("consent").listeners.change(); },
@@ -74,6 +79,77 @@ function harness(b = backend(), store = new Map()) {
   }; return h;
 }
 function fixture() { const h = harness(); const event = h.b.event(); h.b.target(event); return h; }
+
+test("disabled registrations still allow a refund from the event picker", async () => {
+  const b = backend(); b.passAdmin = true;
+  const h = harness(b);
+  const ordinary = b.event(), historical = b.event();
+  historical.document.modules = ["orders"];
+  const registration = randomUUID(), pass = randomUUID(), refundDue = 2087;
+  const calls = [];
+  let refunded = false;
+  b.hook = (path, method, body) => {
+    calls.push(path);
+    if (path.endsWith("/registrations")) {
+      const eventID = path.split("/").at(-2);
+      const row = { registration_id: registration, pass_id: pass, state: "returned", role: "leader", version: 4,
+        display_name: "Participant", currency: "BYN", currency_scale: 2, confirmed_minor: 3087, refund_due_minor: refundDue };
+      if (refunded) Object.assign(row, { refunded_at: new Date().toISOString(), refunded_minor: refundDue });
+      return { event_id: eventID, rows: eventID === historical.id ? [row] : [] };
+    }
+    if (path === "./pass-admin/events/" + historical.id + "/refund") {
+      assert.equal(method, "POST");
+      assert.equal(body.refund_minor, refundDue);
+      assert.equal(body.confirmed, true);
+      refunded = true;
+      return { registration_id: registration };
+    }
+  };
+
+  await h.start();
+  await h.select("event", historical.id);
+  assert.ok(calls.includes("./pass-admin/events/" + historical.id + "/registrations"));
+  assert.ok(!calls.includes("./pair-assignments/events/" + historical.id + "/candidates"));
+  for (const id of ["target", "targets-first", "prepare"]) assert.equal(h.get(id).disabled, true);
+  const panel = h.get("pass-admin");
+  assert.equal(panel.hidden, false);
+  const select = panel.querySelectorAll("select")[0];
+  select.value = registration;
+  select.listeners.change();
+  panel.querySelectorAll("input")[0].value = "Transfer recorded";
+  const action = name => panel.querySelectorAll("button").find(button => button.textContent === name);
+  await action("ops.reviewRefund").listeners.click();
+  assert.equal(refunded, false);
+  await action("ops.confirm").listeners.click();
+  assert.equal(refunded, true);
+  assert.match(h.text("pass-admin"), /ops.refundDue 0\.00 BYN/);
+  assert.match(h.text("pass-admin"), /ops.refundedAmount 20.87 BYN/);
+  await h.select("event", ordinary.id);
+  assert.ok(calls.includes("./pair-assignments/events/" + ordinary.id + "/candidates"));
+  assert.equal(h.get("target").disabled, false);
+});
+
+test("the identity download uses the selected event and clears on lost access", async () => {
+  const b = backend(); b.passAdmin = true;
+  const allowed = b.event(), other = b.event();
+  const request = b.request, downloads = [];
+  b.request = (path, ...args) => {
+    if (!path.endsWith("/registrations")) return request(path, ...args);
+    const id = path.split("/").at(-2);
+    return { event_id: id, rows: [], identity_export_available: id === allowed.id };
+  };
+  b.readBlob = async path => { downloads.push(path); throw { status: 403 }; };
+  const h = harness(b);
+  await h.start();
+  const button = () => h.get("pass-admin").querySelectorAll("button").find(n => n.textContent === "ops.exportIdentity");
+  await h.select("event", other.id);
+  assert.equal(button(), undefined);
+  await h.select("event", allowed.id);
+  await button().listeners.click();
+  assert.deepEqual(downloads, ["./pass-admin/events/" + allowed.id + "/identity.zip"]);
+  assert.equal(button(), undefined);
+  assert.equal(h.denied(), 1);
+});
 
 test("explicit named pair selection and fresh consent assign both distinct quoted passes", async () => {
   const h = fixture(); await h.start(); assert.equal(h.get("event").value, ""); assert.equal(h.get("prepare").disabled, true);
@@ -213,3 +289,64 @@ test("legacy completed pair receipt remains readable without new financial effec
 test("modern structured pair proposal cannot drop its two quotes",async()=>{
  const h=fixture(),e=h.b.events[0],t=h.b.targets[0],p=h.b.proposal(e,t);p.preparation.display_terms={event_name:e.document.name,payment_window_seconds:3600,payment_closes_at:new Date(Date.now()+86400000).toISOString()};delete p.preparation.quotes;await h.start();assert.equal(h.get("pending").querySelectorAll("button").length,0);assert.equal(h.b.writes.length,0);
 });
+
+for (const [action, state, review] of [
+  ["return", "assigned", "reviewReturn"],
+  ["refund", "returned", "reviewRefund"],
+]) {
+  test("pass " + action + " distinguishes participants with the same name and role", async () => {
+    const b = backend(); b.passAdmin = true;
+    const h = harness(b), event = b.event();
+    const rows = [123456, 654321].map(telegramID => ({
+      telegram_id: telegramID,
+      registration_id: randomUUID(),
+      pass_id: randomUUID(),
+      display_name: "Alex Lee",
+      state,
+      role: "leader",
+      version: 4,
+      currency: "BYN",
+      currency_scale: 2,
+      confirmed_minor: 3087,
+      refund_due_minor: 2087,
+      refunded_minor: 0,
+    }));
+    const [decoy, target] = rows;
+    const base = "./pass-admin/events/" + event.id + "/";
+    const writes = [];
+    b.hook = (path, method, body) => {
+      if (path === base + "registrations") return { event_id: event.id, rows };
+      if (path === base + action) {
+        writes.push({ method, body });
+        return { registration_id: body.registration_id };
+      }
+    };
+
+    await h.start();
+    await h.select("event", event.id);
+    const panel = h.get("pass-admin"), select = panel.querySelectorAll("select")[0];
+    const options = select.children.slice(1).map(option => ({ value: option.value, text: option.textContent }));
+    select.value = target.registration_id;
+    select.listeners.change();
+    const visibleParagraphs = () => panel.querySelectorAll("p").map(node => node.textContent);
+    const selectedIdentity = visibleParagraphs();
+    panel.querySelectorAll("input")[0].value = "Participant requested this change";
+    const click = key => panel.querySelectorAll("button").find(button => button.textContent === "ops." + key).listeners.click();
+    await click(review);
+    const confirmationIdentity = visibleParagraphs();
+    assert.equal(writes.length, 0);
+    await click("confirm");
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].method, "POST");
+    assert.equal(writes[0].body.registration_id, target.registration_id);
+    assert.equal(writes[0].body.expected_version, target.version);
+    assert.equal(writes[0].body.confirmed, true);
+
+    const label = row => "Alex Lee · Telegram " + row.telegram_id + " · ops.leader";
+    assert.deepEqual(options, rows.map(row => ({ value: row.registration_id, text: label(row) })));
+    for (const paragraphs of [selectedIdentity, confirmationIdentity]) {
+      assert.ok(paragraphs.includes(label(target)));
+      assert.ok(!paragraphs.includes(label(decoy)));
+    }
+  });
+}

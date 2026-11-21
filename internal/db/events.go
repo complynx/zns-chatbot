@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/complynx/zns-chatbot/internal/db/sqlc"
@@ -58,6 +59,7 @@ func eventRecord(row sqlc.ShuttleEvent, rawRules, rawDeposit []byte) (events.Eve
 		}
 	}
 	return events.Event{ID: row.ID, Version: row.Version, Document: events.Document{
+		Slug:         row.Slug,
 		Registration: rules,
 		Deposit:      deposit,
 		Name:         row.Name,
@@ -206,11 +208,19 @@ func writeEventPolicies(
 			return events.Event{}, err
 		}
 	}
-	if err = q.SetEventRegistrationRules(
+	var minimumDeposit int64
+	if document.Deposit != nil {
+		minimumDeposit = document.Deposit.MinimumMinor
+	}
+	changed, err := q.SetEventRegistrationRules(
 		ctx,
-		sqlc.SetEventRegistrationRulesParams{EventID: row.ID, Document: ruleJSON},
-	); err != nil {
+		sqlc.SetEventRegistrationRulesParams{EventID: row.ID, Document: ruleJSON, MinimumDepositMinor: minimumDeposit},
+	)
+	if err != nil {
 		return events.Event{}, err
+	}
+	if changed == 0 {
+		return events.Event{}, ErrConflict
 	}
 	var depositJSON []byte
 	if document.Deposit != nil {
@@ -238,6 +248,7 @@ func writeEvent(ctx context.Context, q *sqlc.Queries, scope EventScope, change E
 		row, err = q.CreateEvent(
 			ctx,
 			sqlc.CreateEventParams{
+				Slug:           d.Slug,
 				ID:             change.ID,
 				BotID:          scope.BotID,
 				OrganizationID: scope.Organization,
@@ -269,6 +280,7 @@ func writeEvent(ctx context.Context, q *sqlc.Queries, scope EventScope, change E
 		row, err = q.UpdateEvent(
 			ctx,
 			sqlc.UpdateEventParams{
+				Slug:           d.Slug,
 				ID:             change.ID,
 				BotID:          scope.BotID,
 				OrganizationID: scope.Organization,
@@ -282,6 +294,10 @@ func writeEvent(ctx context.Context, q *sqlc.Queries, scope EventScope, change E
 		)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
+		return row, ErrConflict
+	}
+	var conflict *pgconn.PgError
+	if errors.As(err, &conflict) && conflict.ConstraintName == "shuttle_events_slug_unique" {
 		return row, ErrConflict
 	}
 	return row, err

@@ -23,6 +23,8 @@ import (
 var errControlTargetFinished = errors.New("control target finished without applying input")
 
 type checkpoint struct {
+	PassEntry              *passEntry             `json:"pass_entry,omitempty"`
+	PassDetailsVersion     *int64                 `json:"pass_details_version,omitempty"`
 	ReactionChatID         string                 `json:"reaction_chat_id,omitempty"`
 	WelcomeAfterOnboarding bool                   `json:"welcome_after_onboarding,omitempty"`
 	NativeAvatar           *db.AvatarDraftReceipt `json:"native_avatar,omitempty"`

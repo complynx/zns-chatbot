@@ -12,8 +12,8 @@ import (
 )
 
 // MiniAppPairAssignmentSession follows current global or event administrator
-// authorization. The fence checks local invalidation and expiry, never IAM I/O
-// under database locks. Bot and agent transports share the canonical operation.
+// authorization. The fence checks local invalidation and expiry. Protected
+// identity exports separately refresh IAM authority after acquiring the release locks.
 type MiniAppPairAssignmentSession struct {
 	UserID             uuid.UUID
 	Bearer, Generation [sha256.Size]byte

@@ -8,14 +8,24 @@ import (
 )
 
 const (
-	eventSchemaMaxTiers         = 100
-	eventSchemaLeaderCapacity   = "leader_capacity"
-	eventSchemaFollowerCapacity = "follower_capacity"
-	eventSchemaClosesAt         = "closes_at"
-	eventSchemaPaymentWindow    = "payment_window_seconds"
-	eventSchemaModules          = "modules"
-	eventSchemaUniqueItems      = "uniqueItems"
+	eventSchemaSlug               = "slug"
+	eventSchemaMaximumRolePercent = 100
+	eventSchemaMinimumRolePercent = 50
+	eventSchemaMaxTiers           = 100
+	eventSchemaLeaderCapacity     = "leader_capacity"
+	eventSchemaFollowerCapacity   = "follower_capacity"
+	eventSchemaClosesAt           = "closes_at"
+	eventSchemaPaymentWindow      = "payment_window_seconds"
+	eventSchemaModules            = "modules"
+	eventSchemaUniqueItems        = "uniqueItems"
 )
+
+func eventSlugSchema() map[string]any {
+	return map[string]any{
+		manifestType: schemaString, schemaPattern: events.SlugPattern,
+		"not": map[string]any{schemaPattern: events.EventIDPattern},
+	}
+}
 
 func nullableEventPolicy(policy map[string]any) map[string]any {
 	return map[string]any{"anyOf": []any{policy, map[string]any{manifestType: "null"}}}
@@ -95,7 +105,19 @@ func eventRegistrationRulesSchema() map[string]any {
 				schemaMinimum: 0,
 				schemaMaximum: agentCurrencyScaleMax,
 			},
-			eventSchemaClosesAt: map[string]any{manifestType: schemaString, schemaFormat: schemaDateTime},
+			eventSchemaClosesAt:  map[string]any{manifestType: schemaString, schemaFormat: schemaDateTime},
+			mealSchemaSalesOpens: map[string]any{manifestType: schemaString, schemaFormat: schemaDateTime},
+			"auto_assign":        map[string]any{manifestType: schemaBoolean},
+			"max_leader_percent": map[string]any{
+				manifestType:  schemaInteger,
+				schemaMinimum: eventSchemaMinimumRolePercent,
+				schemaMaximum: eventSchemaMaximumRolePercent,
+			},
+			"max_follower_percent": map[string]any{
+				manifestType:  schemaInteger,
+				schemaMinimum: eventSchemaMinimumRolePercent,
+				schemaMaximum: eventSchemaMaximumRolePercent,
+			},
 			eventSchemaPaymentWindow: map[string]any{
 				manifestType:  schemaInteger,
 				schemaMinimum: 1,
@@ -112,6 +134,7 @@ func eventChangeDocumentSchema() map[string]any {
 		manifestType: schemaObject, schemaAdditionalProperties: false,
 		schemaRequired: []string{ordersSchemaName, schemaTimezone, schemaStartsAt, schemaEndsAt, eventSchemaModules},
 		schemaProperties: map[string]any{
+			eventSchemaSlug: eventSlugSchema(),
 			ordersSchemaName: map[string]any{
 				manifestType:    schemaString,
 				schemaMinLength: 1,
@@ -178,6 +201,11 @@ func eventDetailsRequirementsSchema() map[string]any {
 		schemaProperties: map[string]any{
 			"legal_name":      map[string]any{manifestType: schemaBoolean},
 			"passport_number": map[string]any{manifestType: schemaBoolean},
+			"passport_countries": map[string]any{
+				manifestType: schemaArray,
+				schemaItems:  map[string]any{manifestType: schemaString, schemaPattern: "^[A-Z]{2}$"},
+			},
+			"passport_photo": map[string]any{manifestType: schemaBoolean},
 		},
 	}
 }

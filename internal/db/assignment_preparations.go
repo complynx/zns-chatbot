@@ -119,7 +119,7 @@ func (s *Store) prepareAssignment(ctx context.Context, scope EventScope, actor, 
 		}
 		return finishAssignmentPreparation(ctx, tx, q, scope, actor, operation, result, session)
 	}
-	result, err := buildAssignmentPreparation(ctx, q, scope, args)
+	result, err := buildAssignmentPreparation(ctx, tx, q, scope, args)
 	if err != nil {
 		return AssignmentPreparation{}, err
 	}
@@ -147,6 +147,7 @@ func (s *Store) prepareAssignment(ctx context.Context, scope EventScope, actor, 
 
 func buildAssignmentPreparation(
 	ctx context.Context,
+	tx pgx.Tx,
 	q *sqlc.Queries,
 	scope EventScope,
 	args PassAssignment,
@@ -197,7 +198,7 @@ func buildAssignmentPreparation(
 	if err != nil {
 		return AssignmentPreparation{}, err
 	}
-	prices, err := assignmentPrices(ctx, q, event, now.Time, []string{entry.Role})
+	prices, err := soloPassPrices(ctx, tx, q, event, now.Time, entry)
 	if err != nil {
 		return AssignmentPreparation{}, err
 	}

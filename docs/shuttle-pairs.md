@@ -1,5 +1,28 @@
 # Pair registration design
 
+The `/passes` participant flow offers event-specific, single-use invitation codes.
+An issuer can create a code when joining the waitlist or from their existing
+waitlisted registration. The bot reserves the code for the first eligible private
+Telegram update it accepts, even if the sender still needs to enter their name.
+Reservation and inbox insertion commit together. Retries retain the original claimant.
+An existing waitlisted participant with the required role and details joins
+immediately. A new claimant completes their own registration before membership
+begins. An outstanding code holds its issuer out of solo allocation. Either
+the issuer or claimant may revoke it before the pair forms.
+
+Use `POST /internal/events/{id}/pass-invites` with `operation_id` to issue a
+code. To replace a partner, also send the waitlisted pair's `replace_pair_id`.
+The pending replacement pauses assignment of that pair. Membership switches
+atomically when the new partner completes registration. Both
+`/internal/events/{id}/pass-invites/claim` and `/revoke` accept a POST body
+containing `code`. Creation by partner account is available on legacy events.
+Events with automatic assignment or a sales start date use invitation codes;
+their Mini App and agent context provide the corresponding `/passes` command.
+Existing directed invitations retain their decisions and operation receipts.
+Event and global administrators may dissolve a selected pair through
+`POST /internal/admin/events/{id}/pairs/{pair}/dissolve` with `operation_id`
+and `expected_version`. Dissolution preserves individual passes and balances.
+
 Pair consent is a separate aggregate.
 Pairing must never combine balances, rewrite
 an assigned price or mark a submitted proof as paid.
@@ -216,10 +239,8 @@ dissolution advance affected registration versions. Both solo assignment prepara
 and execution must reject held or paired registrations, including stale solo
 proposals. No target registration is changed merely by an incoming invitation.
 
-Both original requested_at timestamps remain intact. The provisional pair ordering
-uses the later original timestamp, unlike legacy's copied inviter timestamp. This
-choice is recorded for Daniel in ignored decisions; automatic allocation is not
-enabled before the ordering policy is settled.
+Both original requested_at timestamps remain intact. The pair uses the earlier
+of its two participants' request times for allocation.
 
 ## Assignment and lifecycle
 

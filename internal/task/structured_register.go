@@ -221,7 +221,7 @@ func (s *Service) registerChoice(
 		}
 		c.RegistrationEntry = &entry
 		c.RegistrationChange = &db.RegistrationChange{
-			Kind:    "register",
+			Kind:    registerAction,
 			EventID: entry.EventID,
 			UserID:  scope.UserID,
 			Role:    i.RegistrationRole,
@@ -259,6 +259,9 @@ func (s *Service) registerChoice(
 	result, err = s.store.Registration(ctx, eventScope, result.EventID, scope.UserID)
 	if err != nil {
 		return s.identityError(ctx, t, c, i, err)
+	}
+	if result.State == db.PassReturned {
+		return s.finishRegistration(ctx, t, c, i, passText(ru, "entry.returned"), nil, ru)
 	}
 	text := fmt.Sprintf(
 		"%s\n%s: %s\n/registrations",

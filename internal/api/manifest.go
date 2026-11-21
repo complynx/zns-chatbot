@@ -94,7 +94,7 @@ const (
 	manifestType               = "type"
 )
 
-const agentContractRevision = "mvp-96"
+const agentContractRevision = "mvp-97"
 
 func (s *Server) manifest(w http.ResponseWriter, _ *http.Request) {
 	revision := agentContractRevision
@@ -145,7 +145,7 @@ func (s *Server) manifest(w http.ResponseWriter, _ *http.Request) {
 				manifestDescription: "Solo owner registration and assigned-pass reads",
 				manifestPermissions: []string{},
 				manifestDiscovery:   discoveryStatic,
-				manifestMethods:     registrationMethods(),
+				manifestMethods:     s.registrationTools(),
 			},
 			map[string]any{
 				"id":                "zinusya_administration",

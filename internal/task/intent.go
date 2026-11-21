@@ -17,6 +17,8 @@ import (
 var ErrUnsupportedUpdate = errors.New("unsupported Telegram update")
 
 type intent struct {
+	PassInput            *passInput              `json:"pass_input,omitempty"`
+	PassCallback         string                  `json:"pass_callback,omitempty"`
 	ForwardOrigin        *telegram.MessageOrigin `json:"forward_origin,omitempty"`
 	Symbols              []symbols.Occurrence    `json:"symbols,omitempty"`
 	NativeAvatar         bool                    `json:"native_avatar,omitempty"`
@@ -144,6 +146,9 @@ func callbackIntent(i intent, cb *telegram.CallbackQuery) (intent, error) {
 		return normalized, err
 	}
 	if normalized, matched, err := registrationCallback(i, cb); matched {
+		return normalized, err
+	}
+	if normalized, matched, err := normalizePassCallback(i, cb); matched {
 		return normalized, err
 	}
 	if cursor, ok := strings.CutPrefix(cb.Data, registrationPageCallback); ok {

@@ -1,5 +1,7 @@
 package api
 
+import "github.com/complynx/zns-chatbot/internal/registrationdetails"
+
 const detailsOperationID = "operation_id"
 const detailsLegalNameLimit = 256
 const detailsPassportLimit = 128
@@ -20,31 +22,8 @@ const (
 		"Missing status is unknown: retain the same operation ID and exact arguments after uncertainty."
 )
 
-func registrationDetailsModule() map[string]any {
-	version := map[string]any{manifestType: schemaInteger, schemaMinimum: 0}
-	uuidField := map[string]any{manifestType: schemaString, schemaFormat: schemaUUID}
-	input := func(properties map[string]any, required ...string) map[string]any {
-		if required == nil {
-			required = []string{}
-		}
-		return map[string]any{
-			manifestType:               schemaObject,
-			schemaAdditionalProperties: false,
-			schemaProperties:           properties,
-			schemaRequired:             required,
-		}
-	}
-	output := map[string]any{
-		manifestType:               schemaObject,
-		schemaAdditionalProperties: false,
-		schemaRequired:             []string{schemaVersion, "legal_name_present", "passport_number_present"},
-		schemaProperties: map[string]any{
-			schemaVersion:             version,
-			"legal_name_present":      map[string]any{manifestType: schemaBoolean},
-			"passport_number_present": map[string]any{manifestType: schemaBoolean},
-		},
-	}
-	method := func(id, description string, arguments map[string]any, write bool) map[string]any {
+func registrationDetailsMethod(output map[string]any) func(string, string, map[string]any, bool) map[string]any {
+	return func(id, description string, arguments map[string]any, write bool) map[string]any {
 		item := map[string]any{
 			"id":                 id,
 			manifestDescription:  description,
@@ -66,6 +45,35 @@ func registrationDetailsModule() map[string]any {
 		}
 		return item
 	}
+}
+
+func registrationDetailsModule() map[string]any {
+	version := map[string]any{manifestType: schemaInteger, schemaMinimum: 0}
+	uuidField := map[string]any{manifestType: schemaString, schemaFormat: schemaUUID}
+	input := func(properties map[string]any, required ...string) map[string]any {
+		if required == nil {
+			required = []string{}
+		}
+		return map[string]any{
+			manifestType:               schemaObject,
+			schemaAdditionalProperties: false,
+			schemaProperties:           properties,
+			schemaRequired:             required,
+		}
+	}
+	output := map[string]any{
+		manifestType:               schemaObject,
+		schemaAdditionalProperties: false,
+		schemaRequired:             []string{schemaVersion, "legal_name_present", "passport_number_present"},
+		schemaProperties: map[string]any{
+			schemaVersion:              version,
+			"legal_name_present":       map[string]any{manifestType: schemaBoolean},
+			"passport_number_present":  map[string]any{manifestType: schemaBoolean},
+			"passport_country_present": map[string]any{manifestType: schemaBoolean},
+			"passport_photo_present":   map[string]any{manifestType: schemaBoolean},
+		},
+	}
+	method := registrationDetailsMethod(output)
 	get := method(
 		"get",
 		registrationDetailsReadDescription,
@@ -114,12 +122,29 @@ func registrationDetailsModule() map[string]any {
 		input(map[string]any{detailsOperationID: uuidField}, detailsOperationID),
 		false,
 	)
+	country := method(
+		"set_passport_country",
+		"Store the explicitly supplied passport issuing country as a two-letter ISO code. "+
+			"Passport photos are collected in the protected Mini App.",
+		input(
+			map[string]any{
+				schemaExpectedVersion: version,
+				"passport_country": map[string]any{
+					manifestType: schemaString, schemaMinLength: registrationdetails.Alpha2Length,
+					schemaMaxLength: registrationdetails.Alpha2Length,
+				},
+			},
+			schemaExpectedVersion,
+			"passport_country",
+		),
+		true,
+	)
 	return map[string]any{
 		"id":                "zinusya_registration_details",
 		manifestDescription: "Owner legal registration details, separated from the profile",
 		manifestPermissions: []string{},
 		manifestDiscovery:   discoveryStatic,
-		manifestMethods:     append([]any{get, name, passport, operation}, detailsRequestMethods(method)...),
+		manifestMethods:     append([]any{get, name, passport, country, operation}, detailsRequestMethods(method)...),
 	}
 }
 

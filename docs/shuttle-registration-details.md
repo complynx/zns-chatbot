@@ -55,7 +55,7 @@ so a concurrent first write cannot commit unseen and then be dropped.
 
 ## Owner API and startup configuration
 
-The optional zinusya_registration_details module exposes get, set_legal_name, set_passport_number and operation under /internal/agent/registration_details/. Without the configured protection key, the module and routes remain absent.
+The optional `zinusya_registration_details` module exposes `get`, `set_legal_name`, `set_passport_number`, `set_passport_country` and `operation` under `/internal/agent/registration_details/`. The protected Mini App accepts passport photos. Without the configured protection key, the module and routes remain absent.
 
 Configure a persistent, randomly generated32-byte secret as unpadded canonical
 base64url in `registration_details_key`, preferably through the secret environment
@@ -67,7 +67,7 @@ without a data migration breaks decryption and exact write replay.
 The bearer token determines the owner. Callers cannot select another owner's
 record. Mutations carry an operation UUID, matching idempotency key, expected
 record version and one explicitly supplied value. Reads and successful receipts
-return only `version`, `legal_name_present` and `passport_number_present`. Operation
+return the version and field-presence flags. Operation
 lookup and duplicate writes retain the immutable historical redacted result after
 later edits or a service restart. Revoked owners cannot read, mutate or recover
 receipts. Missing status is unknown and does not authorize a new operation after
@@ -84,15 +84,12 @@ are implemented separately below.
 Under the existing registration rule document, `details_requirements` is optional:
 
 ```json
-{"details_requirements":{"passport_number":true}}
+{"details_requirements":{"passport_number":true,"passport_countries":["RU","BY"],"passport_photo":true}}
 ```
 
-This is a policy fragment; the other required registration settings remain
-required. Omitted flags default false. Requiring a passport normalizes legal-name
-requirement to true. A legal-name-only policy is supported. Null flag values,
-wrong types and unknown fields are rejected. An absent policy preserves the old
-serialized rule document and its behavior. Huma's HTTP schema and the agent
-manifest both permit single-flag policy objects.
+Each passport field is independently optional. Enabling any of them also requires a full legal name. Events with an explicit sales opening or automatic queue assignment always require the full name. Existing events without these settings retain their saved policy.
+
+A nonempty `passport_countries` list asks for the issuing country. On the protected form, each listed country has its own category and other valid countries share the foreign category. The saved country can be classified against a different list at another event. `passport_photo` requires a JPEG or PNG file of up to 5 MiB and 24 megapixels. Migration 86 stores country and photo in the encrypted owner record and adds redacted presence flags to the database.
 
 New solo joins and registrations created by accepting a pair invitation check
 missing legal fields.

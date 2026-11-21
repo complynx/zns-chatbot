@@ -63,6 +63,14 @@
   const detailsSaveName = document.getElementById("details-save-name");
   const detailsSavePassport = document.getElementById("details-save-passport");
   const detailsRefresh = document.getElementById("details-refresh");
+  const detailsFields = {
+    "legal-name": [detailsName, detailsSaveName],
+    "passport-number": [detailsPassport, detailsSavePassport],
+    "passport-country": [document.getElementById("details-country"), document.getElementById("details-save-country")],
+    "passport-photo": [document.getElementById("details-photo"), document.getElementById("details-save-photo")]
+  };
+  const detailsRequestID = window.location?.search ? new URLSearchParams(window.location.search).get("details_request") : null;
+  let detailsRequest;
   const detailsWords = {
     en: { title: "Registration details", note: "Saved values are hidden. Filling these fields does not register you for an event.",
       name: "Legal full name", passport: "Passport number", saveName: "Save legal name", savePassport: "Save passport number",
@@ -162,6 +170,7 @@
     setBusy, denied: detailsDenied
   });
   const pairAssignmentsUI = window.createZinusyaPairAssignments?.({
+    readBlob: readProof,
     request: (path, method, body) => request(path, method, body, session.token),
     setBusy, denied: detailsDenied
   });
@@ -196,7 +205,8 @@
   if (session.detailsChange) {
     const c = session.detailsChange;
     session.detailsChange = validDetailsChange(c)
-      ? { owner: c.owner, operation_id: c.operation_id, expected_version: c.expected_version, field: c.field }
+      ? { owner: c.owner, operation_id: c.operation_id, expected_version: c.expected_version, field: c.field,
+          ...(c.details_request ? {details_request:c.details_request} : {}) }
       : { invalid: true };
   }
 
@@ -388,6 +398,7 @@
       const p = await request("./profile", "GET", undefined, session.token);
       if (!Number.isSafeInteger(p.version) || p.version < 0) throw new Error("Invalid profile");
       profileVersion = p.version;
+      const previousLanguage = language;
       language = p.bot_language === "en" || p.bot_language === "ru" ? p.bot_language : defaultLanguage;
       document.documentElement.lang = language;
       knowledgeUI?.setLanguage(language);
@@ -407,6 +418,7 @@
       pairAssignmentsUI?.setLanguage(language);
       profileLabels();
       detailsLabels();
+      if (detailsRequest && language !== previousLanguage) configureDetails(detailsRequest);
       name.textContent = p.full_name;
       name.hidden = !name.textContent;
       show("connected");
@@ -478,23 +490,38 @@
     const id = value => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
       && value !== "00000000-0000-0000-0000-000000000000";
     return c && id(c.owner) && id(c.operation_id) && Number.isSafeInteger(c.expected_version) && c.expected_version >= 0
-      && (c.field === "legal-name" || c.field === "passport-number");
+      && (!c.details_request || id(c.details_request)) && Object.hasOwn(detailsFields, c.field);
   }
 
   function detailsSnapshot(value) {
     if (!value || !Number.isSafeInteger(value.version) || value.version < 0
       || typeof value.legal_name_present !== "boolean" || typeof value.passport_number_present !== "boolean") throw new Error("Invalid details status");
-    return { version: value.version, legal_name_present: value.legal_name_present, passport_number_present: value.passport_number_present };
+    return { version: value.version, legal_name_present: value.legal_name_present, passport_number_present: value.passport_number_present,
+      passport_country_present: value.passport_country_present === true, passport_photo_present: value.passport_photo_present === true };
   }
 
   function detailsLabels() {
     const w = detailsWords[language];
     document.getElementById("details-title").textContent = w.title;
-    document.getElementById("details-note").textContent = w.note;
+    const sharing = detailsRequest && window.passCopy?.(language, "registration.details.organizerAccess");
+    document.getElementById("details-note").textContent = sharing ? w.note + " " + sharing : w.note;
     document.getElementById("details-name-label").textContent = w.name;
     document.getElementById("details-passport-label").textContent = w.passport;
     detailsSaveName.textContent = w.saveName;
     detailsSavePassport.textContent = w.savePassport;
+    for (const [id, saveLabel] of [["country", "saveCountry"], ["photo", "savePhoto"]]) {
+      if (!window.passCopy) continue;
+      document.getElementById("details-" + id + "-label").textContent = window.passCopy(language, "registration.details." + id + "Label");
+      document.getElementById("details-save-" + id).textContent = window.passCopy(language, "registration.details." + saveLabel);
+      const present = detailsCurrent && detailsCurrent["passport_" + id + "_present"];
+      document.getElementById("details-" + id + "-presence").textContent = detailsCurrent ? w[present ? "present" : "missing"] : "";
+    }
+    if (detailsRequest?.country_category && window.passCopy) {
+      const category = detailsRequest.country_category;
+      document.getElementById("details-country-presence").textContent = category === "foreign"
+        ? window.passCopy(language, "registration.details.otherCountries")
+        : new Intl.DisplayNames([language], { type: "region" }).of(category);
+    }
     detailsRefresh.textContent = w.refresh;
     document.getElementById("details-name-presence").textContent = detailsCurrent ? w[detailsCurrent.legal_name_present ? "present" : "missing"] : "";
     document.getElementById("details-passport-presence").textContent = detailsCurrent ? w[detailsCurrent.passport_number_present ? "present" : "missing"] : "";
@@ -503,10 +530,10 @@
 
   function detailsControls(value) {
     const pending = session.detailsChange;
-    const ready = detailsCurrent && (detailsPhase === "ready" || detailsPhase === "saved" || detailsPhase === "recovered" || detailsPhase === "conflict" || detailsPhase === "storage");
+    const ready = detailsCurrent && ["ready","saved","recovered","conflict","storage","invalid"].includes(detailsPhase);
     const retryable = validDetailsChange(pending) && detailsPhase !== "disabled" && detailsPhase !== "blocked"
-      && (detailsBody || detailsPhase === "reenter");
-    for (const [field, input, button] of [["legal-name", detailsName, detailsSaveName], ["passport-number", detailsPassport, detailsSavePassport]]) {
+      && (detailsBody || detailsPhase === "reenter" || detailsPhase === "invalid");
+    for (const [field, [input, button]] of Object.entries(detailsFields)) {
       const enabled = !value && !!session.token && (pending ? retryable && pending.field === field : ready);
       input.disabled = !enabled || !!detailsBody;
       button.disabled = !enabled;
@@ -515,15 +542,15 @@
   }
 
   function clearDetails() {
-    detailsName.value = detailsPassport.value = "";
+    for (const [input] of Object.values(detailsFields)) input.value = "";
+    detailsRequest = undefined;
     detailsBody = detailsCurrent = undefined;
     detailsPhase = "unavailable";
     detailsSection.hidden = true;
   }
 
   function clearDetailsInput(field) {
-    if (field === "legal-name") detailsName.value = "";
-    if (field === "passport-number") detailsPassport.value = "";
+    if (Object.hasOwn(detailsFields, field)) detailsFields[field][0].value = "";
   }
 
   function forgetDetailsChange() {
@@ -566,8 +593,16 @@
           // Missing receipt after a newer monotonic version means the old CAS cannot apply.
           forgetDetailsChange();
           detailsPhase = "conflict";
+        } else if ((pending.details_request || null) !== detailsRequestID) {
+          detailsPhase = "blocked";
         } else detailsPhase = detailsCurrent.version === pending.expected_version ? (detailsBody ? "retry" : "reenter") : "blocked";
       }
+      // Recover the original operation first. A fresh save follows the event
+      // in the launch URL, even if an earlier save belonged to a different form.
+      detailsRequest = detailsRequestID
+        ? await request("./registration-details/requests/" + encodeURIComponent(detailsRequestID), "GET", undefined, session.token)
+        : undefined;
+      configureDetails(detailsRequest || { request: { requirements: { legal_name: true, passport_number: true } } });
     } catch (error) {
       if (error.status === 401) { detailsDenied(); return; }
       detailsCurrent = undefined;
@@ -580,11 +615,33 @@
   async function saveDetails(field) {
     if (busy || !session.token) return;
     detailsControls(false);
-    const button = field === "legal-name" ? detailsSaveName : detailsSavePassport;
+    const [input, button] = detailsFields[field];
     if (button.disabled) return;
-    const input = field === "legal-name" ? detailsName : detailsPassport;
+    let value = input.value;
+    if (field === "passport-photo" && !detailsBody) {
+      const file = input.files?.[0];
+      if (!file || file.size > 5 * 1024 * 1024) {
+        detailsPhase = "invalid";
+        detailsLabels();
+        return;
+      }
+      setBusy(true);
+      try {
+        value = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result.slice(reader.result.indexOf(",") + 1));
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      } catch {
+        detailsPhase = "invalid";
+        detailsLabels();
+        return;
+      } finally { setBusy(false); }
+    }
     if (!session.detailsChange) {
-      const pending = { owner: detailsOwner, operation_id: crypto.randomUUID(), expected_version: detailsCurrent.version, field };
+      const pending = { owner: detailsOwner, operation_id: crypto.randomUUID(), expected_version: detailsCurrent.version, field,
+        ...(detailsRequestID ? { details_request: detailsRequestID } : {}) };
       if (!validDetailsChange(pending)) { detailsPhase = "blocked"; detailsLabels(); detailsControls(false); return; }
       session.detailsChange = pending;
       if (!save()) {
@@ -593,7 +650,8 @@
       }
     }
     const pending = session.detailsChange;
-    if (!detailsBody) detailsBody = { operation_id: pending.operation_id, expected_version: pending.expected_version, value: input.value };
+    if (!detailsBody) detailsBody = { operation_id: pending.operation_id, expected_version: pending.expected_version, value,
+      ...(pending.details_request ? { details_request: pending.details_request } : {}) };
     setBusy(true);
     try {
       detailsSnapshot(await request("./registration-details/" + pending.field, "POST", detailsBody, session.token));
@@ -602,17 +660,55 @@
       if (detailsPhase === "ready") detailsPhase = "saved";
     } catch (error) {
       if (error.status === 401) { detailsDenied(); return; }
-      if (error.status === 400 || error.status === 409) {
+      if (error.status === 410 && pending.details_request) {
+        forgetDetailsChange();
+        await readDetails();
+        if (pending.details_request === detailsRequestID) detailsPhase = "blocked";
+      } else if (error.status === 400) {
+        forgetDetailsChange();
+        await readDetails();
+        if (detailsPhase === "ready") detailsPhase = "invalid";
+      } else if (error.status === 409) {
         detailsBody = undefined;
         clearDetailsInput(pending.field);
         await readDetails();
-        if (detailsPhase === "reenter" && error.status === 400) detailsPhase = "invalid";
       } else detailsPhase = "retry";
     } finally { detailsLabels(); setBusy(false); }
   }
 
-  document.getElementById("details-name-form").addEventListener("submit", event => { event.preventDefault(); return saveDetails("legal-name"); });
-  document.getElementById("details-passport-form").addEventListener("submit", event => { event.preventDefault(); return saveDetails("passport-number"); });
+  for (const [id, field] of [["name", "legal-name"], ["passport", "passport-number"], ["country", "passport-country"], ["photo", "passport-photo"]]) {
+    document.getElementById("details-" + id + "-form").addEventListener("submit", event => {
+      event.preventDefault();
+      return saveDetails(field);
+    });
+  }
+
+  function configureDetails(context) {
+    const rules = context.request.requirements;
+    for (const [id, required] of [["name", rules.legal_name], ["passport", rules.passport_number],
+      ["country", rules.passport_countries?.length], ["photo", rules.passport_photo]]) {
+      document.getElementById("details-" + id + "-form").hidden = !required;
+    }
+    if (!rules.passport_countries?.length) return;
+    const select = detailsFields["passport-country"][0];
+    const previous = select.value;
+    const foreign = document.createElement("optgroup");
+    foreign.label = window.passCopy(language, "registration.details.otherCountries");
+    const names = new Intl.DisplayNames([language], { type: "region" });
+    const option = code => {
+      const element = document.createElement("option");
+      element.value = code;
+      element.textContent = code ? names.of(code) : "";
+      return element;
+    };
+    select.replaceChildren(option(""));
+    for (const code of rules.passport_countries) select.append(option(code));
+    const otherCountries = context.countries.filter(code => !rules.passport_countries.includes(code));
+    otherCountries.sort((a, b) => names.of(a).localeCompare(names.of(b), language));
+    for (const code of otherCountries) foreign.append(option(code));
+    select.append(foreign);
+    select.value = previous;
+  }
   detailsRefresh.addEventListener("click", async () => {
     if (busy || !session.token) return;
     setBusy(true);
@@ -641,9 +737,23 @@
       year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit",
       timeZoneName: "shortOffset" }).format(new Date(instant));
     article.append(textElement("p", date(item.starts_at) + " — " + date(item.ends_at) + " · " + item.timezone));
-    article.append(textElement("p", (w[item.registration.role] || item.registration.role) + " · " + (w[item.registration.state] || item.registration.state)));
+    const registrationState = item.registration.state === "returned" ? window.passCopy(language, "ops.returnedState") : w[item.registration.state] || item.registration.state;
+    article.append(textElement("p", (w[item.registration.role] || item.registration.role) + " · " + registrationState));
     if (!item.registration_enabled) {
       article.append(textElement("p", w.disabled));
+    } else if (item.pass_return) {
+      const ret = item.pass_return;
+      const label = key => window.passCopy(language, "ops." + key);
+      article.append(textElement("p", label("returnedAt") + " " + date(ret.returned_at)));
+      if (ret.currency) {
+        const format = minor => money(minor, ret.currency_scale, ret.currency);
+        article.append(textElement("p", w.price + " " + format(ret.frozen_price_minor)),
+          textElement("p", label("confirmedAmount") + " " + format(ret.confirmed_minor)),
+          textElement("p", label("refundDue") + " " + format(ret.refund_due_minor - ret.refunded_minor)),
+          textElement("p", label("refundedAmount") + " " + format(ret.refunded_minor)));
+        if (ret.refunded_at) article.append(textElement("p", label("refundAt") + " " + date(ret.refunded_at)));
+        else if (ret.refund_due_minor > 0) article.append(textElement("p", label("refundPending")));
+      }
     } else if (item.pass) {
       const pass = item.pass;
       const balance = pass.balance;

@@ -148,6 +148,10 @@ func lockPairAssignmentAuthority(ctx context.Context, q *sqlc.Queries, scope Pay
 	if scope.GlobalAdmin {
 		return nil
 	}
+	return checkPairEventAdministrator(ctx, q, scope, eventID)
+}
+
+func checkPairEventAdministrator(ctx context.Context, q *sqlc.Queries, scope PaymentScope, eventID uuid.UUID) error {
 	authority, err := q.ReadEventAuthority(ctx, sqlc.ReadEventAuthorityParams{
 		EventID: eventID, UserID: scope.UserID, BotID: scope.BotID, OrganizationID: scope.Organization,
 	})
@@ -180,6 +184,7 @@ func lockPairAssignmentActor(ctx context.Context, q *sqlc.Queries, scope Payment
 }
 
 type pairAssignmentCandidate struct {
+	individualPrices bool
 	Quotes           []AssignmentQuote
 	Event            events.Event
 	Pair             sqlc.ShuttlePair
@@ -200,10 +205,12 @@ func checkPairAssignment(
 		return c, err
 	}
 	c.Event = event
-	c.Pair, err = q.GetPair(ctx, sqlc.GetPairParams{ID: args.PairID, EventID: args.EventID})
+	pair, err := q.GetPairForAssignment(ctx, sqlc.GetPairForAssignmentParams{ID: args.PairID, EventID: args.EventID})
 	if err != nil {
 		return c, err
 	}
+	c.Pair = pair.ShuttlePair
+	c.individualPrices = pair.FromPassInvite || event.Document.Registration.UsesPassInvites()
 	if event.Version != args.ExpectedEventVersion || c.Pair.Version != args.ExpectedPairVersion ||
 		c.Pair.State != registrations.Waitlisted {
 		return c, ErrConflict
@@ -258,12 +265,27 @@ func checkPairAssignment(
 	if err != nil {
 		return c, err
 	}
-	prices, err := assignmentPrices(ctx, q, event, c.Now.Time, []string{registrations.Leader, registrations.Follower})
-	if err != nil {
-		return c, err
-	}
-	c.Quotes, err = assignmentQuotes(event, prices, c.Leader.ID, c.Follower.ID)
+	c.Quotes, err = pairAssignmentQuotes(ctx, q, c)
 	return c, err
+}
+
+func pairAssignmentQuotes(ctx context.Context, q *sqlc.Queries, c pairAssignmentCandidate) ([]AssignmentQuote, error) {
+	event := c.Event
+	roles := []string{registrations.Leader, registrations.Follower}
+	byTime := c.Follower.RequestedAt.Time.Compare(c.Leader.RequestedAt.Time)
+	followerFirst := c.individualPrices &&
+		(byTime < 0 || (byTime == 0 && bytes.Compare(c.Follower.ID[:], c.Leader.ID[:]) < 0))
+	if followerFirst {
+		slices.Reverse(roles)
+	}
+	prices, err := assignmentPrices(ctx, q, event, c.Now.Time, roles, c.individualPrices)
+	if err != nil {
+		return nil, err
+	}
+	if followerFirst {
+		slices.Reverse(prices)
+	}
+	return assignmentQuotes(event, prices, c.Leader.ID, c.Follower.ID)
 }
 
 func checkPairAssignmentMember(

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +16,7 @@ import (
 	"github.com/complynx/zns-chatbot/internal/db/sqlc"
 	"github.com/complynx/zns-chatbot/internal/events"
 	"github.com/complynx/zns-chatbot/internal/registrationdetails"
+	"github.com/complynx/zns-chatbot/internal/registrations"
 )
 
 const detailsRequestLifetime = 2 * time.Hour
@@ -98,7 +100,7 @@ func (s *Store) BeginDetailsRequest(
 	if event.Version != args.ExpectedEventVersion {
 		return DetailsRequestStatus{}, ErrConflict
 	}
-	status, err := ensureDetailsRequest(ctx, tx, q, scope.UserID, event)
+	status, err := ensureDetailsRequest(ctx, tx, q, scope.UserID, event, event.Document.Registration.ClosesAt)
 	if err != nil {
 		return status, err
 	}
@@ -185,7 +187,7 @@ func nativeDetailsOutcome(
 	if err = q.LockEventOperation(ctx, "details-requests:"+change.UserID.String()); err != nil {
 		return err
 	}
-	status, err := ensureDetailsRequest(ctx, tx, q, change.UserID, event)
+	status, err := ensureDetailsRequest(ctx, tx, q, change.UserID, event, event.Document.Registration.ClosesAt)
 	if err != nil {
 		return err
 	}
@@ -211,14 +213,18 @@ func ensureDetailsRequest(
 	q *sqlc.Queries,
 	owner uuid.UUID,
 	event events.Event,
+	saleDeadline time.Time,
 ) (DetailsRequestStatus, error) {
 	status, err := registrationDetailsStatus(ctx, q, owner)
 	if err != nil {
 		return DetailsRequestStatus{}, err
 	}
-	now, err := registrationMutationTime(ctx, q, event.Document.Registration.ClosesAt, pgtype.Timestamptz{})
+	now, err := q.RegistrationNow(ctx)
 	if err != nil {
 		return DetailsRequestStatus{}, err
+	}
+	if !saleDeadline.IsZero() && !now.Time.Before(saleDeadline) {
+		return DetailsRequestStatus{}, registrations.ErrUnavailable
 	}
 	required := registrationdetails.Requirements{}
 	if event.Document.Registration.DetailsRequirements != nil {
@@ -234,6 +240,10 @@ func ensureDetailsRequest(
 	missing := required.Missing(status)
 	if err == nil && previous.ExpiresAt.Time.After(now.Time) && previous.EventVersion == event.Version &&
 		previous.LegalNameRequired == required.LegalName && previous.PassportNumberRequired == required.PassportNumber &&
+		slices.Equal(
+			previous.PassportCountries,
+			required.PassportCountries,
+		) && previous.PassportPhotoRequired == required.PassportPhoto &&
 		(!previous.CompletedAt.Valid || len(missing) == 0) {
 		return detailsRequestStatus(previous, status, now.Time), nil
 	}
@@ -249,8 +259,8 @@ func ensureDetailsRequest(
 		return DetailsRequestStatus{}, err
 	}
 	expires := now.Time.Add(detailsRequestLifetime)
-	if event.Document.Registration.ClosesAt.Before(expires) {
-		expires = event.Document.Registration.ClosesAt
+	if !saleDeadline.IsZero() && saleDeadline.Before(expires) {
+		expires = saleDeadline
 	}
 	var completed pgtype.Timestamptz
 	var completedVersion pgtype.Int8
@@ -263,7 +273,8 @@ func ensureDetailsRequest(
 		ctx,
 		"INSERT INTO shuttle_registration_details_requests(id,user_id,event_id,event_version,"+
 			"event_timezone,legal_name_required,passport_number_required,created_at,expires_at,"+
-			"completed_at,completed_details_version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+			"completed_at,completed_details_version,passport_countries,passport_photo_required) "+
+			"VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,COALESCE($12::text[],'{}'),$13)",
 		id,
 		owner,
 		event.ID,
@@ -275,6 +286,8 @@ func ensureDetailsRequest(
 		expires,
 		completed,
 		completedVersion,
+		required.PassportCountries,
+		required.PassportPhoto,
 	)
 	if err != nil {
 		return DetailsRequestStatus{}, err
@@ -291,14 +304,19 @@ func detailsRequestStatus(
 	status registrationdetails.Status,
 	observed time.Time,
 ) DetailsRequestStatus {
+	if len(row.PassportCountries) == 0 {
+		row.PassportCountries = nil
+	}
 	request := DetailsRequest{
 		ID:            row.ID,
 		EventID:       row.EventID,
 		EventVersion:  row.EventVersion,
 		EventTimezone: row.EventTimezone,
 		Requirements: registrationdetails.Requirements{
-			LegalName:      row.LegalNameRequired,
-			PassportNumber: row.PassportNumberRequired,
+			LegalName:         row.LegalNameRequired,
+			PassportNumber:    row.PassportNumberRequired,
+			PassportCountries: row.PassportCountries,
+			PassportPhoto:     row.PassportPhotoRequired,
 		},
 		CreatedAt: row.CreatedAt.Time.UTC(),
 		ExpiresAt: row.ExpiresAt.Time.UTC(),
@@ -387,12 +405,15 @@ func resolveDetailsRequests(ctx context.Context, tx pgx.Tx, owner uuid.UUID, sta
 		ctx,
 		`UPDATE shuttle_registration_details_requests SET completed_at=$5,completed_details_version=$2
 WHERE user_id=$1 AND completed_at IS NULL AND superseded_at IS NULL AND expires_at>$5
-AND (NOT legal_name_required OR $3) AND (NOT passport_number_required OR $4)`,
+AND (NOT legal_name_required OR $3) AND (NOT passport_number_required OR $4)
+AND (cardinality(passport_countries)=0 OR $6) AND (NOT passport_photo_required OR $7)`,
 		owner,
 		status.Version,
 		status.LegalNamePresent,
 		status.PassportNumberPresent,
 		now.Time,
+		status.PassportCountryPresent,
+		status.PassportPhotoPresent,
 	)
 	return err
 }

@@ -75,6 +75,16 @@ func (s *Store) DissolvePair(
 	return s.dissolvePair(ctx, scope, operation, args, nil)
 }
 
+// DissolvePairAsAdmin ends the selected relationship under current event assignment authority.
+func (s *Store) DissolvePairAsAdmin(
+	ctx context.Context,
+	scope PaymentScope,
+	operation string,
+	args PairDissolution,
+) (registrations.Pair, error) {
+	return s.dissolveAuthorizedPair(ctx, scope, operation, args, nil, true)
+}
+
 func (s *Store) dissolvePair(
 	ctx context.Context,
 	scope PaymentScope,
@@ -82,6 +92,11 @@ func (s *Store) dissolvePair(
 	args PairDissolution,
 	session *MiniAppPairSession,
 ) (registrations.Pair, error) {
+	return s.dissolveAuthorizedPair(ctx, scope, operation, args, session, false)
+}
+
+func (s *Store) dissolveAuthorizedPair(ctx context.Context, scope PaymentScope, operation string,
+	args PairDissolution, session *MiniAppPairSession, byAdmin bool) (registrations.Pair, error) {
 	if !paymentScopeValid(scope, operation) || args.EventID == uuid.Nil || args.PairID == uuid.Nil ||
 		args.ExpectedVersion < 1 {
 		return registrations.Pair{}, registrations.ErrInvalid
@@ -103,7 +118,7 @@ func (s *Store) dissolvePair(
 	); err != nil {
 		return registrations.Pair{}, err
 	}
-	pair, err := lockParticipantPair(ctx, q, scope, args.EventID, args.PairID, session)
+	pair, err := lockDissolutionPair(ctx, q, scope, args, session, byAdmin)
 	if err != nil {
 		return registrations.Pair{}, err
 	}
@@ -157,6 +172,17 @@ func (s *Store) dissolvePair(
 		err = tx.Commit(ctx)
 	}
 	return result, err
+}
+
+func lockDissolutionPair(ctx context.Context, q *sqlc.Queries, scope PaymentScope,
+	args PairDissolution, session *MiniAppPairSession, byAdmin bool) (sqlc.ShuttlePair, error) {
+	if !byAdmin {
+		return lockParticipantPair(ctx, q, scope, args.EventID, args.PairID, session)
+	}
+	if err := lockPairAssignmentAuthority(ctx, q, scope, args.EventID); err != nil {
+		return sqlc.ShuttlePair{}, err
+	}
+	return q.GetPair(ctx, sqlc.GetPairParams{ID: args.PairID, EventID: args.EventID})
 }
 
 func lockParticipantPair(

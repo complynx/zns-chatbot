@@ -43,7 +43,7 @@ func (s *Server) servePublic(w http.ResponseWriter, r *http.Request) {
 		((r.Method == http.MethodGet &&
 			(strings.HasSuffix(r.URL.Path, "/original") || strings.Contains(r.URL.Path, "/preview/"))) ||
 			(r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/finalize")))
-	if source ||
+	if source || (r.Method == http.MethodPost && r.URL.Path == "/app/registration-details/passport-photo") ||
 		(r.Method == http.MethodPost && (r.URL.Path == "/app/avatars/drafts" || r.URL.Path == "/app/avatars/drafts/upload")) {
 		serveBoundedAPI(w, r, s.public, avatarUploadTimeout)
 		return
@@ -52,6 +52,9 @@ func (s *Server) servePublic(w http.ResponseWriter, r *http.Request) {
 }
 
 func internalReadTimeout(r *http.Request) time.Duration {
+	if r.Method == http.MethodPost && r.URL.Path == identityDeliveryPath {
+		return passIdentityExportTimeout
+	}
 	if (r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/internal/avatar-drafts/")) ||
 		(r.Method == http.MethodPost &&
 			(r.URL.Path == avatarPath+"create_draft" || r.URL.Path == avatarPath+avatarRefetchMethod ||

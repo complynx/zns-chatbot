@@ -37,6 +37,7 @@ func TestHistoryImageRequestsHaveTimeToReturnAfterBoundedReads(t *testing.T) {
 		{http.MethodPost, avatarPath + "finalize_draft", avatarUploadTimeout},
 		{http.MethodGet, "/internal/avatar-drafts/draft/original", avatarUploadTimeout},
 		{http.MethodPost, "/app/avatars/drafts", avatarUploadTimeout},
+		{http.MethodPost, "/app/registration-details/passport-photo", avatarUploadTimeout},
 		{http.MethodGet, "/app/avatars/drafts/draft/original", avatarUploadTimeout},
 		{http.MethodGet, "/app/avatars/history/archive/record/preview", historyAvatarReadTimeout},
 		{http.MethodGet, "/app/avatars/history", 0},

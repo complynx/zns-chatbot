@@ -45,7 +45,7 @@ func (s *Store) RecentStructuredRequests(
 			" AND prior.route='structured' AND prior.state IN ('completed','delivery_unknown',"+
 			"'delivery_failed','closed')\n"+
 			" AND (prior.request->>'structured_command' IN ('/start','/avatar','/pairs','/menu',"+
-			"'/profile','/registrations','/register','/orders','/massage','/knowledge',"+
+			"'/profile','/registrations','/register','/passes','/orders','/massage','/knowledge',"+
 			"'/payment_reviews','/payments') OR op.user_id IS NOT NULL)\n"+
 			"ORDER BY prior.seq DESC LIMIT 5",
 		taskID,

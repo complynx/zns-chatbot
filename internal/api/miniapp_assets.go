@@ -3,12 +3,21 @@ package api
 import (
 	"embed"
 	"net/http"
+
+	"github.com/complynx/zns-chatbot/internal/passcopy"
 )
 
 //go:embed miniapp_ui/*
 var miniAppAssets embed.FS
 
 func (s *Server) miniAppPage(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/app/pass-copy.js" {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		_, _ = w.Write(passcopy.BrowserScript())
+		return
+	}
 	file, contentType := miniAppAsset(r.URL.Path)
 	if file == "" {
 		http.NotFound(w, r)
@@ -40,6 +49,8 @@ func miniAppAsset(path string) (string, string) {
 		return "app.js", javaScriptType
 	case "/app/order-proof.js":
 		return "order-proof.js", javaScriptType
+	case "/app/pass-admin.js":
+		return "pass-admin.js", javaScriptType
 	case "/app/pair-assignments.js":
 		return "pair-assignments.js", javaScriptType
 	case "/app/assignments.js":

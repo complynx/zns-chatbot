@@ -22,8 +22,10 @@
   <script src="./massage-staff.js" defer></script>
   <script src="./massage-admin.js" defer></script>
   <script src="./assignments.js" defer></script>
+  <script src="./pass-admin.js" defer></script>
   <script src="./pair-assignments.js" defer></script>
   <script src="./knowledge.js" defer></script>
+  <script src="./pass-copy.js" defer></script>
   <script src="./app.js" defer></script>
 </head>
 <body>
@@ -68,6 +70,18 @@
         <p id="details-passport-presence"></p>
         <input id="details-passport" name="passport_number" aria-describedby="details-passport-presence details-note" autocomplete="off" spellcheck="false" autocapitalize="off" maxlength="128" required>
         <button id="details-save-passport" type="submit">Save passport number</button>
+      </form>
+      <form id="details-country-form" autocomplete="off" hidden>
+        <label id="details-country-label" for="details-country"></label>
+        <p id="details-country-presence"></p>
+        <select id="details-country" aria-describedby="details-country-presence" required></select>
+        <button id="details-save-country" type="submit"></button>
+      </form>
+      <form id="details-photo-form" autocomplete="off" hidden>
+        <label id="details-photo-label" for="details-photo"></label>
+        <p id="details-photo-presence"></p>
+        <input id="details-photo" type="file" accept="image/jpeg,image/png" aria-describedby="details-photo-presence" required>
+        <button id="details-save-photo" type="submit"></button>
       </form>
       <div class="actions">
         <button id="details-refresh" type="button">Check saved status</button>
@@ -453,6 +467,7 @@
       <h1 id="ppa-title">Assign passes to a pair</h1><p id="ppa-note"></p><p id="ppa-status" role="status" aria-live="polite"></p>
       <label id="ppa-event-label" for="ppa-event">Event</label><select id="ppa-event"></select>
       <div class="actions"><button id="ppa-events-first" type="button">Refresh events</button><button id="ppa-events-next" type="button" hidden>Next events</button></div>
+      <div id="pass-admin" hidden></div>
       <label id="ppa-target-label" for="ppa-target">Pair</label><select id="ppa-target"></select>
       <div class="actions"><button id="ppa-targets-first" type="button">Refresh pairs</button><button id="ppa-targets-next" type="button" hidden>Next pairs</button></div>
       <button id="ppa-prepare" type="button">Review pair assignment</button><div id="ppa-preview"></div>

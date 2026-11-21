@@ -18,6 +18,9 @@ var (
 )
 
 type IntakeRequest struct {
+	PassSlug                                *PassSlugBinding
+	PassInvite                              *PassInviteInput
+	PassTicket                              *PassTicketInput
 	Symbols                                 []symbols.Occurrence
 	Attachments                             []files.Incoming
 	BotID, UpdateID, TelegramUserID, ChatID int64

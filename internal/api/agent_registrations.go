@@ -66,6 +66,7 @@ type agentRegistrationStatusResponse struct {
 }
 
 func (s *Server) registerAgentRegistrations(api huma.API) {
+	s.registerIdentityDelivery(api)
 	huma.Register(api, huma.Operation{OperationID: "agent-registration-list", Method: http.MethodPost,
 		Path: "/internal/agent/registrations/list", MaxBodyBytes: internalBodyLimit}, s.agentAccountEvents)
 	huma.Register(
@@ -322,7 +323,7 @@ func registrationSchema() map[string]any {
 			},
 			schemaState: map[string]any{
 				manifestType: schemaString,
-				schemaEnum:   []string{registrations.Waitlisted, registrations.Assigned},
+				schemaEnum:   []string{registrations.Waitlisted, registrations.Assigned, registrations.Returned},
 			},
 			schemaVersion:  map[string]any{manifestType: schemaInteger, schemaMinimum: 1},
 			"requested_at": instant,
