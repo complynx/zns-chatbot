@@ -552,27 +552,31 @@ func (p *peers) telegramEditMarkup(w http.ResponseWriter, r *http.Request) {
 	respond(w, map[string]any{"ok": false, "error_code": 400, "description": "Bad Request: message to edit not found"})
 }
 
+func (p *peers) telegramEditText(w http.ResponseWriter, r *http.Request) {
+	var message telegram.EditMessageRequest
+	err := json.NewDecoder(r.Body).Decode(&message)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if err == nil && p.messageEdits != nil && message.MessageID > 0 && message.MessageID <= int64(len(p.sent)) &&
+		p.sent[message.MessageID-1].ChatID == message.ChatID {
+		p.messageEdits = append(p.messageEdits, message)
+		respond(w, map[string]any{
+			"ok":     true,
+			"result": map[string]any{"message_id": message.MessageID, "chat": map[string]int64{"id": message.ChatID}},
+		})
+		return
+	}
+	w.WriteHeader(http.StatusBadRequest)
+	respond(w, map[string]any{"ok": false, "error_code": 400, "description": "Bad Request: message to edit not found"})
+}
+
 func (p *peers) telegram(w http.ResponseWriter, r *http.Request) {
 	if strings.HasSuffix(r.URL.Path, "/editMessageReplyMarkup") {
 		p.telegramEditMarkup(w, r)
 		return
 	}
 	if strings.HasSuffix(r.URL.Path, "/editMessageText") {
-		var message telegram.EditMessageRequest
-		err := json.NewDecoder(r.Body).Decode(&message)
-		p.mu.Lock()
-		defer p.mu.Unlock()
-		if err == nil && p.messageEdits != nil && message.MessageID > 0 && message.MessageID <= int64(len(p.sent)) &&
-			p.sent[message.MessageID-1].ChatID == message.ChatID {
-			p.messageEdits = append(p.messageEdits, message)
-			respond(w, map[string]any{
-				"ok":     true,
-				"result": map[string]any{"message_id": message.MessageID, "chat": map[string]int64{"id": message.ChatID}},
-			})
-			return
-		}
-		w.WriteHeader(http.StatusBadRequest)
-		respond(w, map[string]any{"ok": false, "error_code": 400, "description": "Bad Request: message to edit not found"})
+		p.telegramEditText(w, r)
 		return
 	}
 	if strings.HasSuffix(r.URL.Path, "/sendMessage") {
