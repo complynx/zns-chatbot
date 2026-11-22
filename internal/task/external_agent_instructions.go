@@ -11,15 +11,12 @@ import (
 	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
-const externalAgentServerName = "zinusya-mcp"
-
 func externalAgentInstructionsView(
 	capability loom.ExternalAgentCapability, profile loom.ExternalAgentProfile, ru bool,
 ) (string, *telegram.InlineKeyboardMarkup) {
-	keyboard := &telegram.InlineKeyboardMarkup{InlineKeyboard: [][]telegram.InlineKeyboardButton{{{
-		Text:         structuredText(ru, "Back to settings", "Назад к настройкам"),
-		CallbackData: fmt.Sprintf("%s%d:%s", externalAgentCallbackPrefix, profile.Version, externalAgentSettingsPage),
-	}}}}
+	keyboard := &telegram.InlineKeyboardMarkup{
+		InlineKeyboard: [][]telegram.InlineKeyboardButton{externalAgentBackButton(profile.Version, ru)},
+	}
 	oauth := capability.OAuth
 	if oauth == nil || !oauth.DynamicRegistration || oauth.Issuer == "" || oauth.Scope == "" {
 		return structuredText(ru,
@@ -30,14 +27,6 @@ func externalAgentInstructionsView(
 				". Определи OAuth-издателя по метаданным MCP и используй поддерживаемый им способ регистрации. "+
 				"Если нужна предварительная регистрация, запроси у оператора Client ID и redirect URI."), keyboard
 	}
-	entry := struct {
-		Type  string            `json:"type"`
-		URL   string            `json:"url"`
-		OAuth map[string]string `json:"oauth"`
-	}{"remote", capability.Resource, map[string]string{"scope": oauth.Scope}}
-	example, _ := json.MarshalIndent(map[string]any{
-		"mcp": map[string]any{"servers": map[string]any{externalAgentServerName: entry}},
-	}, "", "  ")
 	return structuredText(
 		ru,
 		"Add the remote MCP server zinusya-mcp to my agent. "+
@@ -50,8 +39,16 @@ func externalAgentInstructionsView(
 			"Получи OAuth-метаданные по адресу MCP и зарегистрируй клиент динамически. "+
 			"Укажи локальный HTTP callback с IP, портом и путём, например http://127.0.0.1:<port>/callback. "+
 			"Открой браузер для входа. Я подтвержу клиент в Telegram.\n\n",
-	) +
-		"OAuth issuer: " + oauth.Issuer + "\nOpenCode 2:\n" + string(example), keyboard
+	) + structuredText(ru, "MCP server: ", "Сервер MCP: ") + capability.Resource +
+		structuredText(ru, "\nOAuth issuer: ", "\nИздатель OAuth: ") + oauth.Issuer +
+		structuredText(ru, "\nOAuth scope: ", "\nОбласть доступа OAuth: ") + oauth.Scope, keyboard
+}
+
+func externalAgentBackButton(version int64, ru bool) []telegram.InlineKeyboardButton {
+	return []telegram.InlineKeyboardButton{{
+		Text:         structuredText(ru, "Back to settings", "Назад к настройкам"),
+		CallbackData: fmt.Sprintf("%s%d:%s", externalAgentCallbackPrefix, version, externalAgentSettingsPage),
+	}}
 }
 
 func (s *Service) finishExternalAgentInstructions(

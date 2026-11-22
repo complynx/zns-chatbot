@@ -45,13 +45,15 @@ func externalAgentCallback(i intent, data string) (intent, bool, error) {
 	switch action {
 	case externalAgentLegacyEnable, externalAgentEnableRead, externalAgentDisable,
 		externalAgentHistory, externalAgentMemory, externalAgentSkills, externalAgentWrites,
-		externalAgentInstructions, externalAgentSettingsPage:
-		i.Kind, i.StructuredCommand, i.Text = kindStructured, externalAgentCommand, externalAgentCommand
-		i.ExternalAgentChange = &externalAgentChange{Action: action, Version: version}
-		return i, true, nil
+		externalAgentInstructions, externalAgentSettingsPage, externalAgentConnections:
 	default:
-		return i, true, ErrUnsupportedUpdate
+		if _, valid := parseExternalAgentSelection(action); !valid || i.CallbackMessageID <= 0 {
+			return i, true, ErrUnsupportedUpdate
+		}
 	}
+	i.Kind, i.StructuredCommand, i.Text = kindStructured, externalAgentCommand, externalAgentCommand
+	i.ExternalAgentChange = &externalAgentChange{Action: action, Version: version}
+	return i, true, nil
 }
 
 func (s *Service) structuredExternalAgent(ctx context.Context, t *db.Task, c checkpoint, i intent) error {
@@ -98,22 +100,27 @@ func (s *Service) externalAgentView(
 			return access == externalAgentWrites
 		})
 	}
-	var notice string
-	if change != nil {
-		switch change.Action {
-		case externalAgentInstructions:
-			return externalAgentInstructionsView(*capability, profile, ru)
-		case externalAgentSettingsPage:
+	if change == nil || change.Action == externalAgentSettingsPage {
+		return externalAgentSettings(*capability, profile, ru)
+	}
+	if change.Action == externalAgentInstructions {
+		return externalAgentInstructionsView(*capability, profile, ru)
+	}
+	selection, selected := parseExternalAgentSelection(change.Action)
+	if change.Action == externalAgentConnections || selected {
+		if capability.OAuth == nil || !capability.OAuth.ManageConnections {
 			return externalAgentSettings(*capability, profile, ru)
 		}
-		if change.Version == profile.Version && change.Action == externalAgentWrites && !profile.Enabled {
-			notice = structuredText(ru, "Enable read access first.\n\n", "Сначала включи чтение.\n\n")
-		} else {
-			profile, notice, err = s.changeExternalAgentProfile(ctx, auth, capability.Access, profile, *change, ru)
-		}
-		if err != nil {
-			return notice, nil
-		}
+		return s.externalAgentConnectionsView(ctx, auth, profile.Version, selection, ru)
+	}
+	var notice string
+	if change.Version == profile.Version && change.Action == externalAgentWrites && !profile.Enabled {
+		notice = structuredText(ru, "Enable read access first.\n\n", "Сначала включи чтение.\n\n")
+	} else {
+		profile, notice, err = s.changeExternalAgentProfile(ctx, auth, capability.Access, profile, *change, ru)
+	}
+	if err != nil {
+		return notice, nil
 	}
 	text, keyboard := externalAgentSettings(*capability, profile, ru)
 	return notice + text, keyboard
@@ -214,6 +221,12 @@ func externalAgentSettings(
 		add(externalAgentToggle(profile.Writes, structuredText(ru, "Changes", "Изменения")), externalAgentWrites)
 	}
 	add(structuredText(ru, "Get instructions for the agent", "Получить инструкцию для агента"), externalAgentInstructions)
+	if capability.OAuth != nil && capability.OAuth.ManageConnections {
+		add(structuredText(ru, "Authorized clients", "Авторизованные клиенты"), externalAgentConnections)
+	}
+	if profile.Enabled {
+		add(structuredText(ru, "Disable", "Отключить"), externalAgentDisable)
+	}
 	text += structuredText(ru,
 		"\n\nMCP server: ", "\n\nСервер MCP: ") + capability.Resource
 	return text, keyboard

@@ -15,8 +15,9 @@ The optional history setting governs Loom chat history. Zinusya's
 owner-scoped legacy history follows the Zinusya tool permissions.
 
 Enable **Write and management tools** in `/mcp` to use the write catalog.
-The external client uses Loom's `write_catalog` to inspect the current
-methods and sends a stable request ID with each `write`. Profile, event,
+The external client calls `modules.help.write_catalog({})` in Loom's `script`
+to inspect the current methods and sends a stable request ID to start each
+`write`. Profile, event,
 registration, booking, order, knowledge, payment and administration
 actions use the same role and ownership checks as the main bot.
 
@@ -27,9 +28,10 @@ the exact request once or reject it. Eligible methods offer two more
 choices. Remember approval for the same method, or allow all eligible
 writes for this MCP connection. Mandatory approvals still appear
 for each operation. Closing the connection or withdrawing write access
-ends its remembered rules. The external client calls `write_continue`
-with the original operation ID to resume delivery if the prompt did not
-arrive or to execute the operation after approval.
+ends its remembered rules. The external client calls `write` with the
+original `operation_id` to resume delivery if the prompt did not arrive or
+to execute the operation after approval. It can check the receipt with
+`modules.help.write_status({operation_id})` in `script`.
 Only the last message can confirm a multipart prompt. If Telegram loses the
 delivery receipt for that message, continuation can send a new final part.
 
@@ -40,10 +42,18 @@ number in the private form or explicitly provide it to an agent for
 registration. Both write paths return presence and version only. Loom encrypts
 the passport write arguments using its storage key.
 
-**Turn off access and close connections** disables the profile and revokes
-all open MCP sessions for that user in the organization. To end just one
-session, ask Zinusya in the normal chat to list and revoke MCP connections
-using Loom's `mcp_access` tools.
+**Disable** turns off the profile and closes its MCP sessions. When Loom
+advertises `external_agent.oauth.manage_connections`, **Disable** also
+revokes current broker logins. These clients sign in again after access is
+enabled.
+
+With the same capability, **Authorized clients** lists current broker logins.
+Select one or more clients, or use **Select all**, then choose **Revoke
+selected**. Revoked clients sign in again. The Read and Changes settings
+still apply to clients with a valid login.
+
+With direct issuer authorization, use Loom's `mcp_access` tools through
+Zinusya's normal chat to list and close individual MCP sessions.
 
 ## Deployment
 
