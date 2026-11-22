@@ -11,6 +11,7 @@ import (
 )
 
 const externalAgentProfilePath = "/users/me/external-agent"
+const externalConnectionsPath = externalAgentProfilePath + "/connections"
 const ExternalAgentProfilePermission = "external_agent.profile.write"
 
 type ExternalAgentCapability struct {
@@ -25,6 +26,33 @@ type ExternalAgentOAuth struct {
 	Issuer              string `json:"issuer"`
 	Scope               string `json:"scope"`
 	DynamicRegistration bool   `json:"dynamic_client_registration"`
+	ManageConnections   bool   `json:"manage_connections"`
+}
+
+type ExternalAgentConnection struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func (c *Client) ListExternalAgentConnections(ctx context.Context, auth Auth) ([]ExternalAgentConnection, error) {
+	if auth.SubjectToken == "" || auth.SessionID != "" {
+		return nil, &Error{Outcome: NotStarted}
+	}
+	var result struct {
+		Connections []ExternalAgentConnection `json:"connections"`
+	}
+	err := c.call(ctx, http.MethodGet, externalConnectionsPath, auth, "", nil, &result, false, false)
+	return result.Connections, err
+}
+
+func (c *Client) RevokeExternalAgentConnections(ctx context.Context, auth Auth, ids []string) error {
+	if auth.SubjectToken == "" || auth.SessionID != "" {
+		return &Error{Outcome: NotStarted}
+	}
+	return c.call(ctx, http.MethodPost, externalConnectionsPath+"/revoke", auth, "", struct {
+		IDs []string `json:"ids"`
+	}{ids}, &struct{}{}, true, false)
 }
 
 type ExternalConnectionApproval struct {

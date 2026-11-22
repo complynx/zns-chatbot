@@ -86,7 +86,7 @@ func TestExternalAgentSettingsRespectCapabilityAndConsentVersion(t *testing.T) {
 	enabled := externalAgentButton(t, keyboard.InlineKeyboard[0][0].CallbackData)
 	text, keyboard = service.externalAgentView(t.Context(), auth, enabled, false)
 	require.Contains(t, text, resource)
-	require.Len(t, keyboard.InlineKeyboard, 3)
+	require.Len(t, keyboard.InlineKeyboard, 4)
 	require.Equal(t, "☑️ Read", keyboard.InlineKeyboard[0][0].Text)
 	require.Equal(t, "mcp:1:disable", keyboard.InlineKeyboard[0][0].CallbackData)
 	text, _ = service.externalAgentView(t.Context(), auth, &externalAgentChange{Version: 1, Action: "memory"}, false)
@@ -95,13 +95,17 @@ func TestExternalAgentSettingsRespectCapabilityAndConsentVersion(t *testing.T) {
 	text, keyboard = service.externalAgentView(t.Context(), auth, write, false)
 	require.NotContains(t, text, "couldn't")
 	require.Equal(t, "☑️ Changes", keyboard.InlineKeyboard[1][0].Text)
+	button := keyboard.InlineKeyboard[3][0]
+	require.Equal(t, "Disable", button.Text)
+	require.Equal(t, "mcp:2:disable", button.CallbackData)
 	text, _ = service.externalAgentView(t.Context(), auth, write, false)
 	require.Contains(t, text, "out of date")
-	disabled := externalAgentButton(t, keyboard.InlineKeyboard[0][0].CallbackData)
+	disabled := externalAgentButton(t, button.CallbackData)
 	text, keyboard = service.externalAgentView(t.Context(), auth, disabled, true)
 	require.Contains(t, text, resource)
 	require.Len(t, keyboard.InlineKeyboard, 3)
 	require.Equal(t, "⬜ Чтение", keyboard.InlineKeyboard[0][0].Text)
+	require.Equal(t, "⬜ Изменения", keyboard.InlineKeyboard[1][0].Text)
 	mu.Lock()
 	defer mu.Unlock()
 	require.Equal(t, 3, writes)
@@ -112,7 +116,7 @@ func externalAgentButton(t *testing.T, data string) *externalAgentChange {
 	t.Helper()
 	callback := &telegram.CallbackQuery{
 		From:    telegram.User{ID: 7},
-		Message: &telegram.Message{Chat: telegram.Chat{ID: 7, Type: "private"}},
+		Message: &telegram.Message{ID: 42, Chat: telegram.Chat{ID: 7, Type: "private"}},
 		Data:    data,
 	}
 	update := telegram.Update{ID: 1, CallbackQuery: callback}

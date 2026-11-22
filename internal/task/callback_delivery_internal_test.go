@@ -97,9 +97,11 @@ func TestAgentInstructionsUseAdvertisedBrokerSettings(t *testing.T) {
 		},
 	}
 	text, keyboard := externalAgentInstructionsView(capability, loom.ExternalAgentProfile{Version: 8}, false)
-	require.Contains(t, text, `"zinusya-mcp"`)
-	require.Contains(t, text, `"url": "https://loom.example/mcp"`)
-	require.Contains(t, text, `"scope": "mcp"`)
+	require.Contains(t, text, "zinusya-mcp")
+	require.Contains(t, text, "MCP server: https://loom.example/mcp")
+	require.Contains(t, text, "OAuth issuer: https://loom.example")
+	require.Contains(t, text, "OAuth scope: mcp")
+	require.NotContains(t, text, "OpenCode")
 	require.Contains(t, text, "PKCE S256")
 	require.Equal(t, "mcp:8:settings", keyboard.InlineKeyboard[0][0].CallbackData)
 }
