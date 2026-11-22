@@ -48,7 +48,7 @@ func externalApprovalCallback(i intent, cb *telegram.CallbackQuery) (intent, boo
 		return i, true, ErrUnsupportedUpdate
 	}
 	switch choice {
-	case "once", "method", externalApprovalAll, "reject":
+	case "once", "method", externalApprovalAll, approvalReject:
 		i.Kind, i.StructuredCommand, i.Text = kindStructured, externalAgentCommand, externalAgentCommand
 		i.ExternalApproval = &externalApprovalChoice{ID: id, Choice: choice}
 		i.CallbackMessageID = cb.Message.ID
@@ -86,6 +86,13 @@ func (s *Service) sendExternalApproval(
 	if err != nil {
 		return err
 	}
+	return s.sendExternalPrompt(ctx, user, id, approval.ExpiresAt, messages, keyboard)
+}
+
+func (s *Service) sendExternalPrompt(
+	ctx context.Context, user db.User, id uuid.UUID, expires time.Time,
+	messages []render.Message, keyboard *telegram.InlineKeyboardMarkup,
+) error {
 	rendered, err := json.Marshal(struct {
 		Messages []render.Message               `json:"messages"`
 		Keyboard *telegram.InlineKeyboardMarkup `json:"keyboard"`
@@ -95,7 +102,7 @@ func (s *Service) sendExternalApproval(
 	}
 	attempt := externalApprovalAttempt{operation: id, lease: uuid.New(), presentation: sha256.Sum256(rendered)}
 	nextPart, claimed, err := s.store.ClaimExternalApproval(
-		ctx, id, user.ID, attempt.lease, approval.ExpiresAt, attempt.presentation[:],
+		ctx, id, user.ID, attempt.lease, expires, attempt.presentation[:],
 	)
 	if err != nil {
 		return err
@@ -115,7 +122,7 @@ func (s *Service) sendExternalApproval(
 	}
 	attempt.nextPart = nextPart
 	// Respect the caller's deadline and cap sending below the delivery lease.
-	ctx, cancel := context.WithTimeout(ctx, min(time.Until(approval.ExpiresAt), externalApprovalSendTimeout))
+	ctx, cancel := context.WithTimeout(ctx, min(time.Until(expires), externalApprovalSendTimeout))
 	defer cancel()
 	return s.sendExternalApprovalMessages(ctx, user.TelegramUserID, attempt, messages, keyboard)
 }
@@ -223,7 +230,7 @@ func externalApprovalMessage(approval loom.ExternalApproval, ru bool) (string, *
 	}
 	rows := [][]telegram.InlineKeyboardButton{
 		button(structuredText(ru, "Approve once", "Подтвердить один раз"), "once"),
-		button(structuredText(ru, "Reject", "Отклонить"), "reject"),
+		button(structuredText(ru, "Reject", "Отклонить"), approvalReject),
 	}
 	if approval.Remember {
 		text += structuredText(ru,
@@ -238,28 +245,26 @@ func externalApprovalMessage(approval loom.ExternalApproval, ru bool) (string, *
 	return text, &telegram.InlineKeyboardMarkup{InlineKeyboard: rows}
 }
 
-type externalApprovalEditor interface {
-	EditMessageText(context.Context, telegram.EditMessageRequest) (telegram.Receipt, error)
-}
-
 func (s *Service) decideExternalApproval(ctx context.Context, t *db.Task, checkpoint checkpoint, i intent) error {
 	ru := s.languageFor(ctx, i) == "ru"
 	inactive := structuredText(ru, "This MCP approval is no longer pending.", "Этот запрос MCP уже закрыт или истёк.")
-	if !s.options.ExternalAgentWrites {
-		return s.finishStructuredKeyboard(ctx, t, checkpoint, i, inactive, nil, ru)
-	}
 	user, service, err := s.authorize(ctx, *t, i)
 	if err != nil {
+		i.CallbackMessageID = 0
 		return s.identityError(ctx, t, checkpoint, i, err)
 	}
-	allowed, err := s.store.CanAnswerExternalApproval(ctx, i.ExternalApproval.ID, user.ID, i.CallbackMessageID)
+	matched, expired, err := s.store.ExternalApprovalCallback(ctx, i.ExternalApproval.ID, user.ID, i.CallbackMessageID)
 	if err != nil {
 		return s.wait()
 	}
-	if !allowed {
+	if !matched {
 		stale := structuredText(ru, "This message cannot confirm the request. Use the latest approval message.",
 			"Это сообщение не может подтвердить запрос. Используй последнее сообщение с кнопками.")
+		i.CallbackMessageID = 0
 		return s.finishStructuredKeyboard(ctx, t, checkpoint, i, stale, nil, ru)
+	}
+	if expired || !s.options.ExternalAgentWrites {
+		return s.finishStructuredKeyboard(ctx, t, checkpoint, i, inactive, nil, ru)
 	}
 	_, subject, err := s.taskIdentity(ctx, user)
 	if err != nil {
@@ -290,11 +295,5 @@ func (s *Service) decideExternalApproval(ctx context.Context, t *db.Task, checkp
 	case externalApprovalRejected:
 		result = structuredText(ru, "MCP request rejected.", "Запрос MCP отклонён.")
 	}
-	if editor, ok := s.tg.(externalApprovalEditor); ok {
-		_, _ = editor.EditMessageText(ctx, telegram.EditMessageRequest{
-			ChatID: i.ChatID, MessageID: i.CallbackMessageID, Text: "MCP " + i.ExternalApproval.ID.String() + "\n\n" + result,
-			ReplyMarkup: &telegram.InlineKeyboardMarkup{InlineKeyboard: [][]telegram.InlineKeyboardButton{}},
-		})
-	}
-	return s.finishStructuredKeyboard(ctx, t, checkpoint, i, result, nil, ru)
+	return s.finishStructuredKeyboard(ctx, t, checkpoint, i, "MCP "+i.ExternalApproval.ID.String()+"\n\n"+result, nil, ru)
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/internal/identity"
+	"github.com/complynx/zns-chatbot/internal/loom"
 )
 
 const externalAgentTokenPath = "/internal/agent/external-agent/token"
@@ -40,12 +41,18 @@ func (s *Server) externalAgentToken(w http.ResponseWriter, r *http.Request) {
 	body := json.NewDecoder(http.MaxBytesReader(w, r.Body, externalAgentTokenBodyLimit))
 	body.DisallowUnknownFields()
 	var input struct {
-		SubjectToken    string `json:"subject_token"`
-		ProtocolVersion int    `json:"protocol_version"`
+		SubjectToken       string                           `json:"subject_token"`
+		ProtocolVersion    int                              `json:"protocol_version"`
+		ConnectionApproval *loom.ExternalConnectionApproval `json:"connection_approval"`
 	}
-	if err := body.Decode(&input); err != nil || input.ProtocolVersion != 1 || input.SubjectToken == "" ||
+	if err := body.Decode(&input); err != nil || input.ProtocolVersion != 1 ||
+		(input.SubjectToken == "") == (input.ConnectionApproval == nil) ||
 		!errors.Is(body.Decode(new(any)), io.EOF) {
 		http.Error(w, "invalid token request", http.StatusBadRequest)
+		return
+	}
+	if input.ConnectionApproval != nil {
+		s.deliverExternalConnectionApproval(w, r, *input.ConnectionApproval)
 		return
 	}
 	ctx := r.Context()

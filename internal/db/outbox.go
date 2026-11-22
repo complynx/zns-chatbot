@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -35,6 +36,23 @@ func (s *Store) ListOutbox(ctx context.Context, id uuid.UUID) ([]Delivery, error
 		out[i] = delivery(r)
 	}
 	return out, nil
+}
+
+// HasDeliveredCallback binds an edit to the exact button the bot delivered in this chat.
+func (s *Store) HasDeliveredCallback(
+	ctx context.Context, owner Task, prompt uuid.UUID, chatID, messageID int64, callback string,
+) (bool, error) {
+	var matched bool
+	err := s.pool.QueryRow(ctx, `
+SELECT EXISTS (
+ SELECT 1 FROM shuttle_tasks t JOIN shuttle_outbox o ON o.task_id=t.id
+ WHERE t.id=$1 AND t.user_id=$2 AND t.conversation_id=$3 AND o.state='delivered'
+ AND o.receipt->>'chat_id'=$4::text AND o.receipt->>'message_id'=$5::text
+ AND o.payload#>'{reply_markup,inline_keyboard}' @>
+     jsonb_build_array(jsonb_build_array(jsonb_build_object('callback_data',$6::text)))
+)`, prompt, owner.UserID, owner.ConversationID,
+		strconv.FormatInt(chatID, 10), strconv.FormatInt(messageID, 10), callback).Scan(&matched)
+	return matched, err
 }
 
 // BlockPendingDelivery retains an unsent receipt after local access revocation.

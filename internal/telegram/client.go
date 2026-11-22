@@ -120,11 +120,17 @@ type LinkPreviewOptions struct {
 	IsDisabled bool `json:"is_disabled"`
 }
 type EditMessageRequest struct {
+	ChatID             int64                 `json:"chat_id"`
+	MessageID          int64                 `json:"message_id"`
+	Text               string                `json:"text"`
+	Entities           []MessageEntity       `json:"entities,omitempty"`
+	ReplyMarkup        *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
+	LinkPreviewOptions *LinkPreviewOptions   `json:"link_preview_options,omitempty"`
+}
+type EditMessageMarkupRequest struct {
 	ChatID      int64                 `json:"chat_id"`
 	MessageID   int64                 `json:"message_id"`
-	Text        string                `json:"text"`
-	Entities    []MessageEntity       `json:"entities,omitempty"`
-	ReplyMarkup *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
+	ReplyMarkup *InlineKeyboardMarkup `json:"reply_markup"`
 }
 type Receipt struct {
 	MessageID int64
@@ -203,9 +209,20 @@ func (c *Client) SendMessage(ctx context.Context, input SendMessageRequest) (Rec
 	return Receipt{MessageID: message.ID, ChatID: message.Chat.ID}, err
 }
 func (c *Client) EditMessageText(ctx context.Context, input EditMessageRequest) (Receipt, error) {
+	return c.editMessage(ctx, "editMessageText", input, input.ChatID, input.MessageID)
+}
+
+func (c *Client) EditMessageMarkup(ctx context.Context, input EditMessageMarkupRequest) (Receipt, error) {
+	return c.editMessage(ctx, "editMessageReplyMarkup", input, input.ChatID, input.MessageID)
+}
+
+func (c *Client) editMessage(ctx context.Context, method string, input any, chatID, messageID int64) (Receipt, error) {
 	var message Message
-	err := c.call(ctx, "editMessageText", input, &message, true)
-	if err == nil && (message.ID != input.MessageID || message.Chat.ID != input.ChatID) {
+	err := c.call(ctx, method, input, &message, true)
+	if failure, ok := errors.AsType[*Error](err); ok && failure.ReasonClass() == "message_not_modified" {
+		return Receipt{MessageID: messageID, ChatID: chatID}, nil
+	}
+	if err == nil && (message.ID != messageID || message.Chat.ID != chatID) {
 		err = &Error{Outcome: Unknown}
 	}
 	return Receipt{MessageID: message.ID, ChatID: message.Chat.ID}, err

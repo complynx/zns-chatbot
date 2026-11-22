@@ -20,6 +20,11 @@ import (
 	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
+const (
+	noticeNoActiveTask  = "no_active"
+	noticeStaleApproval = "stale"
+)
+
 func languageChoice(code, fallback string) string {
 	if strings.TrimSpace(code) == "" {
 		code = fallback
@@ -68,13 +73,13 @@ func (s *Service) localized(ctx context.Context, i intent, key string) string {
 			"Отменила задачу. Уже выполненные действия могут сохраниться.",
 			"I cancelled the task. Actions already completed may remain.",
 		},
-		"no_active": {"Нет активной задачи.", "There is no active task."},
+		noticeNoActiveTask: {"Нет активной задачи.", "There is no active task."},
 		reasonCreditsExhausted: {
 			"Бюджет исчерпан, поэтому я не могу продолжить. Пополни баланс или дождись следующего пополнения, " +
 				"затем напиши мне ещё раз.",
 			"The budget is used, so I can’t continue. Add funds or wait for the next funding, then write to me again.",
 		},
-		"stale": {
+		noticeStaleApproval: {
 			"Этот вопрос уже не актуален. Используй моё последнее сообщение.",
 			"This prompt is no longer current. Use my latest message.",
 		},
@@ -229,9 +234,10 @@ func (s *Service) approvalContent(
 	case loom.ReplyModeAgent:
 		payload.ReplyMarkup = approvalKeyboard(yes, no)
 	case loom.ReplyModeProtocol:
+		prompt := approvalPromptKey(a)
 		payload.ReplyMarkup = &telegram.InlineKeyboardMarkup{InlineKeyboard: [][]telegram.InlineKeyboardButton{{
-			{Text: yes, CallbackData: "a:" + id.String() + ":" + approvalPromptKey(a) + ":approve"},
-			{Text: no, CallbackData: "a:" + id.String() + ":" + approvalPromptKey(a) + ":reject"},
+			{Text: yes, CallbackData: approvalCallbackData(id, prompt, approvalApprove)},
+			{Text: no, CallbackData: approvalCallbackData(id, prompt, approvalReject)},
 		}}}
 	default:
 		return nil
@@ -251,6 +257,15 @@ func (s *Service) finish(ctx context.Context, t *db.Task, c checkpoint, i intent
 	if c.KeyboardPrompt != "" {
 		removeReplyKeyboard(out)
 		c.KeyboardPrompt = ""
+	}
+	if i.Kind == kindApproval && (key == noticeStaleApproval || key == noticeNoActiveTask) {
+		var err error
+		out, err = s.closeRunApprovalKeyboard(ctx, *t, i, out)
+		if err != nil {
+			return s.wait()
+		}
+	} else {
+		out = editCallbackOutput(i, out)
 	}
 	if e := s.save(ctx, t, c, out); e != nil {
 		return s.wait()

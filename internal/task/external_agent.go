@@ -16,12 +16,15 @@ const externalAgentCommand = "/mcp"
 const externalAgentCallbackPrefix = "mcp:"
 
 const (
-	externalAgentEnable  = "enable"
-	externalAgentDisable = "disable"
-	externalAgentHistory = "history"
-	externalAgentMemory  = "memory"
-	externalAgentSkills  = "skills"
-	externalAgentWrites  = "writes"
+	externalAgentLegacyEnable = "enable"
+	externalAgentEnableRead   = "read-on"
+	externalAgentDisable      = "disable"
+	externalAgentHistory      = "history"
+	externalAgentMemory       = "memory"
+	externalAgentSkills       = "skills"
+	externalAgentWrites       = "writes"
+	externalAgentInstructions = "instructions"
+	externalAgentSettingsPage = "settings"
 )
 
 type externalAgentChange struct {
@@ -40,8 +43,9 @@ func externalAgentCallback(i intent, data string) (intent, bool, error) {
 		return i, true, ErrUnsupportedUpdate
 	}
 	switch action {
-	case externalAgentEnable, externalAgentDisable, externalAgentHistory, externalAgentMemory, externalAgentSkills,
-		externalAgentWrites:
+	case externalAgentLegacyEnable, externalAgentEnableRead, externalAgentDisable,
+		externalAgentHistory, externalAgentMemory, externalAgentSkills, externalAgentWrites,
+		externalAgentInstructions, externalAgentSettingsPage:
 		i.Kind, i.StructuredCommand, i.Text = kindStructured, externalAgentCommand, externalAgentCommand
 		i.ExternalAgentChange = &externalAgentChange{Action: action, Version: version}
 		return i, true, nil
@@ -65,6 +69,10 @@ func (s *Service) structuredExternalAgent(ctx context.Context, t *db.Task, c che
 	}
 	auth := loom.Auth{ServiceToken: service.Token, SubjectToken: subject.Token}
 	message, keyboard := s.externalAgentView(ctx, auth, i.ExternalAgentChange, ru)
+	if i.ExternalAgentChange != nil && i.ExternalAgentChange.Action == externalAgentInstructions &&
+		keyboard != nil {
+		return s.finishExternalAgentInstructions(ctx, t, c, i, message, keyboard, ru)
+	}
 	return s.finishStructuredKeyboard(ctx, t, c, i, message, keyboard, ru)
 }
 
@@ -92,7 +100,17 @@ func (s *Service) externalAgentView(
 	}
 	var notice string
 	if change != nil {
-		profile, notice, err = s.changeExternalAgentProfile(ctx, auth, capability.Access, profile, *change, ru)
+		switch change.Action {
+		case externalAgentInstructions:
+			return externalAgentInstructionsView(*capability, profile, ru)
+		case externalAgentSettingsPage:
+			return externalAgentSettings(*capability, profile, ru)
+		}
+		if change.Version == profile.Version && change.Action == externalAgentWrites && !profile.Enabled {
+			notice = structuredText(ru, "Enable read access first.\n\n", "Сначала включи чтение.\n\n")
+		} else {
+			profile, notice, err = s.changeExternalAgentProfile(ctx, auth, capability.Access, profile, *change, ru)
+		}
 		if err != nil {
 			return notice, nil
 		}
@@ -145,26 +163,23 @@ func (c externalAgentChange) apply(
 		return profile, false
 	}
 	switch c.Action {
-	case externalAgentEnable:
-		return loom.ExternalAgentProfile{Enabled: true, Version: c.Version}, !profile.Enabled
+	case externalAgentEnableRead:
+		return loom.ExternalAgentProfile{
+			Enabled: true, Version: c.Version,
+			History: slices.Contains(access, externalAgentHistory),
+			Memory:  slices.Contains(access, externalAgentMemory),
+			Skills:  slices.Contains(access, externalAgentSkills),
+		}, !profile.Enabled
 	case externalAgentDisable:
 		return loom.ExternalAgentProfile{Version: c.Version}, profile.Enabled
 	}
 	if !profile.Enabled || !slices.Contains(access, c.Action) {
 		return profile, false
 	}
-	switch c.Action {
-	case externalAgentHistory:
-		profile.History = !profile.History
-	case externalAgentMemory:
-		profile.Memory = !profile.Memory
-	case externalAgentSkills:
-		profile.Skills = !profile.Skills
-	case externalAgentWrites:
-		profile.Writes = !profile.Writes
-	default:
+	if c.Action != externalAgentWrites {
 		return profile, false
 	}
+	profile.Writes = !profile.Writes
 	return profile, true
 }
 
@@ -185,36 +200,28 @@ func externalAgentSettings(
 			" Zinusya tools follow your current roles, including administrative permissions.",
 			" Инструменты Зинуси учитывают твои текущие права, включая административные.")
 	}
-	if !profile.Enabled {
-		add(structuredText(ru, "Enable read access", "Разрешить доступ на чтение"), externalAgentEnable)
-		return text + structuredText(ru, "\n\nAccess is off.", "\n\nДоступ выключен."), keyboard
-	}
 	text += structuredText(ru,
-		"\n\nAdd this server in your MCP client and sign in with the same account:\n",
-		"\n\nДобавь этот сервер в MCP-клиенте и войди в тот же аккаунт:\n") + capability.Resource
-	for _, setting := range []struct {
-		id, en, ru string
-		enabled    bool
-	}{
-		{
-			externalAgentHistory,
-			"Loom chat history (including past results)",
-			"История чата Loom (включая прошлые результаты)",
-			profile.History,
-		},
-		{externalAgentMemory, "Personal memory", "Личная память", profile.Memory},
-		{externalAgentSkills, "Organization skill library", "Библиотека навыков организации", profile.Skills},
-		{externalAgentWrites, "Write and management tools", "Инструменты записи и управления", profile.Writes},
-	} {
-		if slices.Contains(capability.Access, setting.id) {
-			prefix := structuredText(ru, "Allow: ", "Разрешить: ")
-			if setting.enabled {
-				prefix = structuredText(ru, "Revoke: ", "Отозвать: ")
-			}
-			add(prefix+structuredText(ru, setting.en, setting.ru), setting.id)
-		}
+		"\n\nTurning on read access allows available chat history, personal memory and organization skills. "+
+			"Turning it off also disables changes and closes existing connections.",
+		"\n\nВключение чтения разрешает доступ к истории чатов, личной памяти и навыкам организации, если они доступны. "+
+			"Выключение чтения также отключает изменения и закрывает подключения.")
+	readAction := externalAgentEnableRead
+	if profile.Enabled {
+		readAction = externalAgentDisable
 	}
-	add(structuredText(ru, "Turn off access and close connections", "Выключить доступ и закрыть подключения"),
-		externalAgentDisable)
+	add(externalAgentToggle(profile.Enabled, structuredText(ru, "Read", "Чтение")), readAction)
+	if slices.Contains(capability.Access, externalAgentWrites) {
+		add(externalAgentToggle(profile.Writes, structuredText(ru, "Changes", "Изменения")), externalAgentWrites)
+	}
+	add(structuredText(ru, "Get instructions for the agent", "Получить инструкцию для агента"), externalAgentInstructions)
+	text += structuredText(ru,
+		"\n\nMCP server: ", "\n\nСервер MCP: ") + capability.Resource
 	return text, keyboard
+}
+
+func externalAgentToggle(enabled bool, label string) string {
+	if enabled {
+		return "☑️ " + label
+	}
+	return "⬜ " + label
 }

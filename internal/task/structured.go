@@ -62,6 +62,9 @@ func structuredText(ru bool, english, russian string) string {
 
 // structured uses the normal durable task/outbox independently of any active Loom run.
 func (s *Service) structured(ctx context.Context, t *db.Task, c checkpoint, i intent) error {
+	if i.ExternalConnection != nil {
+		return s.decideExternalConnection(ctx, t, c, i)
+	}
 	if i.ExternalApproval != nil {
 		return s.decideExternalApproval(ctx, t, c, i)
 	}
@@ -126,7 +129,7 @@ func (s *Service) structured(ctx context.Context, t *db.Task, c checkpoint, i in
 	if i.StructuredCommand == menuCommand || i.StructuredCommand == startCommand {
 		out = structuredMenuOutput(i, text, ru, formURL)
 	}
-	if err = s.save(ctx, t, c, out); err != nil {
+	if err = s.save(ctx, t, c, editCallbackOutput(i, out)); err != nil {
 		return s.wait()
 	}
 	return s.deliver(ctx, t, c)

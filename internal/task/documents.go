@@ -23,6 +23,8 @@ func (s *Service) sendOutbound(ctx context.Context, row db.Delivery) (telegram.R
 	case "avatar_document":
 		receipt, err := s.sendAvatarDocument(ctx, row)
 		return receipt, "", err
+	case editCallbackTextKind, editCallbackMarkupKind:
+		return s.sendCallbackEdit(ctx, row, header.Kind)
 	case "":
 		return s.sendKeyboardText(ctx, row)
 	default:
