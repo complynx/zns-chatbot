@@ -113,25 +113,7 @@ func (s *Service) structured(ctx context.Context, t *db.Task, c checkpoint, i in
 	if err != nil {
 		return s.identityError(ctx, t, c, i, err)
 	}
-	formURL := ""
-	if s.options.MiniAppURL != "" {
-		switch i.StructuredCommand {
-		case menuCommand, startCommand:
-			formURL = s.options.MiniAppURL
-		case paymentsCommand:
-			formURL = s.options.MiniAppURL + "#pass-payments"
-		case pairsCommand:
-			formURL = s.options.MiniAppURL + "#pairs"
-		case avatarCommand:
-			formURL = s.options.MiniAppURL + "#avatars"
-		case ordersCommand:
-			formURL = s.options.MiniAppURL + "#orders"
-		case massageCommand:
-			formURL = s.options.MiniAppURL + "#massage"
-		case knowledgeCommand:
-			formURL = s.options.MiniAppURL + "#knowledge"
-		}
-	}
+	formURL := s.structuredFormURL(i.StructuredCommand)
 	t.State = stateCompleted
 	out := structuredOutput(i, text, next, ru, formURL)
 	if i.StructuredCommand == menuCommand || i.StructuredCommand == startCommand {
@@ -141,6 +123,30 @@ func (s *Service) structured(ctx context.Context, t *db.Task, c checkpoint, i in
 		return s.wait()
 	}
 	return s.deliver(ctx, t, c)
+}
+
+func (s *Service) structuredFormURL(command string) string {
+	if s.options.MiniAppURL == "" {
+		return ""
+	}
+	switch command {
+	case menuCommand, startCommand:
+		return s.options.MiniAppURL
+	case paymentsCommand:
+		return s.options.MiniAppURL + "#pass-payments"
+	case pairsCommand:
+		return s.options.MiniAppURL + "#pairs"
+	case avatarCommand:
+		return s.options.MiniAppURL + "#avatars"
+	case ordersCommand:
+		return s.options.MiniAppURL + "#orders"
+	case massageCommand:
+		return s.options.MiniAppURL + "#massage"
+	case knowledgeCommand:
+		return s.options.MiniAppURL + "#knowledge"
+	default:
+		return ""
+	}
 }
 
 func (s *Service) taskPrincipal(ctx context.Context, user db.User) (identity.Principal, error) {

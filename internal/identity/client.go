@@ -411,11 +411,10 @@ func (c *Client) verify(ctx context.Context, token string, useCached bool) (Prin
 	// Flat roles belong to the introspection client's project, which can differ
 	// from this API. Only the exact configured project claim may authorize it.
 	var apiRoles map[string]map[string]string
-	if raw, present := fields["urn:zitadel:iam:org:project:"+c.options.APIAudience+":roles"]; present {
-		if json.Unmarshal(raw, &apiRoles) != nil {
-			c.Invalidate(s.Subject)
-			return Principal{}, ErrDenied
-		}
+	if raw, present := fields["urn:zitadel:iam:org:project:"+c.options.APIAudience+":roles"]; present &&
+		json.Unmarshal(raw, &apiRoles) != nil {
+		c.Invalidate(s.Subject)
+		return Principal{}, ErrDenied
 	}
 	if !info.Active || info.Subject != s.Subject || info.Issuer != s.Issuer || info.Org != s.Org ||
 		info.Expiry == nil ||
