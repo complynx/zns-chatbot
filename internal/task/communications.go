@@ -21,6 +21,7 @@ import (
 )
 
 const communicationPersonal = "personal"
+const communicationsCommand = "/communications"
 const communicationCancel = "cancel"
 const communicationKeep = "keep"
 const communicationSuggested = "suggested"
@@ -344,7 +345,7 @@ func communicationCallback(i intent, cb *telegram.CallbackQuery) (intent, bool, 
 		return i, true, ErrUnsupportedUpdate
 	}
 	i.Kind = kindStructured
-	i.StructuredCommand = "/communications"
+	i.StructuredCommand = communicationsCommand
 	i.Text = cb.Data
 	return i, true, nil
 }
@@ -368,6 +369,7 @@ func (s *Service) structuredCommunication(
 	action := parts[2]
 	var text string
 	var keyboard *telegram.InlineKeyboardMarkup
+	editKind := editCallbackTextKind
 	switch action {
 	case communicationKeep, communicationSuggested, communicationCancel:
 		message, e := s.store.Communication(ctx, scope, id)
@@ -396,6 +398,7 @@ func (s *Service) structuredCommunication(
 			)
 		}
 	default:
+		editKind = editCallbackMarkupKind
 		text, keyboard, err = s.communicationSubscriptionAction(ctx, scope, id, action, ru)
 		if err != nil {
 			return err
@@ -407,7 +410,8 @@ func (s *Service) structuredCommunication(
 		return err
 	}
 	t.State = stateCompleted
-	if err = s.save(ctx, t, c, []db.Outbound{{DedupKey: "communication-action", Payload: raw}}); err != nil {
+	out := editCallbackMessage(i, []db.Outbound{{DedupKey: "communication-action", Payload: raw}}, editKind)
+	if err = s.save(ctx, t, c, out); err != nil {
 		return err
 	}
 	return s.deliver(ctx, t, c)
@@ -547,9 +551,13 @@ func (s *Service) communicationSubscriptionAction(
 				" После отписки ты можешь пропустить нужную информацию об эвенте.",
 			)
 		}
+		unsubscribe, subscribe := subscriptionChoiceLabels(message.Arguments.EventID, all, ru)
+		if category == broadcasts.Information {
+			unsubscribe = structuredText(ru, "⚠️ May miss updates: ", "⚠️ Можно пропустить новости: ") + unsubscribe
+		}
 		keyboard = &telegram.InlineKeyboardMarkup{InlineKeyboard: [][]telegram.InlineKeyboardButton{
-			{communicationButton(id, off, structuredText(ru, "Unsubscribe", "Отписаться"))},
-			{communicationButton(id, on, structuredText(ru, "Subscribe", "Подписаться"))},
+			{communicationButton(id, off, unsubscribe)},
+			{communicationButton(id, on, subscribe)},
 		}}
 	default:
 		subscribed := strings.HasPrefix(action, "on")
@@ -585,16 +593,30 @@ func (s *Service) communicationSubscriptionAction(
 					"рассылкой в этом сообщении. Предупреждения остаются включены.",
 			)
 		}
-		keyboard = &telegram.InlineKeyboardMarkup{
-			InlineKeyboard: [][]telegram.InlineKeyboardButton{
-				{communicationButton(id, on, structuredText(ru, "Restore subscription", "Восстановить подписку"))},
-				{
-					communicationButton(id, "all", structuredText(ru, "Global category subscription", "Общая подписка на категорию")),
-				},
-			},
+		keyboard = &telegram.InlineKeyboardMarkup{}
+		if !subscribed {
+			keyboard.InlineKeyboard = append(keyboard.InlineKeyboard,
+				[]telegram.InlineKeyboardButton{
+					communicationButton(id, on, structuredText(ru, "Restore subscription", "Восстановить подписку")),
+				})
 		}
 	}
+	keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, subscriptionButtons(d, message, ru).InlineKeyboard...)
 	return text, keyboard, nil
+}
+
+func subscriptionChoiceLabels(event uuid.UUID, all, ru bool) (string, string) {
+	switch {
+	case all:
+		return structuredText(ru, "Mute category everywhere", "Отключить категорию везде"),
+			structuredText(ru, "Restore category globally", "Восстановить категорию везде")
+	case event == uuid.Nil:
+		return structuredText(ru, "Mute general broadcasts", "Отключить общие рассылки"),
+			structuredText(ru, "Restore general broadcasts", "Восстановить общие рассылки")
+	default:
+		return structuredText(ru, "Mute this event's broadcasts", "Отключить рассылки мероприятия"),
+			structuredText(ru, "Restore this event's broadcasts", "Восстановить рассылки мероприятия")
+	}
 }
 
 func (s *Service) handleCommunicationAction(
@@ -620,7 +642,7 @@ func (s *Service) handleCommunicationAction(
 				"The recipient list or your access changed. Prepare a new message with a fresh audience.",
 				"Список получателей или доступ к ним изменились. Подготовь сообщение заново с актуальным списком.")
 		}
-		if saveErr := s.save(ctx, t, c, structuredOutput(i, text, nil, ru, "")); saveErr != nil {
+		if saveErr := s.save(ctx, t, c, editCallbackOutput(i, structuredOutput(i, text, nil, ru, ""))); saveErr != nil {
 			return saveErr
 		}
 		return s.deliver(ctx, t, c)

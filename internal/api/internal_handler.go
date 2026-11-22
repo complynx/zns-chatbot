@@ -10,6 +10,12 @@ import (
 // Long reads extend socket deadlines as well as the request context. Other
 // routes retain the server defaults.
 func (s *Server) serveInternal(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost && (s.externalAgentPaths[r.URL.Path] || s.externalWriteAuthorized(r)) {
+		original := r
+		request := r.WithContext(context.WithValue(r.Context(), externalAgentReadKey{}, true))
+		defer func() { original.Pattern = request.Pattern }()
+		r = request
+	}
 	timeout := internalReadTimeout(r)
 	if timeout == 0 {
 		s.internal.ServeHTTP(w, r)

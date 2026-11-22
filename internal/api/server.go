@@ -41,6 +41,9 @@ const (
 )
 
 type Options struct {
+	ExternalAgentTokenSecret                                                  string
+	ExternalAgentWrites                                                       bool
+	ExternalAgentEnabled                                                      bool
 	PersonalizationEnabled                                                    bool
 	SkillsEnabled                                                             bool
 	MiniAppAllowLocalHTTP                                                     bool
@@ -54,19 +57,21 @@ type Options struct {
 }
 
 type Server struct {
-	store             *db.Store
-	iam               *identity.Client
-	tasks             Acceptor
-	options           Options
-	public, internal  *http.ServeMux
-	accepting         atomic.Bool
-	settingsMu        sync.Mutex
-	settingsTTL       time.Duration
-	settingsTTLKnown  bool
-	archiveValidation chan struct{}
-	miniAppKey        miniapp.SessionKey
-	prelinkVerifier   *identity.TelegramPrelinkVerifier
-	prelinkBearerHash [sha256.Size]byte
+	externalAgentPaths map[string]bool
+	externalWritePaths map[string]bool
+	store              *db.Store
+	iam                *identity.Client
+	tasks              Acceptor
+	options            Options
+	public, internal   *http.ServeMux
+	accepting          atomic.Bool
+	settingsMu         sync.Mutex
+	settingsTTL        time.Duration
+	settingsTTLKnown   bool
+	archiveValidation  chan struct{}
+	miniAppKey         miniapp.SessionKey
+	prelinkVerifier    *identity.TelegramPrelinkVerifier
+	prelinkBearerHash  [sha256.Size]byte
 }
 
 func New(store *db.Store, iam *identity.Client, tasks Acceptor, options Options) (*Server, error) {
@@ -109,6 +114,7 @@ func New(store *db.Store, iam *identity.Client, tasks Acceptor, options Options)
 	api := humago.New(s.internal, internalConfig)
 	s.register(api)
 	s.registerFiles(api)
+	s.registerExternalAgentTokenService()
 	return s, nil
 }
 func (s *Server) PublicHandler() http.Handler   { return http.HandlerFunc(s.servePublic) }
@@ -195,6 +201,9 @@ func (s *Server) authorizeIdentity(ctx context.Context, header string, admin boo
 	}
 	if p.OrganizationID != s.options.OrganizationID || p.Subject == s.options.ActorID {
 		return p, huma.Error403Forbidden("user identity required")
+	}
+	if allowed, _ := ctx.Value(externalAgentReadKey{}).(bool); p.ExternalAgent && !allowed {
+		return p, huma.Error403Forbidden("external agent credential requires an authorized tool route")
 	}
 	if admin {
 		if _, hasRole := p.Roles["zinusya.admin"][s.options.OrganizationID]; !hasRole {

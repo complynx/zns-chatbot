@@ -16,6 +16,11 @@ import (
 
 var ErrUnsupportedUpdate = errors.New("unsupported Telegram update")
 
+const (
+	approvalApprove = "approve"
+	approvalReject  = "reject"
+)
+
 type intent struct {
 	PassInput            *passInput              `json:"pass_input,omitempty"`
 	PassCallback         string                  `json:"pass_callback,omitempty"`
@@ -27,6 +32,9 @@ type intent struct {
 	CallbackMessageID    int64                   `json:"callback_message_id,omitempty"`
 	ReplyToMessageID     int64                   `json:"reply_to_message_id,omitempty"`
 	StructuredCommand    string                  `json:"structured_command,omitempty"`
+	ExternalAgentChange  *externalAgentChange    `json:"external_agent_change,omitempty"`
+	ExternalApproval     *externalApprovalChoice `json:"external_approval,omitempty"`
+	ExternalConnection   *externalApprovalChoice `json:"external_connection,omitempty"`
 	PartnerCode          *uuid.UUID              `json:"partner_code,omitempty"`
 	Attachments          []files.Incoming        `json:"attachments,omitempty"`
 	PreferredLanguage    string                  `json:"preferred_language,omitempty"`
@@ -142,6 +150,7 @@ func callbackIntent(i intent, cb *telegram.CallbackQuery) (intent, error) {
 	}
 	i.User = cb.From
 	i.ChatID = cb.Message.Chat.ID
+	i.CallbackMessageID = cb.Message.ID
 	if normalized, matched, err := communicationCallback(i, cb); matched {
 		return normalized, err
 	}
@@ -149,6 +158,15 @@ func callbackIntent(i intent, cb *telegram.CallbackQuery) (intent, error) {
 		return normalized, err
 	}
 	if normalized, matched, err := normalizePassCallback(i, cb); matched {
+		return normalized, err
+	}
+	if normalized, matched, err := externalAgentCallback(i, cb.Data); matched {
+		return normalized, err
+	}
+	if normalized, matched, err := externalApprovalCallback(i, cb); matched {
+		return normalized, err
+	}
+	if normalized, matched, err := externalConnectionCallback(i, cb.Data); matched {
 		return normalized, err
 	}
 	if cursor, ok := strings.CutPrefix(cb.Data, registrationPageCallback); ok {
@@ -180,7 +198,7 @@ func callbackChoice(i intent, kind, value string) (intent, error) {
 	case "a":
 		i.Kind = kindApproval
 		i.Decision = value
-		if value != "approve" && value != "reject" {
+		if value != approvalApprove && value != approvalReject {
 			return i, ErrUnsupportedUpdate
 		}
 	default:

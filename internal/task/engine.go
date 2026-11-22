@@ -144,7 +144,7 @@ func (s *Service) work(parent context.Context, id uuid.UUID) error {
 		return s.finish(ctx, &t, c, i, stateFailed, kindUnsupported)
 	}
 	if t.Route == "no_active" {
-		return s.finish(ctx, &t, c, i, stateCompleted, "no_active")
+		return s.finish(ctx, &t, c, i, stateCompleted, noticeNoActiveTask)
 	}
 	if t.Route == kindStructured {
 		return s.dispatchStructured(ctx, &t, c, i)
@@ -509,7 +509,7 @@ func (s *Service) control(ctx context.Context, t *db.Task, c checkpoint, i inten
 		return s.finishedTarget(ctx, t, c, i, user, service, target)
 	}
 	if i.CallbackTaskID != uuid.Nil && i.CallbackTaskID != target.ID {
-		return s.finish(ctx, t, c, i, stateFailed, "stale")
+		return s.finish(ctx, t, c, i, stateFailed, noticeStaleApproval)
 	}
 	applied, err := s.sendControl(ctx, t, &c, i, auth, target.RunID, run)
 	if !applied {
@@ -530,15 +530,33 @@ func (s *Service) completeControl(
 		// target observes that run. If the target ends first, adoptRun takes the run.
 		return s.waitForService(ctx, t, c)
 	}
-	t.RunID = target.RunID
-	t.AuthSessionID = target.AuthSessionID
-	t.State = stateCompleted
 	c.Run = &run
 	out := s.stepLimitInputAck(ctx, i, *c.InputReceipt)
-	if err := s.save(ctx, t, c, out); err != nil {
+	if err := s.saveAcceptedControl(ctx, t, c, i, target, out); err != nil {
 		return s.wait()
 	}
 	return s.deliverAndContinueStart(ctx, t, c, i)
+}
+
+func (s *Service) saveAcceptedControl(
+	ctx context.Context, t *db.Task, c checkpoint, i intent, target db.Task, out []db.Outbound,
+) error {
+	t.RunID = target.RunID
+	t.AuthSessionID = target.AuthSessionID
+	t.State = stateCompleted
+	if i.Kind == kindApproval && i.CallbackMessageID > 0 {
+		ru := s.languageFor(ctx, i) == "ru"
+		text := structuredText(ru, "Approved.", "Подтверждено.")
+		if i.Decision == approvalReject {
+			text = structuredText(ru, "Rejected.", "Отклонено.")
+		}
+		ack, err := s.closeRunApprovalKeyboard(ctx, *t, i, s.result(ctx, i, text, "approval-ack"))
+		if err != nil {
+			return err
+		}
+		out = append(ack, out...)
+	}
+	return s.save(ctx, t, c, out)
 }
 
 func (s *Service) finishedTarget(
@@ -557,7 +575,7 @@ func (s *Service) finishedTarget(
 		}
 	}
 	if i.Kind != kindMessage {
-		return s.finish(ctx, t, c, i, stateCompleted, "no_active")
+		return s.finish(ctx, t, c, i, stateCompleted, noticeNoActiveTask)
 	}
 	promoted, err := s.store.PromoteMessage(ctx, t.ID, s.owner, t.Fence)
 	if err != nil {
@@ -611,10 +629,7 @@ func (s *Service) reconcileFinishedInput(
 		return true, s.adoptRun(ctx, t, i, user, service, target, receipt.ID)
 	}
 	c.InputReceipt = &receipt
-	t.RunID = target.RunID
-	t.AuthSessionID = target.AuthSessionID
-	t.State = stateCompleted
-	if err = s.save(ctx, t, c, nil); err != nil {
+	if err = s.saveAcceptedControl(ctx, t, c, i, target, nil); err != nil {
 		return true, s.wait()
 	}
 	return true, s.deliver(ctx, t, c)
@@ -640,7 +655,7 @@ func (s *Service) sendControl(
 	}
 	if err := s.prepareControl(ctx, t, c, i, run); err != nil {
 		if errors.Is(err, ErrUnsupportedUpdate) {
-			return false, s.finish(ctx, t, *c, i, stateFailed, "stale")
+			return false, s.finish(ctx, t, *c, i, stateFailed, noticeStaleApproval)
 		}
 		return false, s.wait()
 	}

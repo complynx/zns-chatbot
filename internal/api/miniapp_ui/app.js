@@ -523,9 +523,13 @@
         : new Intl.DisplayNames([language], { type: "region" }).of(category);
     }
     detailsRefresh.textContent = w.refresh;
-    document.getElementById("details-name-presence").textContent = detailsCurrent ? w[detailsCurrent.legal_name_present ? "present" : "missing"] : "";
-    document.getElementById("details-passport-presence").textContent = detailsCurrent ? w[detailsCurrent.passport_number_present ? "present" : "missing"] : "";
+    for (const [id, present] of [["details-name-presence", detailsCurrent?.legal_name_present], ["details-passport-presence", detailsCurrent?.passport_number_present]]) {
+      const element = document.getElementById(id);
+      element.textContent = detailsCurrent ? w[present ? "present" : "missing"] : "";
+    }
     detailsStatus.textContent = w[detailsPhase] || "";
+    const ordinaryStatus = ["loading", "ready", "saved", "recovered"].includes(detailsPhase);
+    detailsStatus.className = ordinaryStatus ? "" : "details-alert";
   }
 
   function detailsControls(value) {

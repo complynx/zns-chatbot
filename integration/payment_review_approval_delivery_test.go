@@ -142,7 +142,7 @@ func TestPaymentReviewApprovalDoesNotOfferUnverifiableConsent(t *testing.T) {
 				f.H.peers.mu.Lock()
 				defer f.H.peers.mu.Unlock()
 				return len(f.H.peers.createAttempts)+f.H.peers.runGets >= 2
-			}, 5*time.Second, 10*time.Millisecond)
+			}, approvalRetryObservationTimeout, 10*time.Millisecond)
 			f.H.stop(t)
 			f.H.peers.mu.Lock()
 			sent := append([]telegram.SendMessageRequest(nil), f.H.peers.sent...)

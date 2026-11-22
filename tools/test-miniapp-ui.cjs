@@ -462,6 +462,8 @@ test("private form saves one field without storing or prefilling legal values",a
  assert.equal(app.elements["details-name"].value,"");
  assert.equal(app.stored().detailsChange,undefined);
  assert.match(app.elements["details-name-presence"].textContent,/Saved; value hidden/);
+ assert.match(app.elements["details-passport-presence"].textContent,/Not filled in/);
+ assert.equal(app.elements["details-status"].className,"");
  assert.equal(app.elements["profile-first-name"].value,account.first_name);
  assertNoPrivateStorage(app,"Synthetic Private Legal Name");
 });
@@ -591,6 +593,7 @@ test("missing receipt plus a newer version closes old CAS without submitting a r
  assert.equal(app.stored().detailsChange,undefined);
  assert.equal(app.elements["details-save-name"].disabled,false);
  assert.match(app.elements["details-status"].textContent,/can no longer apply at its old version/);
+ assert.equal(app.elements["details-status"].className,"details-alert");
 });
 
 test("unavailable receipt lookup preserves metadata and blocks changed writes until refresh",async()=>{
@@ -634,6 +637,20 @@ test("new Telegram launch recovers the same owner's pending private operation",a
  assert.equal(app.calls[0].path,"./session/bootstrap");
  assert.equal(app.detailsCalls[1].path,"./registration-details/operations/"+pending.operation_id);
  assert.equal(app.stored().detailsChange,undefined);
+});
+
+test("private form markup labels each blank input and links its saved-status text",()=>{
+ const html=readFileSync(resolve(__dirname,"../internal/api/miniapp_ui/index.html"),"utf8");
+ const section=html.match(/<section id="details"[\s\S]*?<\/section>/)[0];
+ for (const [id,presence] of [["details-name","details-name-presence"],["details-passport","details-passport-presence"]]) {
+  const input=section.match(new RegExp('<input id="'+id+'"[^>]*>'))[0];
+  assert.match(section,new RegExp('<label id="'+id+'-label" for="'+id+'">'));
+  assert.match(input,new RegExp('aria-describedby="'+presence+' details-note"'));
+  assert.match(section,new RegExp('id="'+presence+'"'));
+  assert.match(input,/ required[ >]/);
+  assert.match(input,/autocomplete="off"/);
+  assert.doesNotMatch(input,/ (?:value|placeholder)=/);
+ }
 });
 
 test("disabled private module does not discard a pending operation or allow writes",async()=>{

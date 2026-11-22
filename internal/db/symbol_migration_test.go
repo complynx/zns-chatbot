@@ -15,7 +15,8 @@ func TestSymbolMigrationPreservesVersion74(t *testing.T) {
 	task := accepted(t, s, 1)
 	// Rewind the fixture's empty post-baseline additions as well as version 76.
 	_, err := s.Pool().
-		Exec(ctx, `DROP TABLE shuttle_broadcast_subscriptions,shuttle_communication_deliveries,shuttle_communications;
+		Exec(ctx, `DROP TABLE shuttle_external_approval_messages;
+DROP TABLE shuttle_broadcast_subscriptions,shuttle_communication_deliveries,shuttle_communications;
 ALTER TABLE shuttle_user_profiles DROP CONSTRAINT shuttle_profile_name_no_markup;
 DROP TRIGGER shuttle_users_remember_names ON shuttle_users;
 DROP TRIGGER shuttle_profiles_remember_names ON shuttle_user_profiles;
@@ -65,9 +66,10 @@ func TestReactionMigrationPreservesVersion75CatalogAndTasks(t *testing.T) {
 	_, downErr := baselineProvider(t, s).DownTo(ctx, 82)
 	require.NoError(t, downErr)
 	task := accepted(t, s, 3)
-	// The version-75 fixture predates both the baseline and the empty ban audit table.
+	// Rewind the empty post-baseline additions while keeping the version-75 symbol catalog.
 	_, err := s.Pool().
-		Exec(ctx, `DROP TABLE shuttle_broadcast_subscriptions,shuttle_communication_deliveries,shuttle_communications;
+		Exec(ctx, `DROP TABLE shuttle_external_approval_messages;
+DROP TABLE shuttle_broadcast_subscriptions,shuttle_communication_deliveries,shuttle_communications;
 ALTER TABLE shuttle_user_profiles DROP CONSTRAINT shuttle_profile_name_no_markup;
 DROP TRIGGER shuttle_users_remember_names ON shuttle_users;
 DROP TRIGGER shuttle_profiles_remember_names ON shuttle_user_profiles;

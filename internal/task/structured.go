@@ -53,7 +53,7 @@ func structuredCommand(text string) bool {
 	return text == registerCommand || strings.HasPrefix(text, registerCommand+" ") ||
 		text == startCommand || text == pairsCommand || text == avatarCommand || text == menuCommand ||
 		text == ordersCommand || text == massageCommand || text == paymentReviewsCommand ||
-		text == paymentsCommand || text == profileCommand ||
+		text == paymentsCommand || text == profileCommand || text == externalAgentCommand ||
 		text == registrationsCommand ||
 		strings.HasPrefix(text, registrationsCommand+" ")
 }
@@ -65,8 +65,17 @@ func structuredText(ru bool, english, russian string) string {
 	return english
 }
 
-// structured uses the normal durable task/outbox, without touching Loom or its active task.
+// structured uses the normal durable task/outbox independently of any active Loom run.
 func (s *Service) structured(ctx context.Context, t *db.Task, c checkpoint, i intent) error {
+	if i.ExternalConnection != nil {
+		return s.decideExternalConnection(ctx, t, c, i)
+	}
+	if i.ExternalApproval != nil {
+		return s.decideExternalApproval(ctx, t, c, i)
+	}
+	if i.StructuredCommand == externalAgentCommand {
+		return s.structuredExternalAgent(ctx, t, c, i)
+	}
 	user, _, err := s.authorize(ctx, *t, i)
 	var principal identity.Principal
 	if err == nil {
@@ -128,29 +137,36 @@ func (s *Service) structured(ctx context.Context, t *db.Task, c checkpoint, i in
 	if i.StructuredCommand == menuCommand || i.StructuredCommand == startCommand {
 		out = structuredMenuOutput(i, text, ru, formURL)
 	}
-	if err = s.save(ctx, t, c, out); err != nil {
+	if err = s.save(ctx, t, c, editCallbackOutput(i, out)); err != nil {
 		return s.wait()
 	}
 	return s.deliver(ctx, t, c)
 }
 
 func (s *Service) taskPrincipal(ctx context.Context, user db.User) (identity.Principal, error) {
+	principal, _, err := s.taskIdentity(ctx, user)
+	return principal, err
+}
+
+func (s *Service) taskIdentity(
+	ctx context.Context, user db.User,
+) (identity.Principal, identity.Credential, error) {
 	bot, organization, _ := s.iam.DeploymentScope()
 	if user.Revoked || user.BotID != bot || user.Organization != organization || user.Subject == "" {
-		return identity.Principal{}, identity.ErrDenied
+		return identity.Principal{}, identity.Credential{}, identity.ErrDenied
 	}
 	credential, err := s.iam.UserToken(ctx, user.Subject)
 	if err != nil {
-		return identity.Principal{}, err
+		return identity.Principal{}, identity.Credential{}, err
 	}
 	principal, err := s.iam.Verify(ctx, credential.Token)
 	if err != nil {
-		return identity.Principal{}, err
+		return identity.Principal{}, identity.Credential{}, err
 	}
 	if principal.Subject != user.Subject || principal.OrganizationID != organization {
-		return identity.Principal{}, identity.ErrDenied
+		return identity.Principal{}, identity.Credential{}, identity.ErrDenied
 	}
-	return principal, nil
+	return principal, credential, nil
 }
 
 func (s *Service) structuredView(

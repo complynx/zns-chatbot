@@ -157,7 +157,7 @@ func (s *Service) registrationRoleMenu(
 			},
 		},
 	}
-	return s.finishRegistration(ctx, t, c, i, text, keyboard, ru)
+	return s.finishStructuredKeyboard(ctx, t, c, i, text, keyboard, ru)
 }
 
 func (s *Service) registrationEventsMenu(
@@ -193,7 +193,7 @@ func (s *Service) registrationEventsMenu(
 	if len(page.Events) == 0 {
 		text = structuredText(ru, "No open registrations on this page.", "На этой странице нет открытых регистраций.")
 	}
-	return s.finishRegistration(ctx, t, c, i, text, keyboard, ru)
+	return s.finishStructuredKeyboard(ctx, t, c, i, text, keyboard, ru)
 }
 
 func (s *Service) registerChoice(
@@ -261,7 +261,7 @@ func (s *Service) registerChoice(
 		return s.identityError(ctx, t, c, i, err)
 	}
 	if result.State == db.PassReturned {
-		return s.finishRegistration(ctx, t, c, i, passText(ru, "entry.returned"), nil, ru)
+		return s.finishStructuredKeyboard(ctx, t, c, i, passText(ru, "entry.returned"), nil, ru)
 	}
 	text := fmt.Sprintf(
 		"%s\n%s: %s\n/registrations",
@@ -278,11 +278,11 @@ func (s *Service) registerChoice(
 			"\nТы в листе ожидания. Пасс и платёж не создавались.",
 		)
 	}
-	return s.finishRegistration(ctx, t, c, i, text, nil, ru)
+	return s.finishStructuredKeyboard(ctx, t, c, i, text, nil, ru)
 }
 
 func (s *Service) registrationRetry(ctx context.Context, t *db.Task, c checkpoint, i intent, ru bool) error {
-	return s.finishRegistration(
+	return s.finishStructuredKeyboard(
 		ctx,
 		t,
 		c,
@@ -299,7 +299,7 @@ func (s *Service) registrationRetry(ctx context.Context, t *db.Task, c checkpoin
 	)
 }
 
-func (s *Service) finishRegistration(
+func (s *Service) finishStructuredKeyboard(
 	ctx context.Context,
 	t *db.Task,
 	c checkpoint,
@@ -322,7 +322,7 @@ func (s *Service) finishRegistration(
 		out[len(out)-1].Payload = raw
 	}
 	t.State = stateCompleted
-	if err := s.save(ctx, t, c, out); err != nil {
+	if err := s.save(ctx, t, c, editCallbackOutput(i, out)); err != nil {
 		return s.wait()
 	}
 	return s.deliver(ctx, t, c)

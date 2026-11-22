@@ -7,13 +7,20 @@ import (
 	"errors"
 	"io"
 
+	"github.com/google/uuid"
+
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/loom"
 )
 
 // Read the actor's original prepared decision so an abbreviated Loom prompt
 // cannot replace its human terms. Displaying consent never confirms payment.
-func (s *Service) paymentReviewApprovalText(ctx context.Context, t db.Task, i intent, a loom.Approval) (string, error) {
+func (s *Service) paymentReviewApprovalText(
+	ctx context.Context,
+	userID uuid.UUID,
+	i intent,
+	a loom.Approval,
+) (string, error) {
 	var args db.PaymentReviewCommitChange
 	decoder := json.NewDecoder(bytes.NewReader(a.Arguments))
 	decoder.DisallowUnknownFields()
@@ -23,7 +30,7 @@ func (s *Service) paymentReviewApprovalText(ctx context.Context, t db.Task, i in
 	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
 		return "", errors.New("trailing payment review arguments")
 	}
-	user, err := s.store.GetUser(ctx, t.UserID)
+	user, err := s.store.GetUser(ctx, userID)
 	if err != nil {
 		return "", err
 	}

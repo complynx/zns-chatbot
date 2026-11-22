@@ -317,14 +317,14 @@ func (s *Service) finishPassScreen(
 	if len(screen.rows) == 0 {
 		c.PassEntry = nil
 	}
-	return s.finishRegistration(ctx, t, c, i, text,
+	return s.finishStructuredKeyboard(ctx, t, c, i, text,
 		&telegram.InlineKeyboardMarkup{InlineKeyboard: screen.rows}, ru)
 }
 
 func (s *Service) passEntryError(ctx context.Context, t *db.Task, c checkpoint, i intent, ru bool, err error) error {
 	c.PassEntry = nil
 	if passChoiceUnavailable(err) {
-		return s.finishRegistration(ctx, t, c, i, passText(ru, "entry.invalid"), nil, ru)
+		return s.finishStructuredKeyboard(ctx, t, c, i, passText(ru, "entry.invalid"), nil, ru)
 	}
 	return s.identityError(ctx, t, c, i, err)
 }

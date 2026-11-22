@@ -7,7 +7,7 @@ import (
 
 func knowledgeModule() map[string]any {
 	return map[string]any{
-		"id": "zinusya_knowledge",
+		"id": knowledgeModuleID,
 		manifestDescription: "Published community knowledge, separate from private chat history. " +
 			"Use capabilities for your rights. Global admins manage named roles.",
 		manifestPermissions:   []string{},

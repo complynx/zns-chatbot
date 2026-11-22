@@ -40,6 +40,10 @@ import (
 // These tests exercise real durable acceptance and recovery; upstream services
 // remain HTTP peers so their uncertainty is observed through public behavior.
 type peers struct {
+	mcpWriteSecret                          string
+	mcpDecisions                            []string
+	messageEdits                            []telegram.EditMessageRequest
+	markupEdits                             []telegram.EditMessageMarkupRequest
 	reactionEvents                          []loom.ChatEvent
 	reactionCalls                           []reactionCall
 	reactionsEnabled                        bool
@@ -108,6 +112,7 @@ type peers struct {
 	terminalInputConflict                   bool
 	secondInputEntered                      chan struct{}
 	sendEntered                             chan struct{}
+	beforeSend                              func(telegram.SendMessageRequest)
 	sendRelease                             chan struct{}
 	cancelKeys                              []string
 	loomUnavailableCalls                    int
@@ -180,13 +185,18 @@ func (p *peers) credentialExpiry() time.Time {
 }
 
 func (p *peers) token(subject string) string {
+	return p.tokenForAudience(subject, []string{"loom", "api"}, subject != "actor")
+}
+
+func (p *peers) tokenForAudience(subject string, audience []string, delegated bool) string {
 	now := time.Now()
 	// These scenarios do not test issuance time; allow small VM clock steps.
 	issuedAt := now.Add(-time.Minute)
 	claims := map[string]any{
 		"iss":                                   p.iam.URL,
 		"sub":                                   subject,
-		"aud":                                   []string{"loom", "api"},
+		"aud":                                   audience,
+		"client_id":                             "fixture",
 		"exp":                                   p.credentialExpiry().Unix(),
 		"iat":                                   issuedAt.Unix(),
 		"urn:zitadel:iam:user:resourceowner:id": "org",
@@ -199,7 +209,7 @@ func (p *peers) token(subject string) string {
 			"zinusya.admin": map[string]string{"org": "Org"},
 		}
 	}
-	if subject != "actor" {
+	if delegated {
 		claims["act"] = map[string]string{"sub": "actor"}
 	}
 	result, e := jwt.Signed(p.signer).Claims(claims).Serialize()
@@ -314,6 +324,9 @@ func (p *peers) agent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
+	case p.mcpWriteSecret != "" && (strings.HasPrefix(r.URL.Path, "/v1/users/me/external-agent/approvals/") ||
+		strings.HasPrefix(r.URL.Path, "/v1/users/me/external-agent/connections/")):
+		p.externalApprovalDecision(w, r)
 	case strings.HasSuffix(r.URL.Path, "/history") && r.Method == http.MethodGet && p.reactionsEnabled:
 		p.reactionHistory(w, r)
 	case strings.HasSuffix(r.URL.Path, "/capabilities") && r.Method == http.MethodGet:
@@ -522,7 +535,54 @@ func (p *peers) initialRun(key string, request loom.CreateRunRequest) loom.Run {
 	}
 	return run
 }
+func (p *peers) telegramEditMarkup(w http.ResponseWriter, r *http.Request) {
+	var message telegram.EditMessageMarkupRequest
+	err := json.NewDecoder(r.Body).Decode(&message)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if err == nil && p.markupEdits != nil && message.MessageID > 0 && message.MessageID <= int64(len(p.sent)) &&
+		p.sent[message.MessageID-1].ChatID == message.ChatID {
+		p.markupEdits = append(p.markupEdits, message)
+		respond(w, map[string]any{"ok": true, "result": telegram.Message{
+			ID: message.MessageID, Chat: telegram.Chat{ID: message.ChatID},
+		}})
+		return
+	}
+	w.WriteHeader(http.StatusBadRequest)
+	respond(w, map[string]any{"ok": false, "error_code": 400, "description": "Bad Request: message to edit not found"})
+}
+
+func (p *peers) telegramEditText(w http.ResponseWriter, r *http.Request) {
+	var message telegram.EditMessageRequest
+	err := json.NewDecoder(r.Body).Decode(&message)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if err == nil && p.messageEdits != nil && message.MessageID > 0 && message.MessageID <= int64(len(p.sent)) &&
+		p.sent[message.MessageID-1].ChatID == message.ChatID {
+		p.messageEdits = append(p.messageEdits, message)
+		respond(w, map[string]any{
+			"ok":     true,
+			"result": map[string]any{"message_id": message.MessageID, "chat": map[string]int64{"id": message.ChatID}},
+		})
+		return
+	}
+	w.WriteHeader(http.StatusBadRequest)
+	respond(w, map[string]any{"ok": false, "error_code": 400, "description": "Bad Request: message to edit not found"})
+}
+
 func (p *peers) telegram(w http.ResponseWriter, r *http.Request) {
+	if strings.HasSuffix(r.URL.Path, "/editMessageReplyMarkup") {
+		p.telegramEditMarkup(w, r)
+		return
+	}
+	if strings.HasSuffix(r.URL.Path, "/editMessageText") {
+		p.telegramEditText(w, r)
+		return
+	}
+	if strings.HasSuffix(r.URL.Path, "/sendMessage") {
+		p.telegramSendMessage(w, r)
+		return
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if strings.HasSuffix(r.URL.Path, "/setMessageReaction") {
@@ -579,21 +639,22 @@ func (p *peers) telegram(w http.ResponseWriter, r *http.Request) {
 		respond(w, map[string]any{"ok": true, "result": true})
 		return
 	}
-	p.telegramSendMessage(w, r)
+	w.WriteHeader(http.StatusNotFound)
 }
 
-// telegramSendMessage runs under the peer mutex and validates before accepting an effect.
+// telegramSendMessage validates before accepting an effect.
 func (p *peers) telegramSendMessage(w http.ResponseWriter, r *http.Request) {
 	var message telegram.SendMessageRequest
-	if !strings.HasSuffix(r.URL.Path, "/sendMessage") {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
 	if err := json.NewDecoder(r.Body).Decode(&message); err != nil || invalidTelegramMarkup(message.ReplyMarkup) {
 		w.WriteHeader(http.StatusBadRequest)
 		respond(w, map[string]any{"ok": false, "error_code": 400, "description": "Bad Request: invalid keyboard array"})
 		return
 	}
+	if p.beforeSend != nil {
+		p.beforeSend(message)
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.sent = append(p.sent, message)
 	if p.rejectSendOnce {
 		p.rejectSendOnce = false
@@ -733,6 +794,8 @@ func (h *harness) start(t *testing.T) {
 		h.observer,
 		slog.New(slog.DiscardHandler),
 		task.Options{
+			ExternalAgentEnabled: p.mcpWriteSecret != "",
+			ExternalAgentWrites:  p.mcpWriteSecret != "",
 			PersonalizationToken: func(context.Context) (identity.Credential, error) {
 				return identity.Credential{Token: "personalization-service"}, nil
 			},
@@ -762,18 +825,21 @@ func (h *harness) start(t *testing.T) {
 		iam,
 		service,
 		api.Options{
-			RegistrationDetails:   p.registrationDetails,
-			MiniAppOrigin:         p.miniAppOrigin,
-			MiniAppAllowLocalHTTP: p.miniAppAllowLocalHTTP,
-			MiniAppBotToken:       "123:test-token",
-			AvatarRenderer:        p.avatarProcessor,
-			Telegram:              tg,
-			BotID:                 123,
-			WebhookSecret:         "test-secret",
-			OrganizationID:        "org",
-			ActorID:               "actor",
-			Issuer:                p.iam.URL,
-			LoomAudience:          "loom",
+			ExternalAgentEnabled:     p.mcpWriteSecret != "",
+			ExternalAgentWrites:      p.mcpWriteSecret != "",
+			ExternalAgentTokenSecret: p.mcpWriteSecret,
+			RegistrationDetails:      p.registrationDetails,
+			MiniAppOrigin:            p.miniAppOrigin,
+			MiniAppAllowLocalHTTP:    p.miniAppAllowLocalHTTP,
+			MiniAppBotToken:          "123:test-token",
+			AvatarRenderer:           p.avatarProcessor,
+			Telegram:                 tg,
+			BotID:                    123,
+			WebhookSecret:            "test-secret",
+			OrganizationID:           "org",
+			ActorID:                  "actor",
+			Issuer:                   p.iam.URL,
+			LoomAudience:             "loom",
 		},
 	)
 	require.NoError(t, err)
@@ -1765,7 +1831,11 @@ func (p *peers) issueToken(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
-	respond(w, map[string]any{"access_token": p.token(sub), "expires_in": 3600, "token_type": "Bearer"})
+	token := p.token(sub)
+	if audiences := r.Form["audience"]; len(audiences) > 0 {
+		token = p.tokenForAudience(sub, audiences, sub != "actor")
+	}
+	respond(w, map[string]any{"access_token": token, "expires_in": 3600, "token_type": "Bearer"})
 }
 
 // telegramGetFile is called with p.mu held.

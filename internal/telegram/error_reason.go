@@ -1,6 +1,9 @@
 package telegram
 
-import "net/http"
+import (
+	"net/http"
+	"strings"
+)
 
 // ReasonClass returns only a fixed label, never Telegram's response description.
 func (e *Error) ReasonClass() string {
@@ -20,7 +23,13 @@ func (e *Error) ReasonClass() string {
 }
 
 func rejectionReasonClass(description string) string {
+	if strings.HasPrefix(description, "Bad Request: message is not modified") {
+		return "message_not_modified"
+	}
 	switch description {
+	case "Bad Request: message to edit not found", "Bad Request: message can't be edited",
+		"Bad Request: there is no text in the message to edit", "Bad Request: MESSAGE_ID_INVALID":
+		return "message_not_editable"
 	case "Bad Request: chat not found":
 		return "chat_not_found"
 	case "Forbidden: bot was blocked by the user":

@@ -20,7 +20,7 @@ const (
 
 func pairModule() map[string]any {
 	return map[string]any{
-		"id": "zinusya_pairs",
+		"id": pairsModuleID,
 		manifestDescription: "Participant pair metadata and uncoupling, with exact administrator pass " +
 			"assignment. Each owner retains an individual pass and payment history.",
 		manifestPermissions:   []string{},
