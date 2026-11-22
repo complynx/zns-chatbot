@@ -252,11 +252,11 @@ func (c *Client) call(ctx context.Context, method string, input, result any, mut
 		return &Error{Outcome: NotStarted}
 	}
 	req.Header.Set("Content-Type", "application/json")
-	return c.do(req, result, mutation)
+	return doRequest(c.http, req, result, mutation)
 }
 
-func (c *Client) do(req *http.Request, result any, mutation bool) error {
-	resp, err := c.http.Do(req)
+func doRequest(client *http.Client, req *http.Request, result any, mutation bool) error {
+	resp, err := client.Do(req)
 	outcome := Rejected
 	if mutation {
 		outcome = Unknown

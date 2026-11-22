@@ -1,6 +1,11 @@
 package api
 
-import "github.com/complynx/zns-chatbot/internal/registrations"
+import (
+	"maps"
+	"slices"
+
+	"github.com/complynx/zns-chatbot/internal/registrations"
+)
 
 const (
 	schemaInvitations  = "invitations"
@@ -23,14 +28,14 @@ func pairInvitationMethods() []map[string]any {
 	version := map[string]any{manifestType: schemaInteger, schemaMinimum: 1}
 	context := paymentMethod(
 		"invitation_context",
-		"Read your waitlist role, current registration version and invitation expiry for an "+
-			"explicit event before inviting. Explain that a pending invitation pauses your solo "+
-			"allocation until acceptance, decline, revoke or expiry. "+
-			"It reserves no place for the target. The policy read is a snapshot, not a guarantee of "+
-			"future eligibility.",
+		"Read the invitation policy for the selected event. For event-specific codes, give the user "+
+			"the returned pass_command to manage a pair in Telegram. For account invitations, use "+
+			"the returned role, registration version and expiry. A pending account invitation pauses "+
+			"the inviter's solo allocation until acceptance, decline, revoke or expiry and reserves "+
+			"no place for the target. Eligibility is checked again on invitation.",
 		map[string]any{schemaEventID: uuidField},
 		[]string{schemaEventID},
-		[]string{schemaEventID, schemaExpectedVersion, schemaExpiresAt, schemaRole},
+		nil,
 	)
 	context[manifestPath] = pairInvitationPath + "invitation_context"
 	context[manifestOutputSchema] = invitationContextSchema()
@@ -65,7 +70,8 @@ func pairInvitationMethods() []map[string]any {
 		methodInvite,
 		"Create a directed invitation only after an explicit user request and explanation of the "+
 			"allocation hold. Get your own current waitlist version and expiry from "+
-			"invitation_context. The partner may share their own account/me id as a partner code; "+
+			"invitation_context. If it returns pass_command, direct the user there instead. "+
+			"The partner may share their own account/me id as a partner code; "+
 			"use only a code they supplied, never enumerate Telegram IDs, usernames or profiles. "+
 			"A code identifies the target; it is not authentication or acceptance. "+
 			"The target remains unregistered/unreserved until their explicit acceptance. "+
@@ -113,31 +119,29 @@ func pairInvitationMethods() []map[string]any {
 
 func invitationContextSchema() map[string]any {
 	uuidField := map[string]any{manifestType: schemaString, schemaFormat: schemaUUID}
-	return map[string]any{
-		manifestType:               schemaObject,
-		schemaAdditionalProperties: false,
-		schemaRequired: []string{
-			schemaEventID,
-			schemaEventName,
-			schemaTimezone,
-			schemaRegistrationID,
-			schemaExpectedVersion,
-			schemaRole,
-			schemaExpiresAt,
-		},
-		schemaProperties: map[string]any{
-			schemaEventID:         uuidField,
-			schemaEventName:       map[string]any{manifestType: schemaString},
-			schemaTimezone:        map[string]any{manifestType: schemaString},
+	common := map[string]any{
+		schemaEventID:   uuidField,
+		schemaEventName: map[string]any{manifestType: schemaString},
+		schemaTimezone:  map[string]any{manifestType: schemaString},
+		schemaExpiresAt: map[string]any{manifestType: schemaString, schemaFormat: schemaDateTime},
+	}
+	variant := func(fields map[string]any) map[string]any {
+		maps.Copy(fields, common)
+		return detailsObject(fields, slices.Sorted(maps.Keys(fields))...)
+	}
+	return map[string]any{manifestType: schemaObject, "oneOf": []map[string]any{
+		variant(map[string]any{
+			"pass_command": map[string]any{manifestType: schemaString, schemaMinLength: 1},
+		}),
+		variant(map[string]any{
 			schemaRegistrationID:  uuidField,
 			schemaExpectedVersion: map[string]any{manifestType: schemaInteger, schemaMinimum: 1},
 			schemaRole: map[string]any{
 				manifestType: schemaString,
 				schemaEnum:   []string{registrations.Leader, registrations.Follower},
 			},
-			schemaExpiresAt: map[string]any{manifestType: schemaString, schemaFormat: schemaDateTime},
-		},
-	}
+		}),
+	}}
 }
 
 func invitationListSchema() map[string]any {

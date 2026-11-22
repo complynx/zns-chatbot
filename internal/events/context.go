@@ -19,6 +19,7 @@ var ErrContextUnavailable = errors.New("event context unavailable")
 
 // ContextEvent provides bounded participant-facing event metadata.
 type ContextEvent struct {
+	Slug         string                       `json:"slug,omitempty"`
 	Deposit      *registrations.DepositPolicy `json:"deposit,omitempty"`
 	ID           uuid.UUID                    `json:"id"`
 	Version      int64                        `json:"version"`
@@ -31,6 +32,7 @@ type ContextEvent struct {
 
 func ContextView(event Event) ContextEvent {
 	return ContextEvent{
+		Slug:         event.Document.Slug,
 		Deposit:      event.Document.Deposit,
 		ID:           event.ID,
 		Version:      event.Version,

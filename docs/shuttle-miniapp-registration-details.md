@@ -1,9 +1,9 @@
 # Protected registration details: Mini App backend
 
-The working tree implements private legal-name and passport-number forms and
-their transactional Mini App backend.
-Trusted Telegram WebView,
-unattended model interpretation and remaining registration/pass workflows remain open.
+Participants can send `/passes <slug>` or `/passes <event UUID>` and follow the
+registration prompts to the protected Mini App. The form collects the legal name
+and passport fields required by the selected event, including a passport photo
+when required.
 
 ## API
 
@@ -18,16 +18,25 @@ or caller-supplied owner ID is accepted.
   session returns401. A receipt lookup does not submit or retry a write.
 - POST /app/registration-details/legal-name saves one legal-name value.
 - POST /app/registration-details/passport-number saves one passport-number value.
+- POST /app/registration-details/passport-country saves the two-letter issuing country.
+- POST /app/registration-details/passport-photo saves a base64-encoded JPEG or PNG in the encrypted owner record. The maximum upload is 5 MiB and 24 megapixels.
+- GET /app/registration-details/requests/{request} returns the owner's event-specific form requirements. A configured country list groups those passports separately from foreign passports. Authorised organisers can download the category and other required fields for participants with assigned passes through the separate [event identity export](shuttle-pass-sales.md).
 
-Each POST accepts operation_id (nonzero UUID), expected_version (required integer)
-and value. Unknown fields and invalid values return400 with a fixed error.
+Each POST accepts `operation_id` (nonzero UUID), `expected_version` (required
+integer), and `value`. The event form also sends its `details_request` UUID.
+Saving a requested field through this form makes that field available for the
+event's protected export once the participant has a pass. A generic profile
+edit grants no additional fields. An unavailable event request returns HTTP 410.
+Unknown fields and invalid values return HTTP 400 with a fixed error.
 Mutations return409 for a stale version or reuse of an operation ID with a
 changed canonical request. Retry an uncertain write with the same operation ID,
-version, field and value. Successful replay returns the original receipt even
+version, field, value and original request scope. Successful replay returns the original receipt even
 after newer edits. Read current status separately after recovering that receipt.
+The Mini App can look up the receipt from any form. If a participant needs to
+re-enter the value, they must reopen the original event form or, for a generic
+profile edit, the generic form.
 
-Success bodies contain only version, legal_name_present and
-passport_number_present. Stored private values are never read back or prefilled.
+Mutation receipts contain the version and field-presence flags. The form displays saved status without prefilling private values.
 Cache-Control is no-store; POST requires the configured Origin and JSON content
 type. Without a protection key the routes are absent: GET returns404 through the
 existing page fallback, and POST returns405 from the existing method router.

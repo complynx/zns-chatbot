@@ -25,7 +25,7 @@ window.createZinusyaPairs = function (env) {
   function controls() {
     const busy = locked || working || !owner;
     for (const id of ["event", "events-next", "events-first", "target", "direction", "refresh", "next", "first", "owned-first", "owned-next"]) el[id].disabled = busy || blocked || !!pending;
-    el.invite.disabled = busy || blocked || !!pending || !context;
+    el.invite.disabled = busy || blocked || !!pending || !context || !!context.pass_command;
     el.recover.hidden = el.retry.hidden = !pending; el.discard.hidden = !pending || !rejected;
     el.recover.disabled = el.retry.disabled = el.discard.disabled = busy || blocked;
     for (const button of [...el.list.querySelectorAll("button,input"), ...el["owned-list"].querySelectorAll("button,input")]) button.disabled = busy || blocked || !!pending;
@@ -69,7 +69,8 @@ window.createZinusyaPairs = function (env) {
         (pending.kind === "invite" && value.invitation.target_user_id !== pending.body.arguments.target_user_id)) throw { local: "unknown" };
     }
     try { sessionStorage.removeItem(key()); } catch { throw { local: "unknown" }; }
-    receiptState = pending.kind === "dissolve" ? value.state : value.invitation.state; pending = undefined; rejected = false; context = undefined;
+    receiptState = pending.kind === "dissolve" ? value.state : value.invitation.state; pending = undefined; rejected = false;
+    if (!context?.pass_command) context = undefined;
     el.receipt.textContent = w().receipt + w()[receiptState]; paintContext(); status("ready");
   }
   async function dispatch(e) {
@@ -87,12 +88,17 @@ window.createZinusyaPairs = function (env) {
   }
   function time(value, zone) { return new Intl.DateTimeFormat(language, { timeZone: zone, year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "shortOffset" }).format(new Date(value)) + " (" + zone + ")"; }
   function paintContext() {
+    for (const id of ["note", "code-label", "code", "target-label", "target", "invite"]) el[id].hidden = !!context?.pass_command;
+    if (context?.pass_command) { el.context.textContent = context.pass_command; return; }
     el.context.textContent = context ? context.event_name + " · " + w().role + w()[context.role] + " · " + w().until + time(context.expires_at, context.timezone) : w().context;
   }
   async function loadContext(e) {
     context = undefined; paintContext(); controls();
     if (!el.event.value) return;
     const value = await call(e, "./pairs/events/" + el.event.value + "/context");
+    if (value?.event_id === el.event.value && typeof value.pass_command === "string" && value.pass_command.startsWith("/passes ")) {
+      context = value; paintContext(); return;
+    }
     if (value?.event_id !== el.event.value || !["leader", "follower"].includes(value.role) || !Number.isSafeInteger(value.expected_version) || value.expected_version < 1 || !Number.isFinite(Date.parse(value.expires_at))) throw { local: "invalid" };
     time(value.expires_at, value.timezone); context = value; paintContext();
   }
@@ -160,9 +166,9 @@ window.createZinusyaPairs = function (env) {
     }
   }
   el.invite.addEventListener("click", () => run(async e => {
-    if (pending || !context || !uuid(el.target.value.trim()) || el.target.value.trim() === owner) throw { local: "invalid" };
+    if (pending || !context || context.pass_command || !uuid(el.target.value.trim()) || el.target.value.trim() === owner) throw { local: "invalid" };
     const old = context; await loadContext(e);
-    if (context.expected_version !== old.expected_version || context.role !== old.role || context.expires_at !== old.expires_at) { status("changed"); return; }
+    if (context.pass_command || context.expected_version !== old.expected_version || context.role !== old.role || context.expires_at !== old.expires_at) { status("changed"); return; }
     remember("invite", { event_id: context.event_id, target_user_id: el.target.value.trim(), expected_version: context.expected_version }); await dispatch(e);
   }));
   el.event.addEventListener("change", () => run(loadContext));
@@ -180,7 +186,7 @@ window.createZinusyaPairs = function (env) {
     if (!pending || !rejected) return;
     await recover(e); if (!pending) return;
     try { sessionStorage.removeItem(key()); } catch { throw { local: "unknown" }; }
-    pending = undefined; rejected = false; context = undefined; paintContext(); await list(e);
+    pending = undefined; rejected = false; if (!context?.pass_command) context = undefined; paintContext(); await list(e);
   }));
   return { clear, setBusy(value) { locked = value; controls(); }, setLanguage(locale) { language = locale === "ru" ? "ru" : "en"; labels(); controls(); },
     async start(id, locale) {

@@ -1,0 +1,426 @@
+{
+  "entry.command": [
+    "Find or buy a pass",
+    "Найти или купить пасс"
+  ],
+  "entry.pick_event": [
+    "Choose an event. ✨",
+    "Выбери мероприятие. ✨"
+  ],
+  "entry.no_events": [
+    "There are no pass sales to show right now.",
+    "Сейчас нет открытых или предстоящих продаж пассов."
+  ],
+  "entry.next": [
+    "➡️ Next page",
+    "➡️ Следующая страница"
+  ],
+  "entry.invalid": [
+    "That option is no longer available. Open /passes to try again.",
+    "Этот вариант больше недоступен. Начни заново через /passes."
+  ],
+  "entry.closed": [
+    "Pass registration is closed for this event.",
+    "Регистрация на это мероприятие закрыта."
+  ],
+  "entry.opens": [
+    "Pass sales for %s open on %s.",
+    "Продажи пассов на «%s» откроются %s."
+  ],
+  "entry.pick_role": [
+    "Choose your dance role for %s.",
+    "Выбери свою роль на «%s»."
+  ],
+  "entry.leader": [
+    "Leader",
+    "Лидер"
+  ],
+  "entry.follower": [
+    "Follower",
+    "Фолловер"
+  ],
+  "entry.pick_mode": [
+    "How would you like to register for %s? ✨",
+    "Как хочешь зарегистрироваться на «%s»? ✨"
+  ],
+  "entry.solo": [
+    "🙋 Register solo",
+    "🙋 Без пары"
+  ],
+  "entry.create_pair": [
+    "💌 Invite a partner",
+    "💌 Пригласить в пару"
+  ],
+  "entry.join_pair": [
+    "🔑 Use a pair code",
+    "🔑 Ввести код пары"
+  ],
+  "entry.manage_pair": [
+    "👥 Manage pair",
+    "👥 Моя пара"
+  ],
+  "entry.leave_pair": [
+    "🚪 Leave pair",
+    "🚪 Выйти из пары"
+  ],
+  "entry.replace_pair": [
+    "🔄 Invite a different partner",
+    "🔄 Пригласить другого партнёра"
+  ],
+  "entry.revoke_invite": [
+    "✖️ Cancel invitation",
+    "✖️ Отменить приглашение"
+  ],
+  "entry.invite_usage": [
+    "Open the invitation link or send /passes and the pair code separated by a space.",
+    "Открой ссылку из приглашения или отправь /passes и код пары через пробел."
+  ],
+  "entry.invite_link": [
+    "Share this invitation with your partner.\n%s",
+    "Отправь это приглашение партнёру.\n%s"
+  ],
+  "entry.invite_issued": [
+    "Your one-time pair code is %s.\nShare the invitation below with your partner. The code is reserved for the first eligible person who uses it, even if they still need to fill in their details. While this invitation is active, you can get a pass only as part of a pair.\n%s",
+    "Твой одноразовый код пары — %s.\nОтправь приглашение партнёру. Код закрепится за первым подходящим участником, который им воспользуется, даже если ему ещё нужно заполнить данные. Пока приглашение действует, ты можешь получить пасс только в паре.\n%s"
+  ],
+  "entry.invite_replacement": [
+    "Your new one-time pair code is %s.\nShare the invitation below with your new partner. The code is reserved for the first eligible person who uses it. Your current pair stays active until your new partner finishes registration. Your former partner then returns to the queue with their own registration time. Your new pair’s place is based on whichever of you registered first.\n%s",
+    "Твой новый одноразовый код пары — %s.\nОтправь приглашение новому партнёру. Код закрепится за первым подходящим участником, который им воспользуется. Текущая пара сохранится, пока новый партнёр не завершит регистрацию. После этого прежний партнёр вернётся в очередь со своим временем регистрации. Место новой пары в очереди определится по более ранней из ваших двух регистраций.\n%s"
+  ],
+  "entry.invite_claimed": [
+    "This code is reserved for you. To join the pair, finish registration in the %s role.",
+    "Код закреплён за тобой. Чтобы вступить в пару, заверши регистрацию в роли «%s»."
+  ],
+  "entry.invite_paired": [
+    "Great — you’re in a pair now! 🎉 Your pair’s place in the queue is based on whichever of you registered first. Each of you gets and pays for your own pass.",
+    "Отлично — ты в паре! 🎉 Место пары в очереди определяется по более ранней из ваших двух регистраций. Каждый получает и оплачивает свой пасс отдельно."
+  ],
+  "entry.invite_unavailable": [
+    "This pair code can’t be used for your registration. Open /passes to check your registration status.",
+    "Этот код пары недоступен для твоей регистрации. Открой /passes, чтобы проверить её статус."
+  ],
+  "entry.invite_revoked": [
+    "Invitation canceled. If you’re unpaired, you can now get a pass on your own through the queue.",
+    "Приглашение отменено. Если ты без пары, теперь ты можешь получить пасс в порядке очереди."
+  ],
+  "entry.pair_current": [
+    "You’re registered as a pair. Each person manages their own pass and payment.",
+    "Ты в паре. Каждый управляет своим пассом и оплачивает его отдельно."
+  ],
+  "entry.pair_none": [
+    "You don’t have an active pair or invitation for this event.",
+    "У тебя нет действующей пары или приглашения на это мероприятие."
+  ],
+  "entry.pair_joined": [
+    "Welcome to the pair! 🤝 You’ll each receive and pay for your own pass.",
+    "Добро пожаловать в пару! 🤝 Каждый получит и оплатит свой пасс отдельно."
+  ],
+  "entry.pair_left": [
+    "You’ve left the pair. Each of you goes back to your own registration time in the queue and keeps any pass already assigned.",
+    "Ты больше не в паре. Каждый возвращается к своему времени регистрации в очереди и сохраняет уже выданный пасс, если он есть."
+  ],
+  "entry.details": [
+    "Open the form and fill in the required fields (%s). Save your details, then return here and tap “✅ Continue registration” to finish.",
+    "Открой форму и заполни нужные поля (%s). Сохрани данные, вернись сюда и нажми «✅ Продолжить регистрацию», чтобы её завершить."
+  ],
+  "entry.details_form": [
+    "📝 Open form",
+    "📝 Открыть форму"
+  ],
+  "entry.details_continue": [
+    "✅ Continue registration",
+    "✅ Продолжить регистрацию"
+  ],
+  "entry.details_unavailable": [
+    "The form is unavailable right now. Try again later through /passes.",
+    "Форма сейчас недоступна. Попробуй открыть её позже через /passes."
+  ],
+  "entry.legal_name": [
+    "full legal name",
+    "полное имя по документу"
+  ],
+  "entry.passport_number": [
+    "passport number",
+    "номер паспорта"
+  ],
+  "entry.passport_country": [
+    "passport issuing country",
+    "страна выдачи паспорта"
+  ],
+  "entry.passport_photo": [
+    "passport photo",
+    "фото паспорта"
+  ],
+  "entry.saved_waiting": [
+    "Your registration is in the queue. We’ll message you if a pass is assigned to you.",
+    "Твоя регистрация в очереди. Мы напишем, если тебе выдадут пасс."
+  ],
+  "entry.saved_assigned": [
+    "Your pass has been assigned. Open /registrations to view it.",
+    "Твой пасс выдан. Его можно посмотреть через /registrations."
+  ],
+  "entry.leave_confirm": [
+    "Leave this pair? Each of you will go back to your own registration time in the queue and keep any pass already assigned.",
+    "Выйти из пары? Каждый вернётся к своему времени регистрации в очереди и сохранит уже выданный пасс, если он есть."
+  ],
+  "entry.pair_position": [
+    "Your pair’s queue position — %s",
+    "Место пары в очереди — %s"
+  ],
+  "entry.role_position": [
+    "Queue position in your role — %s",
+    "Место в очереди по роли — %s"
+  ],
+  "entry.individual_position": [
+    "Overall queue position — %s",
+    "Место в общей очереди — %s"
+  ],
+  "entry.waiting": [
+    "You’re still in the queue. We’ll message you if a pass is assigned to you.",
+    "Ты в очереди. Мы напишем, если тебе выдадут пасс."
+  ],
+  "entry.invite_command": [
+    "Your partner can send /passes and this code separated by a space.",
+    "Партнёр может отправить /passes и этот код через пробел."
+  ],
+  "entry.details_ready": [
+    "Your details are saved. Tap “✅ Continue registration” to finish.",
+    "Данные сохранены. Нажми «✅ Продолжить регистрацию», чтобы завершить её."
+  ],
+  "entry.returned": [
+    "This registration has been closed. Open /registrations to view it.",
+    "Эта регистрация закрыта. Её можно посмотреть через /registrations."
+  ],
+  "queue.promoDeadline": [
+    "Your promo priority lasts until %s. To keep it, finish registration without a pair by then. If sales are still open after that, you can still register and join the regular queue based on when you finish. Promo-priced passes are limited, so priority doesn’t guarantee you’ll get one.",
+    "Приоритет на пасс по акционной цене действует до %s. Чтобы его сохранить, заверши регистрацию без пары до этого времени. Если потом продажи ещё будут идти, ты сможешь зарегистрироваться в обычную очередь — по времени завершения регистрации. Пассов по акционной цене ограниченное количество, поэтому приоритет не гарантирует, что они останутся."
+  ],
+  "queue.assigned": [
+    "You have a pass for %s (%s).\nYour pass costs %s. The payment deadline is %s.\nOpen %s to check your payment status and view instructions.",
+    "Тебе выдан пасс на «%s» (%s).\nСтоимость твоего пасса — %s. Срок оплаты — %s.\nОткрой %s, чтобы проверить статус оплаты и посмотреть инструкции."
+  ],
+  "queue.assignedFree": [
+    "You have a free pass for %s (%s). Open %s to view it.",
+    "Тебе выдан бесплатный пасс на «%s» (%s). Его можно посмотреть через %s."
+  ],
+  "queue.assignedDeposit": [
+    "You have a pass for %s (%s).\nYour pass costs %s. The minimum deposit is %s, due by %s. The remaining balance is due by %s.\nOpen %s to check your payment status and view instructions.",
+    "Тебе выдан пасс на «%s» (%s).\nСтоимость твоего пасса — %s. Минимальная предоплата — %s, срок внесения — %s. Остаток нужно оплатить до %s.\nОткрой %s, чтобы проверить статус оплаты и посмотреть инструкции."
+  ],
+  "registration.details.country": [
+    "Passport issuing country",
+    "Страна выдачи паспорта"
+  ],
+  "registration.details.photo": [
+    "Passport photo",
+    "Фото паспорта"
+  ],
+  "registration.details.countryLabel": [
+    "Passport issuing country",
+    "Страна выдачи паспорта"
+  ],
+  "registration.details.photoLabel": [
+    "Choose a JPEG or PNG image of your passport’s personal details page, up to 5 MB.",
+    "Выбери фото страницы паспорта с личными данными в формате JPEG или PNG, до 5 МБ."
+  ],
+  "registration.details.organizerAccess": [
+    "After your pass is issued, authorized organizers of this event can download the details requested for your registration, plus your passport photo if it’s required.",
+    "После выдачи пасса уполномоченные организаторы этого мероприятия смогут скачать данные, запрошенные для твоей регистрации, и фото паспорта, если оно требуется."
+  ],
+  "registration.details.saveCountry": [
+    "Save issuing country",
+    "Сохранить страну выдачи"
+  ],
+  "registration.details.savePhoto": [
+    "Save passport photo",
+    "Сохранить фото паспорта"
+  ],
+  "registration.details.otherCountries": [
+    "Other countries",
+    "Другие страны"
+  ],
+  "ops.title": [
+    "Event registrations",
+    "Регистрации на мероприятие"
+  ],
+  "ops.export": [
+    "📥 Download XLSX",
+    "📥 Скачать XLSX"
+  ],
+  "ops.exportIdentity": [
+    "📦 Download identity data (ZIP)",
+    "📦 Скачать именные данные (ZIP)"
+  ],
+  "ops.return": [
+    "↩️ Return pass",
+    "↩️ Вернуть пасс"
+  ],
+  "ops.returnReason": [
+    "Reason for pass return",
+    "Причина возврата пасса"
+  ],
+  "ops.recordRefund": [
+    "💸 Confirm refund already sent",
+    "💸 Подтвердить, что деньги возвращены"
+  ],
+  "ops.refundedAmount": [
+    "Amount refunded",
+    "Возвращённая сумма"
+  ],
+  "ops.refundableAmount": [
+    "Confirmed amount available to refund",
+    "Подтверждённая сумма к возврату"
+  ],
+  "ops.confirm": [
+    "✅ Confirm",
+    "✅ Подтвердить"
+  ],
+  "ops.refundPending": [
+    "Refund pending",
+    "Ожидает возврата денег"
+  ],
+  "ops.refunded": [
+    "Refunded",
+    "Деньги возвращены"
+  ],
+  "ops.reviewProof": [
+    "Review the pending payment proof first.",
+    "Сначала проверь подтверждение оплаты."
+  ],
+  "ops.returned": [
+    "Pass return recorded.",
+    "Возврат пасса оформлен."
+  ],
+  "ops.exportedAt": [
+    "Export time",
+    "Время выгрузки"
+  ],
+  "ops.selectRegistration": [
+    "Select a registration",
+    "Выбрать регистрацию"
+  ],
+  "ops.confirmedAmount": [
+    "Confirmed amount paid",
+    "Подтверждённая сумма оплаты"
+  ],
+  "ops.noRows": [
+    "No registrations found.",
+    "Регистраций пока нет."
+  ],
+  "ops.error": [
+    "Could not complete the action. Refresh the list and try again.",
+    "Не удалось выполнить действие. Обнови список и попробуй ещё раз."
+  ],
+  "ops.refundReason": [
+    "Refund reference or note",
+    "Комментарий к возврату"
+  ],
+  "ops.requestedAt": [
+    "Registration time",
+    "Время регистрации"
+  ],
+  "ops.event": [
+    "Event",
+    "Мероприятие"
+  ],
+  "ops.role": [
+    "Role",
+    "Роль"
+  ],
+  "ops.state": [
+    "Status",
+    "Статус"
+  ],
+  "ops.name": [
+    "Name",
+    "Имя"
+  ],
+  "ops.currency": [
+    "Currency",
+    "Валюта"
+  ],
+  "ops.price": [
+    "Pass price",
+    "Стоимость пасса"
+  ],
+  "ops.tier": [
+    "Price tier",
+    "Ценовой уровень"
+  ],
+  "ops.partner": [
+    "Partner",
+    "Партнёр"
+  ],
+  "ops.position": [
+    "Queue position",
+    "Место в очереди"
+  ],
+  "ops.returnedAt": [
+    "Pass return time",
+    "Время возврата пасса"
+  ],
+  "ops.refundAt": [
+    "Refund time",
+    "Время возврата денег"
+  ],
+  "ops.confirmedRefund": [
+    "Confirmed refund",
+    "Подтверждённый возврат денег"
+  ],
+  "ops.reasonRequired": [
+    "Enter a reason before confirming.",
+    "Укажи причину перед подтверждением."
+  ],
+  "ops.refundReceived": [
+    "Refund recorded",
+    "Возврат денег зафиксирован"
+  ],
+  "ops.refundDue": [
+    "Amount still to refund",
+    "Остаток к возврату"
+  ],
+  "ops.waitlistedState": [
+    "In queue",
+    "В очереди"
+  ],
+  "ops.assignedState": [
+    "Pass assigned",
+    "Пасс выдан"
+  ],
+  "ops.returnedState": [
+    "Registration closed",
+    "Регистрация закрыта"
+  ],
+  "ops.refundedState": [
+    "Refunded",
+    "Деньги возвращены"
+  ],
+  "ops.leader": [
+    "Leader",
+    "Лидер"
+  ],
+  "ops.follower": [
+    "Follower",
+    "Фолловер"
+  ],
+  "ops.reload": [
+    "🔄 Refresh list",
+    "🔄 Обновить список"
+  ],
+  "ops.reviewReturn": [
+    "👀 Review pass return",
+    "👀 Проверить возврат пасса"
+  ],
+  "ops.reviewRefund": [
+    "👀 Review refund",
+    "👀 Проверить возврат денег"
+  ],
+  "ops.returnNote": [
+    "This removes the selected registration from the queue or frees up the place held by its assigned pass. If this person is in a pair, the pair is dissolved. Their partner keeps their own registration, pass and payment.",
+    "Регистрация будет снята с очереди или, если пасс уже выдан, его место освободится. Если участник в паре, пара распадётся. У партнёра сохранятся его регистрация, пасс и оплата."
+  ],
+  "ops.refundNote": [
+    "Use this action to record the refund after you have transferred the money.",
+    "Зафиксируй возврат после того, как переведёшь деньги."
+  ]
+}

@@ -75,11 +75,10 @@ func (s *Store) changeRegistration(
 		!validRegistrationChange(change) {
 		return registrations.Registration{}, registrations.ErrInvalid
 	}
-	request, err := json.Marshal(change)
+	digest, err := registrationRequestDigest(change, selection)
 	if err != nil {
 		return registrations.Registration{}, err
 	}
-	digest := sha256.Sum256(request)
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return registrations.Registration{}, err
@@ -128,11 +127,18 @@ func (s *Store) changeRegistration(
 	if err != nil {
 		return registrations.Registration{}, err
 	}
-	row, err := applyRegistrationChange(ctx, q, scope, actor, change, expiresAt, approved, selection)
+	row, err := applyRegistrationChange(ctx, tx, q, scope, actor, change, expiresAt, approved, selection)
 	if err != nil {
 		return registrations.Registration{}, nativeDetailsFailure(ctx, tx, q, scope, change, selection, err)
 	}
 
+	if change.Kind == registrationActionRegister {
+		owner := PaymentScope{EventScope: scope, UserID: row.UserID, Subject: actor}
+		row, err = finishPassInviteRegistration(ctx, tx, owner, row, operation, selection)
+		if err != nil {
+			return registrations.Registration{}, err
+		}
+	}
 	result, err := registrationRecord(ctx, q, row)
 	if err != nil {
 		return registrations.Registration{}, err
@@ -155,6 +161,20 @@ func (s *Store) changeRegistration(
 		return registrations.Registration{}, err
 	}
 	return finishAssignmentConfirmation(ctx, tx, q, scope, actor, transport, proposalID, result, session)
+}
+
+func registrationRequestDigest(change RegistrationChange, selection *RegistrationEntry) ([sha256.Size]byte, error) {
+	var request any = change
+	if selection != nil && (selection.IssueInvite || selection.ClaimInviteCode != "") {
+		request = struct {
+			RegistrationChange
+
+			IssueInvite     bool   `json:"issue_invite,omitempty"`
+			ClaimInviteCode string `json:"claim_invite_code,omitempty"`
+		}{change, selection.IssueInvite, normalizePassInvite(selection.ClaimInviteCode)}
+	}
+	raw, err := json.Marshal(request)
+	return sha256.Sum256(raw), err
 }
 
 func decodeRegistrationReceipt(
@@ -206,11 +226,8 @@ func registerSolo(
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return row, err
 	}
-	if err = requireRegistrationDetails(ctx, q, event, c.UserID); err != nil {
-		return row, err
-	}
-	return q.CreateRegistration(
-		ctx,
+	return createEventRegistration(
+		ctx, q, event,
 		sqlc.CreateRegistrationParams{
 			ID:          uuid.New(),
 			EventID:     c.EventID,
@@ -223,6 +240,7 @@ func registerSolo(
 
 func assignPass(
 	ctx context.Context,
+	tx pgx.Tx,
 	q *sqlc.Queries,
 	scope EventScope,
 	event events.Event,
@@ -261,7 +279,7 @@ func assignPass(
 	if err != nil {
 		return row, err
 	}
-	prices, err := assignmentPrices(ctx, q, event, now.Time, []string{row.Role})
+	prices, err := soloPassPrices(ctx, tx, q, event, now.Time, row)
 	if err != nil {
 		return row, err
 	}
@@ -324,7 +342,15 @@ func writeAssignedPass(
 		if e != nil {
 			return row, e
 		}
-		err = q.CreatePassDepositPolicy(ctx, sqlc.CreatePassDepositPolicyParams{PassID: pass.ID, Document: raw})
+		if err = q.CreatePassDepositPolicy(
+			ctx,
+			sqlc.CreatePassDepositPolicyParams{PassID: pass.ID, Document: raw},
+		); err != nil {
+			return row, err
+		}
+	}
+	if rules.AutoAssign {
+		err = q.CreatePassAssignmentNotice(ctx, pass.ID)
 	}
 	return row, err
 }
@@ -499,6 +525,7 @@ func (s *Store) ModuleAvailable(
 
 func applyRegistrationChange(
 	ctx context.Context,
+	tx pgx.Tx,
 	q *sqlc.Queries,
 	scope EventScope,
 	actor string,
@@ -511,22 +538,29 @@ func applyRegistrationChange(
 	if err != nil {
 		return sqlc.ShuttleRegistration{}, err
 	}
-	var row sqlc.ShuttleRegistration
-	if change.Kind == registrationActionRegister {
-		if selection != nil && event.Version != selection.EventVersion {
-			return row, ErrConflict
-		}
-		row, err = registerSolo(ctx, q, scope, actor, change, event, selection)
-	} else {
+	if change.Kind != registrationActionRegister {
 		if event.Version != change.ExpectedEventVersion {
 			return sqlc.ShuttleRegistration{}, ErrConflict
 		}
-		row, err = assignPass(ctx, q, scope, event, change, expiresAt, approved)
+		return assignPass(ctx, tx, q, scope, event, change, expiresAt, approved)
 	}
+	if selection != nil && event.Version != selection.EventVersion {
+		return sqlc.ShuttleRegistration{}, ErrConflict
+	}
+	row, err := registerSolo(ctx, q, scope, actor, change, event, selection)
 	if err != nil {
 		return sqlc.ShuttleRegistration{}, err
 	}
-	return row, nil
+	rules := event.Document.Registration
+	if !rules.AutoAssign || rules.Pricing == nil ||
+		(selection != nil && (selection.IssueInvite || selection.ClaimInviteCode != "")) {
+		return row, nil
+	}
+	now, err := q.RegistrationNow(ctx)
+	if err != nil {
+		return row, err
+	}
+	return row, awardPassPromo(ctx, tx, event, now.Time)
 }
 
 func registrationEventForChange(
@@ -562,6 +596,7 @@ func registrationEventForChange(
 		return events.Event{}, err
 	}
 	if !slices.Contains(event.Document.Modules, "registrations") || event.Document.Registration == nil ||
+		(event.Document.Registration.SalesOpensAt != nil && now.Time.Before(*event.Document.Registration.SalesOpensAt)) ||
 		!now.Time.Before(event.Document.Registration.ClosesAt) {
 		return events.Event{}, registrations.ErrUnavailable
 	}

@@ -165,6 +165,9 @@ func (s *Store) pairOperation(
 	if err != nil {
 		return PairResult{}, err
 	}
+	if err = relinquishDirectedPairPromo(ctx, tx, kind, result, eventID, scope.UserID); err != nil {
+		return PairResult{}, err
+	}
 	if err = enqueuePairInvitationNotice(ctx, q, result.Invitation.ID); err != nil {
 		return PairResult{}, err
 	}
@@ -188,6 +191,19 @@ func (s *Store) pairOperation(
 		err = tx.Commit(ctx)
 	}
 	return result, err
+}
+
+func relinquishDirectedPairPromo(
+	ctx context.Context,
+	tx pgx.Tx,
+	kind string,
+	result PairResult,
+	eventID, userID uuid.UUID,
+) error {
+	if kind == pairInvite || (kind == pairAccept && result.Pair != nil) {
+		return relinquishPassPromo(ctx, tx, eventID, userID)
+	}
+	return nil
 }
 
 func pairUser(ctx context.Context, q *sqlc.Queries, scope PaymentScope, id uuid.UUID) error {
@@ -311,6 +327,9 @@ func createPairInvitation(
 	event, err := registrationEventForChange(ctx, q, scope.EventScope, args.EventID)
 	if err != nil {
 		return PairResult{}, err
+	}
+	if event.Document.Registration.UsesPassInvites() {
+		return PairResult{}, registrations.ErrUnavailable
 	}
 	inviter, err := q.GetRegistration(ctx, sqlc.GetRegistrationParams{EventID: args.EventID, UserID: scope.UserID})
 	if err != nil {
@@ -476,19 +495,28 @@ func acceptPair(
 	if err != nil {
 		return nil, err
 	}
+	return insertWaitlistedPair(ctx, q, inviter, target, now)
+}
+
+func insertWaitlistedPair(
+	ctx context.Context,
+	q *sqlc.Queries,
+	inviter, target sqlc.ShuttleRegistration,
+	now pgtype.Timestamptz,
+) (*registrations.Pair, error) {
 	leader, follower := inviter, target
 	if leader.Role != registrations.Leader {
 		leader, follower = follower, leader
 	}
 	queued := leader.RequestedAt
-	if follower.RequestedAt.Time.After(queued.Time) {
+	if follower.RequestedAt.Time.Before(queued.Time) {
 		queued = follower.RequestedAt
 	}
 	row, err := q.InsertPair(
 		ctx,
 		sqlc.InsertPairParams{
 			ID:                     uuid.New(),
-			EventID:                invitation.EventID,
+			EventID:                inviter.EventID,
 			LeaderRegistrationID:   leader.ID,
 			FollowerRegistrationID: follower.ID,
 			QueuedAt:               queued,
@@ -525,11 +553,8 @@ func pairTargetRegistration(
 ) (sqlc.ShuttleRegistration, error) {
 	row, err := q.GetRegistration(ctx, sqlc.GetRegistrationParams{EventID: event.ID, UserID: scope.UserID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		if err = requireRegistrationDetails(ctx, q, event, scope.UserID); err != nil {
-			return row, err
-		}
-		return q.CreateRegistration(
-			ctx,
+		row, err = createEventRegistration(
+			ctx, q, event,
 			sqlc.CreateRegistrationParams{
 				ID:          uuid.New(),
 				EventID:     event.ID,

@@ -24,6 +24,9 @@ function browser(proof, stored, replies, accountReplies = [], profileReplies = [
   }
   const elements = Object.fromEntries(["status", "name", "retry", "account", "account-title", "account-status",
     "account-events", "account-retry", "account-first", "account-next", "profile", "profile-title", "profile-status", "profile-first-name", "profile-last-name", "profile-language", "profile-first-name-label", "profile-last-name-label", "profile-language-label", "profile-save-name", "profile-save-language", "profile-refresh", "profile-form", "details", "details-title", "details-note", "details-status", "details-name", "details-passport", "details-name-label", "details-passport-label", "details-name-presence", "details-passport-presence", "details-save-name", "details-save-passport", "details-refresh", "details-name-form", "details-passport-form"].map(id => [id, element()]));
+  for (const id of ["country","photo"]) {
+    for (const key of ["details-"+id,"details-"+id+"-form","details-"+id+"-label","details-"+id+"-presence","details-save-"+id]) elements[key]=element();
+  }
   const scrolls = [];
   const launchFactories = { knowledge: "createZinusyaKnowledge", pairs: "createZinusyaPairs", avatars: "createZinusyaAvatars", orders: "createZinusyaOrders", meals: "createZinusyaMeals", massage: "createZinusyaMassage", "payment-review": "createZinusyaPaymentReviews" };
   for (const id of Object.keys(launchFactories)) {
@@ -48,12 +51,12 @@ function browser(proof, stored, replies, accountReplies = [], profileReplies = [
   let saved = JSON.stringify(stored || {});
   const context = {
     document: { getElementById: id => elements[id] || (options.passPayments ? elements[id] = element() : undefined), createElement: element, documentElement: {} },
-    navigator: { language: "en" }, window,
+    navigator: { language: "en" }, window, FileReader: options.FileReader,
     sessionStorage: { getItem: key => key === "zinusya-miniapp-v1" ? saved : null, setItem: (_, value) => {
       if (options.storageUnavailable) throw new Error("Storage unavailable");
       storageWrites.push(value); saved = value;
     } },
-    crypto: webcrypto, Uint8Array, TextEncoder, btoa,
+    crypto: webcrypto, Uint8Array, TextEncoder, URLSearchParams, btoa,
     fetch: async (path, requestOptions) => {
       const accountRead = path.startsWith("./account");
       const profileRead = path.startsWith("./profile");
@@ -83,6 +86,40 @@ function browser(proof, stored, replies, accountReplies = [], profileReplies = [
 
 const account = { user_id: "510e58dd-e547-48d4-b9fa-571d24953218", full_name: "Daniel <test>", first_name: "Daniel", last_name: "<test>", bot_language: "en", session_token: token };
 const emptyPage = { observed_at: "2026-10-15T00:00:00Z", events: [], has_more: false };
+
+test("event passport form shows only requested fields and groups foreign passports",async()=>{
+  const requestID=webcrypto.randomUUID();
+  const route="./registration-details/requests/"+requestID;
+  const profiles = ["en", "ru"].map(bot_language => ({status:200, body:{...account, version:1, bot_language}}));
+  const app=browser("proof",{},[{status:200,body:account}],[],profiles,[{status:200,body:detailsState(0)}],{
+    configureWindow(window) {
+      window.location.search="?details_request="+requestID;
+      window.passCopy=(_,key)=>key;
+    },
+    extraReplies:{[route]:{status:200,body:{
+      request:{requirements:{legal_name:true,passport_countries:["BY","RU"],passport_photo:true}},
+      countries:["BY","RU","NL"],country_category:"foreign"
+    }}}
+  });
+  await app.settle();
+  assert.equal(app.elements["details-passport-form"].hidden,true);
+  assert.equal(app.elements["details-country-form"].hidden,false);
+  assert.equal(app.elements["details-photo-form"].hidden,false);
+  const options=app.elements["details-country"].children;
+  assert.deepEqual(options.slice(1,3).map(item=>item.value),["BY","RU"]);
+  assert.deepEqual(options[3].children.map(item=>item.value),["NL"]);
+  assert.equal(app.elements["details-country-presence"].textContent,"registration.details.otherCountries");
+  const select = app.elements["details-country"];
+  select.value = "NL";
+  await app.elements["profile-refresh"].listeners.click();
+  assert.equal(select.children[1].textContent, new Intl.DisplayNames(["ru"], {type:"region"}).of("BY"));
+  assert.equal(select.value, "NL");
+  await submit(app, "country");
+  await app.settle();
+  const saved = app.detailsCalls.find(call => call.method === "POST");
+  assert.equal(saved.path, "./registration-details/passport-country");
+  assert.equal(JSON.parse(saved.body).details_request, requestID);
+});
 
 test("Telegram entry bootstraps automatically without sign-in or sign-out controls", async () => {
   const html = readFileSync(resolve(__dirname, "../internal/api/miniapp_ui/index.html"), "utf8");
@@ -229,6 +266,19 @@ const event = {
     deposit_required_minor: 3087, currency: "BYN", currency_scale: 2, deposit_satisfied: true, fully_paid: false },
     due_at: "2026-10-15T12:00:00Z", final_due_at: "2026-10-15T12:00:00Z", overdue: false, pending_evidence: 1 }
 };
+
+test("a recorded pass refund leaves zero outstanding in the participant account", async () => {
+  const returned = { ...event, pass: undefined, registration: { role: "leader", state: "returned" },
+    pass_return: { currency: "BYN", currency_scale: 2, frozen_price_minor: 8000, confirmed_minor: 2087,
+      refund_due_minor: 2087, refunded_minor: 2087, returned_at: event.starts_at, refunded_at: event.ends_at } };
+  const app = browser("proof", {}, [{ status: 200, body: account }],
+    [{ status: 200, body: { ...emptyPage, events: [returned] } }], [], [],
+    { configureWindow(window) { window.passCopy = (_, key) => key; } });
+  await app.settle();
+  const text = visibleText(app.elements["account-events"]);
+  assert.match(text, /ops\.refundDue 0\.00 BYN/);
+  assert.match(text, /ops\.refundedAmount 20\.87 BYN/);
+});
 
 test("account renders confirmed exact money separately from pending proofs in the event timezone", async () => {
   const app = browser("proof", {}, [{ status: 200, body: account }],
@@ -465,6 +515,73 @@ test("missing receipt after reload needs explicit reentry using the original ope
  assert.equal(body.operation_id,pending.operation_id);
  assert.equal(body.expected_version,4);
  assertNoPrivateStorage(app,"SYNTHETIC-REENTERED-PASSPORT");
+});
+
+test("a rejected passport photo leaves the next event free to submit its own operation", async () => {
+  const first = webcrypto.randomUUID(), second = webcrypto.randomUUID();
+  const state = {status:200, body:detailsState(4,true)};
+  function open(id, session, replies, receipts = {}) {
+    return browser("proof", session, [{status:200, body:account}], [], [], replies, {
+      configureWindow(window) { window.location.search = "?details_request=" + id; },
+      extraReplies: {...receipts, ["./registration-details/requests/" + id]: {status:200,
+        body:{request:{requirements:{passport_photo:true, passport_number:true}}}}},
+      FileReader: class {
+        readAsDataURL() { this.result = "data:image/jpeg;base64,YmFk"; this.onload(); }
+      }
+    });
+  }
+  const rejected = open(first, signedSession(), [state, {status:400}, state, {status:404}]);
+  await rejected.settle();
+  rejected.elements["details-photo"].files = [{size:3}];
+  await submit(rejected, "photo");
+  const rejectedBody = JSON.parse(rejected.detailsCalls.find(call => call.method === "POST").body);
+  assert.equal(rejectedBody.details_request, first);
+
+  const saved = {status:200, body:detailsState(5,true,true)};
+  const next = open(second, rejected.stored(), [state, saved, saved], {
+    ["./registration-details/operations/" + rejectedBody.operation_id]: {status:404}
+  });
+  await next.settle();
+  assert.equal(next.elements["details-save-passport"].disabled, false);
+  next.elements["details-passport"].value = "SYNTHETIC";
+  await submit(next, "passport");
+  const nextBody = JSON.parse(next.detailsCalls.find(call => call.method === "POST").body);
+  assert.notEqual(nextBody.operation_id, rejectedBody.operation_id);
+  assert.equal(nextBody.details_request, second);
+  assert.equal(next.stored().detailsChange, undefined);
+});
+
+test("only the original form can resume an uncertain identity submission", async () => {
+  const eventA = webcrypto.randomUUID();
+  const eventB = webcrypto.randomUUID();
+  const open = (scope, stored) => browser("proof", stored, [{status:200, body:account}], [], [], [
+    {status:200, body:detailsState(4,true)}, {status:404},
+    {status:200, body:detailsState(5,true,true)}, {status:200, body:detailsState(5,true,true)}
+  ], {
+    configureWindow(window) { window.location.search = scope ? "?details_request=" + scope : ""; },
+    extraReplies: Object.fromEntries([eventA,eventB].map(id => ["./registration-details/requests/" + id,
+      {status:200, body:{request:{requirements:{passport_number:true}}}}]))
+  });
+  for (const [original, other] of [[eventA,eventB],[eventA,null],[null,eventB]]) {
+    const pending = detailsPending("passport-number", 4);
+    if (original) pending.details_request = original;
+    const wrong = open(other, signedSession(pending));
+    await wrong.settle();
+    assert.equal(wrong.elements["details-save-passport"].disabled, true);
+    wrong.elements["details-passport"].value = "WRONG-FORM";
+    await submit(wrong, "passport");
+    assert.ok(wrong.detailsCalls.every(call => call.method === "GET"));
+    assert.deepEqual(wrong.stored().detailsChange, pending);
+
+    const resumed = open(original, wrong.stored());
+    await resumed.settle();
+    assert.equal(resumed.elements["details-save-passport"].disabled, false);
+    resumed.elements["details-passport"].value = "ORIGINAL-FORM";
+    await submit(resumed, "passport");
+    const body = JSON.parse(resumed.detailsCalls.find(call => call.method === "POST").body);
+    assert.equal(body.operation_id, pending.operation_id);
+    assert.equal(body.details_request ?? null, original);
+  }
 });
 
 test("missing receipt plus a newer version closes old CAS without submitting a replacement",async()=>{

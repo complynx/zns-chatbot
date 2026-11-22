@@ -27,7 +27,9 @@ const (
 	paymentReviewsCommand    = "/payment_reviews"
 	paymentsCommand          = "/payments"
 	nameCommand              = "/name"
-	registerCommand          = "/register"
+	registerAction           = "register"
+	registerCommand          = "/" + registerAction
+	passesCommand            = "/passes"
 	profileCommand           = "/profile"
 	registrationsCommand     = "/registrations"
 	registrationCommandParts = 2
@@ -45,6 +47,9 @@ const structuredWelcomeRU = structuredWelcomeLeadRU + " " +
 
 func structuredCommand(text string) bool {
 	text = strings.TrimSpace(text)
+	if isPassCommand(text) {
+		return true
+	}
 	return text == registerCommand || strings.HasPrefix(text, registerCommand+" ") ||
 		text == startCommand || text == pairsCommand || text == avatarCommand || text == menuCommand ||
 		text == ordersCommand || text == massageCommand || text == paymentReviewsCommand ||
@@ -93,6 +98,9 @@ func (s *Service) structured(ctx context.Context, t *db.Task, c checkpoint, i in
 	if i.StructuredCommand == registerCommand {
 		return s.structuredRegister(ctx, t, c, i, scope, ru)
 	}
+	if i.StructuredCommand == passesCommand {
+		return s.structuredPasses(ctx, t, c, i, scope, ru)
+	}
 	// Only already-admitted native name tasks can reach this branch. New /name
 	// messages use the agent dialogue and explicit profile tools.
 	if i.StructuredCommand == nameCommand {
@@ -105,25 +113,7 @@ func (s *Service) structured(ctx context.Context, t *db.Task, c checkpoint, i in
 	if err != nil {
 		return s.identityError(ctx, t, c, i, err)
 	}
-	formURL := ""
-	if s.options.MiniAppURL != "" {
-		switch i.StructuredCommand {
-		case menuCommand, startCommand:
-			formURL = s.options.MiniAppURL
-		case paymentsCommand:
-			formURL = s.options.MiniAppURL + "#pass-payments"
-		case pairsCommand:
-			formURL = s.options.MiniAppURL + "#pairs"
-		case avatarCommand:
-			formURL = s.options.MiniAppURL + "#avatars"
-		case ordersCommand:
-			formURL = s.options.MiniAppURL + "#orders"
-		case massageCommand:
-			formURL = s.options.MiniAppURL + "#massage"
-		case knowledgeCommand:
-			formURL = s.options.MiniAppURL + "#knowledge"
-		}
-	}
+	formURL := s.structuredFormURL(i.StructuredCommand)
 	t.State = stateCompleted
 	out := structuredOutput(i, text, next, ru, formURL)
 	if i.StructuredCommand == menuCommand || i.StructuredCommand == startCommand {
@@ -133,6 +123,30 @@ func (s *Service) structured(ctx context.Context, t *db.Task, c checkpoint, i in
 		return s.wait()
 	}
 	return s.deliver(ctx, t, c)
+}
+
+func (s *Service) structuredFormURL(command string) string {
+	if s.options.MiniAppURL == "" {
+		return ""
+	}
+	switch command {
+	case menuCommand, startCommand:
+		return s.options.MiniAppURL
+	case paymentsCommand:
+		return s.options.MiniAppURL + "#pass-payments"
+	case pairsCommand:
+		return s.options.MiniAppURL + "#pairs"
+	case avatarCommand:
+		return s.options.MiniAppURL + "#avatars"
+	case ordersCommand:
+		return s.options.MiniAppURL + "#orders"
+	case massageCommand:
+		return s.options.MiniAppURL + "#massage"
+	case knowledgeCommand:
+		return s.options.MiniAppURL + "#knowledge"
+	default:
+		return ""
+	}
 }
 
 func (s *Service) taskPrincipal(ctx context.Context, user db.User) (identity.Principal, error) {
@@ -260,12 +274,23 @@ func (s *Service) structuredView(
 func structuredEvent(event db.AccountEvent, ru bool) string {
 	role := structuredRole(event.Registration.Role, ru)
 	state := structuredText(ru, "Waitlisted", "В очереди")
-	if event.Registration.State == "assigned" {
+	switch event.Registration.State {
+	case "assigned":
 		state = structuredText(ru, "Pass assigned", "Пасс назначен")
+	case db.PassReturned:
+		state = passText(ru, "ops.returnedState")
 	}
 	text := event.EventName + "\n" + role + " · " + state + "\n" + event.StartsAt.Format(
 		"2006-01-02 15:04",
 	) + " (" + event.Timezone + ")"
+	if settlement := event.PassReturn; settlement != nil && settlement.Currency != "" {
+		outstanding := settlement.RefundDueMinor - settlement.RefundedMinor
+		text += "\n" + passText(ru, "ops.refundDue") + " · " +
+			noticeAmount(outstanding, settlement.CurrencyScale, settlement.Currency)
+		text += "\n" + passText(ru, "ops.refundedAmount") + " · " +
+			noticeAmount(settlement.RefundedMinor, settlement.CurrencyScale, settlement.Currency)
+		return text
+	}
 	if !event.RegistrationEnabled {
 		return text + structuredText(
 			ru,

@@ -104,7 +104,8 @@ func (s *Server) miniAppAccount(w http.ResponseWriter, r *http.Request) {
 func accountEventsMethod() map[string]any {
 	return paymentMethod(
 		"list",
-		"List only your own event registrations and pass/payment status, including waitlists, "+
+		"List only your own event registrations and pass/payment status. While the module is enabled, pass_return "+
+			"shows its frozen price, confirmed receipts, agreed refund and recorded repayment. Includes waitlists, "+
 			"fully paid and ended events. Never authority-only events or other users, even for admins. "+
 			"Bounded UUID pagination; each page is a fresh snapshot. "+
 			"Disabled registrations retain safe metadata but omit pass/payment details: absent means "+

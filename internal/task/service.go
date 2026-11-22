@@ -26,6 +26,7 @@ import (
 	"github.com/complynx/zns-chatbot/internal/loom"
 	"github.com/complynx/zns-chatbot/internal/miniapp"
 	"github.com/complynx/zns-chatbot/internal/observability"
+	"github.com/complynx/zns-chatbot/internal/registrationdetails"
 	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
@@ -44,6 +45,7 @@ type Options struct {
 	DebugApprovalJSON                           bool
 	AvatarRenderer                              avatar.Processor
 	RegistrationDetailsEnabled                  bool
+	RegistrationDetailsProtector                *registrationdetails.Protector
 	SkillsEnabled                               bool
 	MiniAppURL                                  string
 	BotID                                       int64
@@ -70,6 +72,7 @@ type Service struct {
 	typingDone                    chan struct{}
 	reactionDone                  chan struct{}
 	menuDone                      chan struct{}
+	passAllocationDone            chan struct{}
 	menuMu                        sync.Mutex
 	menuApplied                   map[int64]string
 	menuRetry                     map[int64]menuRetryState
@@ -79,6 +82,7 @@ type Service struct {
 	nextDatabaseDiagnostic        time.Time
 	notificationCursor            uuid.UUID
 	pairExpiryCursor              uuid.UUID
+	passNoticeCursor              uuid.UUID
 	knowledgeArchiveCursor        uuid.UUID
 	avatarSourceExpiryCursor      uuid.UUID
 	knowledgeNotificationCursor   uuid.UUID
@@ -194,6 +198,7 @@ func New(
 	river.AddWorker(workers, &profileNameSyncWorker{service: s})
 	river.AddWorker(workers, &notificationWorker{service: s})
 	river.AddWorker(workers, &pairNotificationWorker{service: s})
+	river.AddWorker(workers, &passQueueNoticeWorker{service: s})
 	river.AddWorker(workers, &orderNotificationWorker{service: s})
 	river.AddWorker(workers, &knowledgeNotificationWorker{service: s})
 	river.AddWorker(workers, &communicationWorker{service: s})
@@ -229,6 +234,7 @@ func New(
 func (s *Service) recoverBusinessNotifications(ctx context.Context) error {
 	scope := s.notificationScope()
 	for _, recoverNotices := range []func(context.Context, db.EventScope) error{
+		s.store.RecoverPassAssignmentNotices,
 		s.store.RecoverNotifications, s.store.RecoverPairNotifications, s.store.RecoverOrderNotifications,
 		s.store.RecoverAvatarDeliveries,
 		s.store.RecoverCommunications,
@@ -296,10 +302,12 @@ func (s *Service) Start(ctx context.Context) error {
 	s.typingDone = make(chan struct{})
 	s.reactionDone = make(chan struct{})
 	s.menuDone = make(chan struct{})
+	s.passAllocationDone = make(chan struct{})
 	go s.watchLock(watchCtx, conn, s.watchDone)
 	go s.watchTyping(watchCtx, s.typingDone)
 	go s.watchReactions(watchCtx, s.reactionDone)
 	go s.watchMenus(watchCtx, s.menuDone)
+	go s.watchPassAllocation(watchCtx, s.passAllocationDone)
 	return nil
 }
 func (s *Service) releaseLock(parent context.Context) {
@@ -346,6 +354,7 @@ func (s *Service) watchLock(ctx context.Context, conn *pgxpool.Conn, done chan s
 				s.record(ctx, "notifications", "error")
 				s.logger.WarnContext(ctx, "notification scheduling unavailable", "class", "notification_queue")
 			}
+			s.repairPassAssignmentNotices(ctx)
 			s.repairPairNotifications(ctx)
 			s.repairProfileNames(ctx)
 			s.repairOrderNotifications(ctx)
@@ -396,6 +405,11 @@ func (s *Service) Stop(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		}
+		select {
+		case <-s.passAllocationDone:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 	if err := s.queue.StopAndCancel(ctx); err != nil {
 		return err
@@ -411,6 +425,9 @@ func (s *Service) accept(ctx context.Context, update telegram.Update, raw json.R
 	}
 	request, err := normalize(update, raw)
 	if err != nil {
+		return db.Task{}, false, err
+	}
+	if err = s.preparePassInput(&request); err != nil {
 		return db.Task{}, false, err
 	}
 	if err = s.routeStart(ctx, &request); err != nil {
@@ -431,6 +448,9 @@ func (s *Service) accept(ctx context.Context, update telegram.Update, raw json.R
 	return s.store.Intake(
 		ctx,
 		db.IntakeRequest{
+			PassSlug:       s.passSlugAtIntake(request),
+			PassInvite:     s.passInviteAtIntake(request),
+			PassTicket:     s.passTicketAtIntake(request),
 			Symbols:        request.Symbols,
 			Attachments:    request.Attachments,
 			BotID:          s.options.BotID,

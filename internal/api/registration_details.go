@@ -26,6 +26,11 @@ type passportNumberArguments struct {
 	PassportNumber  string `json:"passport_number" minLength:"1" maxLength:"128"`
 }
 
+type passportCountryArguments struct {
+	ExpectedVersion int64  `json:"expected_version" minimum:"0"`
+	PassportCountry string `json:"passport_country" minLength:"2" maxLength:"2"`
+}
+
 type registrationDetailsResponse struct {
 	Body struct {
 		Status      string                      `json:"status"`
@@ -60,6 +65,13 @@ func (s *Server) registerRegistrationDetails(api huma.API) {
 		s.agentRegistrationDetailsOperation,
 	)
 	s.registerDetailsRequests(api)
+	registerDetailsMutation(s, api, "set_passport_country", func(a passportCountryArguments) registrationdetails.Mutation {
+		return registrationdetails.Mutation{
+			Field:           registrationdetails.PassportCountry,
+			ExpectedVersion: a.ExpectedVersion,
+			Value:           a.PassportCountry,
+		}
+	})
 	registerDetailsMutation(s, api, "set_legal_name", func(a legalNameArguments) registrationdetails.Mutation {
 		return registrationdetails.Mutation{
 			Field:           registrationdetails.LegalName,

@@ -353,6 +353,15 @@ func (c *Client) signed(ctx context.Context, token string) (claims, error) {
 
 // Verify checks JWT trust before using a bounded positive introspection result.
 func (c *Client) Verify(ctx context.Context, token string) (Principal, error) {
+	return c.verify(ctx, token, true)
+}
+
+// VerifyFresh obtains current roles directly from IAM before a sensitive release.
+func (c *Client) VerifyFresh(ctx context.Context, token string) (Principal, error) {
+	return c.verify(ctx, token, false)
+}
+
+func (c *Client) verify(ctx context.Context, token string, useCached bool) (Principal, error) {
 	s, err := c.signed(ctx, token)
 	if err != nil {
 		return Principal{}, err
@@ -364,7 +373,7 @@ func (c *Client) Verify(ctx context.Context, token string) (Principal, error) {
 	epoch := c.cacheEpoch
 	ttl := c.options.PositiveCacheTTL
 	c.mu.Unlock()
-	if hit {
+	if useCached && hit {
 		return clonePrincipal(cached.principal), nil
 	}
 	d, err := c.discover(ctx)
@@ -402,11 +411,10 @@ func (c *Client) Verify(ctx context.Context, token string) (Principal, error) {
 	// Flat roles belong to the introspection client's project, which can differ
 	// from this API. Only the exact configured project claim may authorize it.
 	var apiRoles map[string]map[string]string
-	if raw, present := fields["urn:zitadel:iam:org:project:"+c.options.APIAudience+":roles"]; present {
-		if json.Unmarshal(raw, &apiRoles) != nil {
-			c.Invalidate(s.Subject)
-			return Principal{}, ErrDenied
-		}
+	if raw, present := fields["urn:zitadel:iam:org:project:"+c.options.APIAudience+":roles"]; present &&
+		json.Unmarshal(raw, &apiRoles) != nil {
+		c.Invalidate(s.Subject)
+		return Principal{}, ErrDenied
 	}
 	if !info.Active || info.Subject != s.Subject || info.Issuer != s.Issuer || info.Org != s.Org ||
 		info.Expiry == nil ||

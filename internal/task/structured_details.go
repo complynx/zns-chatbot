@@ -3,9 +3,11 @@ package task
 import (
 	"context"
 	"errors"
+	"net/url"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/internal/db"
@@ -50,6 +52,8 @@ func (s *Service) registrationDetailsEntry(
 			fields = append(fields, structuredText(ru, "legal full name", "ФИО по документу"))
 		case registrationdetails.PassportNumber:
 			fields = append(fields, structuredText(ru, "passport number", "номер паспорта"))
+		case registrationdetails.PassportCountry, registrationdetails.PassportPhoto:
+			fields = append(fields, passText(ru, "entry."+string(field)))
 		}
 	}
 	text := structuredText(
@@ -85,12 +89,16 @@ func (s *Service) registrationDetailsEntry(
 	)
 	keyboard := &telegram.InlineKeyboardMarkup{}
 	if len(fields) > 0 && s.options.RegistrationDetailsEnabled && s.options.MiniAppURL != "" {
+		formURL, formErr := detailsFormURL(s.options.MiniAppURL, request.Request.ID)
+		if formErr != nil {
+			return formErr
+		}
 		keyboard.InlineKeyboard = append(
 			keyboard.InlineKeyboard,
 			[]telegram.InlineKeyboardButton{
 				{
 					Text:   structuredText(ru, "Fill in registration details", "Заполнить данные"),
-					WebApp: &telegram.WebAppInfo{URL: s.options.MiniAppURL},
+					WebApp: &telegram.WebAppInfo{URL: formURL},
 				},
 			},
 		)
@@ -111,4 +119,15 @@ func (s *Service) registrationDetailsEntry(
 		},
 	)
 	return s.finishStructuredKeyboard(ctx, t, c, i, text, keyboard, ru)
+}
+
+func detailsFormURL(base string, requestID uuid.UUID) (string, error) {
+	form, err := url.Parse(base)
+	if err != nil {
+		return "", err
+	}
+	query := form.Query()
+	query.Set("details_request", requestID.String())
+	form.RawQuery = query.Encode()
+	return form.String(), nil
 }

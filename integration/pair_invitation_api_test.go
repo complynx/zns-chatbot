@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -21,6 +22,65 @@ func invitationAPIRequest(t *testing.T, f pairFixture, token, method, operation 
 		body["confirmation"] = map[string]any{"mode": "none"}
 	}
 	return adminRequest(t, f.H, token, http.MethodPost, "/internal/agent/pairs/"+method, body)
+}
+
+func TestPairInvitationContextMatchesDiscoveredSchemaForBothPolicies(t *testing.T) {
+	t.Parallel()
+	f := setupPair(t)
+	actor := pairUserToken(f, f.A)
+	code, raw := adminRequest(t, f.H, actor, http.MethodPost, "/internal/agent/pairs/discover", map[string]any{})
+	require.Equal(t, http.StatusOK, code, string(raw))
+	var discovery struct {
+		Methods []struct {
+			ID     string      `json:"id"`
+			Output huma.Schema `json:"output_schema"`
+		} `json:"methods"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &discovery))
+	var schema *huma.Schema
+	for _, method := range discovery.Methods {
+		if method.ID == "invitation_context" {
+			schema = &method.Output
+			break
+		}
+	}
+	require.NotNil(t, schema)
+	schema.PrecomputeMessages()
+	read := func(eventID uuid.UUID) map[string]any {
+		t.Helper()
+		args := map[string]any{"event_id": eventID}
+		status, data := invitationAPIRequest(t, f, actor, "invitation_context", uuid.NewString(), args)
+		require.Equal(t, http.StatusOK, status, string(data))
+		var response struct {
+			Status string         `json:"status"`
+			Result map[string]any `json:"result"`
+		}
+		require.NoError(t, json.Unmarshal(data, &response))
+		require.Equal(t, "succeeded", response.Status)
+		validation := &huma.ValidateResult{}
+		huma.Validate(huma.NewMapRegistry("#/schemas/", huma.DefaultSchemaNamer), schema,
+			huma.NewPathBuffer(nil, 0), huma.ModeReadFromServer, response.Result, validation)
+		require.Empty(t, validation.Errors)
+		return response.Result
+	}
+	directed := read(f.EventID)
+	require.Equal(t, f.Entry.ID.String(), directed["registration_id"])
+	require.NotContains(t, directed, "pass_command")
+
+	adminID, _ := registrationUser(t, f.H, 12005, true)
+	admin := paymentScope(t, f.H, adminID, true)
+	event, err := f.H.store.Event(t.Context(), admin.EventScope, f.EventID)
+	require.NoError(t, err)
+	event.Document.Slug = "pair-sale"
+	event.Document.Registration.AutoAssign = true
+	sale, err := f.H.store.ChangeEvent(t.Context(), admin.EventScope, admin.Subject, "create-code-sale",
+		db.EventChange{ID: uuid.New(), Document: event.Document})
+	require.NoError(t, err)
+	handoff := read(sale.ID)
+	require.Equal(t, "/passes pair-sale --pair", handoff["pass_command"])
+	for _, field := range []string{"registration_id", "expected_version", "role"} {
+		require.NotContains(t, handoff, field)
+	}
 }
 
 func TestPairInvitationAPIUsesOwnPartnerCodeAndRequiresTargetConsent(t *testing.T) {

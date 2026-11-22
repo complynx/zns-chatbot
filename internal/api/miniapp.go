@@ -42,6 +42,7 @@ type miniAppBootstrapResponse struct {
 }
 
 func (s *Server) registerMiniApp() {
+	s.registerPassAdmin()
 	s.registerMiniAppPairs()
 	s.registerMiniAppAssignments()
 	s.registerMiniAppPairAssignments()
@@ -65,6 +66,9 @@ func (s *Server) registerMiniApp() {
 		s.public.HandleFunc("GET /app/registration-details/operations/{operation}", s.miniAppDetails)
 		s.public.HandleFunc("POST /app/registration-details/legal-name", s.miniAppDetailsChange)
 		s.public.HandleFunc("POST /app/registration-details/passport-number", s.miniAppDetailsChange)
+		s.public.HandleFunc("POST /app/registration-details/passport-country", s.miniAppDetailsChange)
+		s.public.HandleFunc("POST /app/registration-details/passport-photo", s.miniAppDetailsChange)
+		s.public.HandleFunc("GET /app/registration-details/requests/{request}", s.miniAppDetailsRequest)
 	}
 }
 
@@ -251,15 +255,21 @@ func (s *Server) miniAppVerifiedPrincipal(ctx context.Context, owner db.User) (i
 		s.iam.Invalidate(owner.Subject)
 		return identity.Principal{}, identity.ErrDenied
 	}
-	credential, err := s.iam.UserToken(ctx, owner.Subject)
+	return s.verifyMiniAppSubject(ctx, owner.Subject, s.iam.Verify)
+}
+
+func (s *Server) verifyMiniAppSubject(ctx context.Context, subject string,
+	verify func(context.Context, string) (identity.Principal, error),
+) (identity.Principal, error) {
+	credential, err := s.iam.UserToken(ctx, subject)
 	if err != nil {
 		return identity.Principal{}, err
 	}
-	principal, err := s.iam.Verify(ctx, credential.Token)
+	principal, err := verify(ctx, credential.Token)
 	if err != nil {
 		return identity.Principal{}, err
 	}
-	if principal.Subject != owner.Subject || principal.OrganizationID != owner.Organization ||
+	if principal.Subject != subject || principal.OrganizationID != s.options.OrganizationID ||
 		principal.Actor != s.options.ActorID {
 		return identity.Principal{}, identity.ErrDenied
 	}
