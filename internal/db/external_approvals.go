@@ -61,11 +61,16 @@ func (s *Store) ExternalApprovalDelivered(ctx context.Context, operation, user u
 	return delivered, err
 }
 
-func (s *Store) CanAnswerExternalApproval(ctx context.Context, operation, user uuid.UUID, message int64) (bool, error) {
-	var allowed bool
-	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM shuttle_external_approval_messages
-		WHERE operation_id=$1 AND user_id=$2 AND expires_at>clock_timestamp()
-		AND message_id=$3)`,
-		operation, user, message).Scan(&allowed)
-	return allowed, err
+// ExternalApprovalCallback checks the delivered message independently of the decision deadline.
+func (s *Store) ExternalApprovalCallback(
+	ctx context.Context, operation, user uuid.UUID, message int64,
+) (bool, bool, error) {
+	var expired bool
+	err := s.pool.QueryRow(ctx, `SELECT expires_at<=clock_timestamp()
+		FROM shuttle_external_approval_messages WHERE operation_id=$1 AND user_id=$2 AND message_id=$3`,
+		operation, user, message).Scan(&expired)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, false, nil
+	}
+	return err == nil, expired, err
 }

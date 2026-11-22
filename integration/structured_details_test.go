@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/db"
@@ -165,14 +166,16 @@ func TestStructuredRegistrationDetailsInterruptedPromptCannotAutoRegister(t *tes
 			"shuttle_outbox FOR EACH ROW EXECUTE FUNCTION reject_details_prompt()")
 	require.NoError(t, err)
 	click := registrationButton(t, h, 95911, 1, 456, role)
-	require.Eventually(t, func() bool {
-		var ready bool
-		readErr := h.store.Pool().
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		var requestExists bool
+		var state string
+		require.NoError(c, h.store.Pool().
 			QueryRow(t.Context(), "SELECT EXISTS(SELECT 1 FROM shuttle_registration_details_request_operations WHERE "+
-				"operation_id=$1) AND EXISTS(SELECT 1 FROM shuttle_tasks WHERE id=$1 AND state<>'completed')", click).
-			Scan(&ready)
-		return readErr == nil && ready
-	}, 5*time.Second, 10*time.Millisecond)
+				"operation_id=$1), state FROM shuttle_tasks WHERE id=$1", click).
+			Scan(&requestExists, &state))
+		require.True(c, requestExists, "details expectation was not saved")
+		require.NotEqual(c, "completed", state, "the injected outbox failure did not interrupt the task")
+	}, 15*time.Second, 25*time.Millisecond)
 	h.stop(t)
 	version := int64(0)
 	for _, field := range []registrationdetails.Field{registrationdetails.LegalName, registrationdetails.PassportNumber} {

@@ -47,6 +47,16 @@ using Loom's `mcp_access` tools.
 
 ## Deployment
 
+With Loom's OAuth broker enabled, Zinusya sends a Telegram approval for each
+new OAuth login. It names the OAuth client and shows its callback. The browser
+continues after the owner approves using the delivered message. The approval
+does not change the read or write settings in `/mcp`.
+
+In `/mcp`, use the Read and Changes toggles. Enabling read access includes the
+available Loom history, personal memory and organization skills. Changes
+require read access. Use Get instructions for the agent to copy the server
+URL and the OAuth settings that Loom advertises.
+
 1. Upgrade Loom to a version that supports the external-agent manifest
    permission. Configure its `external_agents` settings, a separate MCP
    audience and introspection credentials, external disclosure, and the

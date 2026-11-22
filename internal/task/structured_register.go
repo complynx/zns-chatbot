@@ -319,7 +319,7 @@ func (s *Service) finishStructuredKeyboard(
 		out[len(out)-1].Payload = raw
 	}
 	t.State = stateCompleted
-	if err := s.save(ctx, t, c, out); err != nil {
+	if err := s.save(ctx, t, c, editCallbackOutput(i, out)); err != nil {
 		return s.wait()
 	}
 	return s.deliver(ctx, t, c)

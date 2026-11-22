@@ -17,7 +17,8 @@ import (
 func TestExternalAgentSettingsRespectCapabilityAndConsentVersion(t *testing.T) {
 	t.Parallel()
 	const resource = "https://loom.example/mcp"
-	const capabilities = `{"external_agent":{"version":1,"resource":"` + resource + `","access":["history","skills"]}}`
+	const capabilities = `{"external_agent":{"version":1,"resource":"` + resource +
+		`","access":["history","skills","writes"]}}`
 	var mu sync.Mutex
 	var profile loom.ExternalAgentProfile
 	advertised := false
@@ -61,7 +62,7 @@ func TestExternalAgentSettingsRespectCapabilityAndConsentVersion(t *testing.T) {
 	defer remote.Close()
 	client, err := loom.New(remote.URL, remote.Client())
 	require.NoError(t, err)
-	service := &Service{loom: client}
+	service := &Service{loom: client, options: Options{ExternalAgentWrites: true}}
 	auth := loom.Auth{ServiceToken: "service", SubjectToken: "owner"}
 	text, keyboard := service.externalAgentView(t.Context(), auth, nil, false)
 	require.Equal(t, externalAgentUnavailable(false), text)
@@ -70,25 +71,37 @@ func TestExternalAgentSettingsRespectCapabilityAndConsentVersion(t *testing.T) {
 	advertised = true
 	mu.Unlock()
 	text, keyboard = service.externalAgentView(t.Context(), auth, nil, false)
-	require.NotContains(t, text, resource)
-	require.Len(t, keyboard.InlineKeyboard, 1)
+	require.Contains(t, text, resource)
+	require.Len(t, keyboard.InlineKeyboard, 3)
+	require.Equal(t, "⬜ Read", keyboard.InlineKeyboard[0][0].Text)
+	require.Equal(t, "⬜ Changes", keyboard.InlineKeyboard[1][0].Text)
+	oldButton := externalAgentButton(t, "mcp:0:enable")
+	notice, refreshed := service.externalAgentView(t.Context(), auth, oldButton, false)
+	require.Contains(t, notice, "out of date")
+	require.Equal(t, "⬜ Read", refreshed.InlineKeyboard[0][0].Text)
+	mu.Lock()
+	require.Zero(t, writes)
+	require.Equal(t, loom.ExternalAgentProfile{}, profile)
+	mu.Unlock()
 	enabled := externalAgentButton(t, keyboard.InlineKeyboard[0][0].CallbackData)
 	text, keyboard = service.externalAgentView(t.Context(), auth, enabled, false)
 	require.Contains(t, text, resource)
 	require.Len(t, keyboard.InlineKeyboard, 3)
-	require.Equal(t, "mcp:1:history", keyboard.InlineKeyboard[0][0].CallbackData)
+	require.Equal(t, "☑️ Read", keyboard.InlineKeyboard[0][0].Text)
+	require.Equal(t, "mcp:1:disable", keyboard.InlineKeyboard[0][0].CallbackData)
 	text, _ = service.externalAgentView(t.Context(), auth, &externalAgentChange{Version: 1, Action: "memory"}, false)
 	require.Contains(t, text, "out of date")
-	history := externalAgentButton(t, keyboard.InlineKeyboard[0][0].CallbackData)
-	text, keyboard = service.externalAgentView(t.Context(), auth, history, false)
+	write := externalAgentButton(t, keyboard.InlineKeyboard[1][0].CallbackData)
+	text, keyboard = service.externalAgentView(t.Context(), auth, write, false)
 	require.NotContains(t, text, "couldn't")
-	require.Contains(t, keyboard.InlineKeyboard[0][0].Text, "Revoke")
-	text, _ = service.externalAgentView(t.Context(), auth, history, false)
+	require.Equal(t, "☑️ Changes", keyboard.InlineKeyboard[1][0].Text)
+	text, _ = service.externalAgentView(t.Context(), auth, write, false)
 	require.Contains(t, text, "out of date")
-	disabled := externalAgentButton(t, keyboard.InlineKeyboard[2][0].CallbackData)
+	disabled := externalAgentButton(t, keyboard.InlineKeyboard[0][0].CallbackData)
 	text, keyboard = service.externalAgentView(t.Context(), auth, disabled, true)
-	require.Contains(t, text, "Доступ выключен")
-	require.Len(t, keyboard.InlineKeyboard, 1)
+	require.Contains(t, text, resource)
+	require.Len(t, keyboard.InlineKeyboard, 3)
+	require.Equal(t, "⬜ Чтение", keyboard.InlineKeyboard[0][0].Text)
 	mu.Lock()
 	defer mu.Unlock()
 	require.Equal(t, 3, writes)

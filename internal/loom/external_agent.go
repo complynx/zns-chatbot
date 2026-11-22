@@ -14,10 +14,40 @@ const externalAgentProfilePath = "/users/me/external-agent"
 const ExternalAgentProfilePermission = "external_agent.profile.write"
 
 type ExternalAgentCapability struct {
-	Resource      string   `json:"resource"`
-	Access        []string `json:"access"`
-	TokenServices []string `json:"token_services"`
-	Version       int      `json:"version"`
+	Resource      string              `json:"resource"`
+	Access        []string            `json:"access"`
+	TokenServices []string            `json:"token_services"`
+	Version       int                 `json:"version"`
+	OAuth         *ExternalAgentOAuth `json:"oauth,omitempty"`
+}
+
+type ExternalAgentOAuth struct {
+	Issuer              string `json:"issuer"`
+	Scope               string `json:"scope"`
+	DynamicRegistration bool   `json:"dynamic_client_registration"`
+}
+
+type ExternalConnectionApproval struct {
+	ID        string    `json:"id"`
+	Issuer    string    `json:"issuer"`
+	Subject   string    `json:"subject"`
+	OrgID     string    `json:"organization"`
+	Client    string    `json:"client"`
+	Redirect  string    `json:"redirect_uri"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+func (c *Client) DecideExternalConnection(ctx context.Context, auth Auth, id, choice string) error {
+	if auth.SubjectToken == "" || auth.SessionID != "" {
+		return &Error{Outcome: NotStarted}
+	}
+	path, err := resourcePath("users/me/external-agent/connections", id, "/decision")
+	if err != nil {
+		return err
+	}
+	return c.call(ctx, http.MethodPost, path, auth, "", struct {
+		Choice string `json:"choice"`
+	}{choice}, &struct{}{}, true, false)
 }
 
 // ExternalAgentProfile is the user's consent and its compare-and-swap version.

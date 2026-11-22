@@ -473,6 +473,7 @@ func communicationDeliveryScenario(t *testing.T, personalized bool) {
 	p := f.h.peers
 	p.adminRole = true
 	if personalized {
+		p.markupEdits = []telegram.EditMessageMarkupRequest{}
 		_, err := f.h.store.Pool().Exec(t.Context(),
 			`INSERT INTO shuttle_user_profiles(user_id,version,full_name) VALUES($1,1,'Saved Sender')`, f.admin.UserID)
 		require.NoError(t, err)
@@ -515,12 +516,16 @@ func communicationDeliveryScenario(t *testing.T, personalized bool) {
 	keyboard, ok = message.ReplyMarkup.(*telegram.InlineKeyboardMarkup)
 	require.True(t, ok)
 	require.Len(t, keyboard.InlineKeyboard, 2)
-	communicationClick(t, f, 41003, keyboard.InlineKeyboard[1][0].CallbackData, 51002)
-	manage := communicationRecipientMessage(t, f, 41003, "Unsubscribing may hide important event information")
-	management := manage.ReplyMarkup.(*telegram.InlineKeyboardMarkup)
-	communicationClick(t, f, 41003, management.InlineKeyboard[0][0].CallbackData, 51003)
-	restore := communicationRecipientMessage(t, f, 41003, "Restore with the button")
-	require.NotNil(t, restore.ReplyMarkup)
+	if personalized {
+		editBroadcastControlsInPlace(t, f, message, keyboard)
+	} else {
+		communicationClick(t, f, 41003, keyboard.InlineKeyboard[1][0].CallbackData, 51002)
+		manage := communicationRecipientMessage(t, f, 41003, "Unsubscribing may hide important event information")
+		management := manage.ReplyMarkup.(*telegram.InlineKeyboardMarkup)
+		communicationClick(t, f, 41003, management.InlineKeyboard[0][0].CallbackData, 51003)
+		restore := communicationRecipientMessage(t, f, 41003, "Restore with the button")
+		require.NotNil(t, restore.ReplyMarkup)
+	}
 	if personalized {
 		require.EqualValues(t, 1, stats.models.Load())
 		require.EqualValues(t, 1, stats.memory.Load())
@@ -567,12 +572,13 @@ func communicationDeliveryScenario(t *testing.T, personalized bool) {
 	require.Eventually(t, func() bool {
 		current, e := f.h.store.Communication(t.Context(), f.admin, second.ID)
 		return e == nil && current.DeliveryCounts["delivery_blocked"] == 1
-	}, 10*time.Second, 20*time.Millisecond)
+	}, 15*time.Second, 25*time.Millisecond)
 	if personalized {
 		require.EqualValues(t, 1, stats.models.Load())
 	}
 	// Warnings are delivered despite that opt-out and have no unsubscribe controls.
 	if personalized {
+		deniedBroadcastClick(t, f, telegramMessageID, keyboard)
 		return
 	}
 	a.Category = "warning"
@@ -586,4 +592,69 @@ func communicationDeliveryScenario(t *testing.T, personalized bool) {
 	require.NoError(t, err)
 	warningMessage := communicationRecipientMessage(t, f, 41003, a.Text)
 	require.Nil(t, warningMessage.ReplyMarkup)
+}
+
+func editBroadcastControlsInPlace(
+	t *testing.T, f knowledgeFixture, message telegram.SendMessageRequest, keyboard *telegram.InlineKeyboardMarkup,
+) {
+	t.Helper()
+	p := f.h.peers
+	var messageID int64
+	p.mu.Lock()
+	for n, sent := range p.sent {
+		if sent.ChatID == message.ChatID && sent.Text == message.Text {
+			messageID = int64(n + 1)
+		}
+	}
+	p.mu.Unlock()
+	require.Positive(t, messageID)
+	click := func(update int64, data string, count int) *telegram.InlineKeyboardMarkup {
+		task := registrationButton(t, f.h, update, messageID, message.ChatID, data)
+		f.h.await(t, task, "completed")
+		require.Eventually(t, func() bool {
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			return len(p.markupEdits) == count
+		}, 5*time.Second, 25*time.Millisecond)
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		edit := p.markupEdits[count-1]
+		require.Equal(t, messageID, edit.MessageID)
+		require.Equal(t, message.ChatID, edit.ChatID)
+		require.Equal(t, message.Text, p.sent[messageID-1].Text)
+		return edit.ReplyMarkup
+	}
+	global := click(51002, keyboard.InlineKeyboard[1][0].CallbackData, 1)
+	require.Len(t, global.InlineKeyboard, 4)
+	require.Contains(t, global.InlineKeyboard[0][0].Text, "May miss updates")
+	event := click(51003, global.InlineKeyboard[2][0].CallbackData, 2)
+	require.True(t, strings.HasSuffix(event.InlineKeyboard[0][0].CallbackData, ":offevent"))
+	global = click(51004, event.InlineKeyboard[3][0].CallbackData, 3)
+	require.True(t, strings.HasSuffix(global.InlineKeyboard[0][0].CallbackData, ":offall"))
+	click(51005, global.InlineKeyboard[0][0].CallbackData, 4)
+	require.Len(t, sentNotifications(p, message.ChatID), 1)
+	var subscribed bool
+	err := f.h.store.Pool().QueryRow(t.Context(), `SELECT subscribed
+ FROM shuttle_broadcast_subscriptions WHERE user_id=$1 AND scope='all' AND category='information'`,
+		f.user.UserID).Scan(&subscribed)
+	require.NoError(t, err)
+	require.False(t, subscribed)
+}
+
+func deniedBroadcastClick(t *testing.T, f knowledgeFixture, messageID int64, keyboard *telegram.InlineKeyboardMarkup) {
+	t.Helper()
+	const recipient = 41003
+	p := f.h.peers
+	p.mu.Lock()
+	p.userInactive = true
+	p.messageEdits = []telegram.EditMessageRequest{}
+	p.mu.Unlock()
+	f.h.iam.Invalidate(f.user.Subject)
+	click := registrationButton(t, f.h, 51006, messageID, recipient, keyboard.InlineKeyboard[1][0].CallbackData)
+	f.h.await(t, click, "failed")
+	communicationRecipientMessage(t, f, recipient, "don’t have access right now")
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	require.Empty(t, p.messageEdits)
+	require.Len(t, p.markupEdits, 4)
 }

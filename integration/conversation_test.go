@@ -151,6 +151,89 @@ func TestConversationApprovalTextDoesNotBecomeBinaryClientDecision(t *testing.T)
 	}
 }
 
+func TestLostInlineApprovalClearsOriginalKeyboard(t *testing.T) {
+	t.Parallel()
+	p := newPeers(t)
+	p.markupEdits = []telegram.EditMessageMarkupRequest{}
+	p.approval = &loom.Approval{
+		ID: "lost-inline-approval", ReplyMode: loom.ReplyModeProtocol,
+		Text: "Approve the exact operation?", ExpiresAt: time.Now().Add(time.Hour),
+	}
+	p.loseInputAndStopLoom = true
+	h := setup(t, p)
+	run := h.submit(t, 96024)
+	h.await(t, run, "awaiting_user")
+	h.awaitReplies(t, 1)
+	p.mu.Lock()
+	prompt := p.sent[0]
+	p.mu.Unlock()
+	buttons := prompt.ReplyMarkup.(*telegram.InlineKeyboardMarkup).InlineKeyboard
+	click := registrationButton(t, h, 96025, 1, prompt.ChatID, buttons[0][0].CallbackData)
+	h.await(t, click, "awaiting_service")
+	p.mu.Lock()
+	require.True(t, p.loomDown)
+	require.Len(t, p.inputs, 1)
+	require.Empty(t, p.markupEdits)
+	p.loomDown = false
+	p.mu.Unlock()
+	h.await(t, run, "completed")
+	h.await(t, click, "completed")
+	require.Eventually(t, func() bool {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return len(p.markupEdits) == 1
+	}, 15*time.Second, 25*time.Millisecond)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	require.Len(t, p.inputs, 1)
+	require.GreaterOrEqual(t, len(p.inputAttempts), 2)
+	require.EqualValues(t, 1, p.markupEdits[0].MessageID)
+	require.Empty(t, p.markupEdits[0].ReplyMarkup.InlineKeyboard)
+	require.Equal(t, prompt.Text, p.sent[0].Text)
+}
+
+func TestStaleInlineApprovalEditsOnlyItsDeliveredKeyboard(t *testing.T) {
+	t.Parallel()
+	p := newPeers(t)
+	p.markupEdits = []telegram.EditMessageMarkupRequest{}
+	p.approval = &loom.Approval{
+		ID: "stale-inline-approval", ReplyMode: loom.ReplyModeProtocol,
+		Text: "Approve the presented operation?", ExpiresAt: time.Now().Add(time.Hour),
+	}
+	h := setup(t, p)
+	run := h.submit(t, 96027)
+	h.await(t, run, "awaiting_user")
+	h.awaitReplies(t, 1)
+	p.mu.Lock()
+	prompt := p.sent[0]
+	remote := p.runs[run.String()]
+	remote.Status, remote.Result = "completed", "The operation is already settled."
+	remote.Version++
+	p.runs[run.String()] = remote
+	p.mu.Unlock()
+	buttons := prompt.ReplyMarkup.(*telegram.InlineKeyboardMarkup).InlineKeyboard
+	h.await(t, run, "completed")
+	h.awaitReplies(t, 2)
+	click := registrationButton(t, h, 96028, 1, prompt.ChatID, buttons[0][0].CallbackData)
+	h.await(t, click, "completed")
+	require.Eventually(t, func() bool {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return len(p.markupEdits) == 1
+	}, 15*time.Second, 25*time.Millisecond)
+	// A stale payload attached to another message must never remove that message's keyboard.
+	other := registrationButton(t, h, 96029, 2, prompt.ChatID, buttons[0][0].CallbackData)
+	h.await(t, other, "completed")
+	h.awaitReplies(t, 3)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	require.Empty(t, p.inputs)
+	require.Len(t, p.markupEdits, 1)
+	require.EqualValues(t, 1, p.markupEdits[0].MessageID)
+	require.Empty(t, p.markupEdits[0].ReplyMarkup.InlineKeyboard)
+	require.Equal(t, prompt.Text, p.sent[0].Text)
+}
+
 func TestConversationRestoresApprovalKeyboardAfterClarificationCompletes(t *testing.T) {
 	t.Parallel()
 	p := newPeers(t)

@@ -38,6 +38,32 @@ type availableTelegram struct {
 	logger *slog.Logger
 }
 
+func (c *availableTelegram) EditMessageText(
+	ctx context.Context,
+	in telegram.EditMessageRequest,
+) (telegram.Receipt, error) {
+	var result telegram.Receipt
+	err := c.privateCall(ctx, in.ChatID, func() error {
+		var err error
+		result, err = c.Client.EditMessageText(ctx, in)
+		return err
+	})
+	return result, err
+}
+
+func (c *availableTelegram) EditMessageMarkup(
+	ctx context.Context,
+	in telegram.EditMessageMarkupRequest,
+) (telegram.Receipt, error) {
+	var result telegram.Receipt
+	err := c.privateCall(ctx, in.ChatID, func() error {
+		var err error
+		result, err = c.Client.EditMessageMarkup(ctx, in)
+		return err
+	})
+	return result, err
+}
+
 func (c *availableTelegram) privateCall(ctx context.Context, id int64, call func() error) error {
 	if id <= 0 {
 		return call()

@@ -42,6 +42,8 @@ import (
 type peers struct {
 	mcpWriteSecret                          string
 	mcpDecisions                            []string
+	messageEdits                            []telegram.EditMessageRequest
+	markupEdits                             []telegram.EditMessageMarkupRequest
 	reactionEvents                          []loom.ChatEvent
 	reactionCalls                           []reactionCall
 	reactionsEnabled                        bool
@@ -322,7 +324,8 @@ func (p *peers) agent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
-	case p.mcpWriteSecret != "" && strings.HasPrefix(r.URL.Path, "/v1/users/me/external-agent/approvals/"):
+	case p.mcpWriteSecret != "" && (strings.HasPrefix(r.URL.Path, "/v1/users/me/external-agent/approvals/") ||
+		strings.HasPrefix(r.URL.Path, "/v1/users/me/external-agent/connections/")):
 		p.externalApprovalDecision(w, r)
 	case strings.HasSuffix(r.URL.Path, "/history") && r.Method == http.MethodGet && p.reactionsEnabled:
 		p.reactionHistory(w, r)
@@ -532,7 +535,50 @@ func (p *peers) initialRun(key string, request loom.CreateRunRequest) loom.Run {
 	}
 	return run
 }
+func (p *peers) telegramEditMarkup(w http.ResponseWriter, r *http.Request) {
+	var message telegram.EditMessageMarkupRequest
+	err := json.NewDecoder(r.Body).Decode(&message)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if err == nil && p.markupEdits != nil && message.MessageID > 0 && message.MessageID <= int64(len(p.sent)) &&
+		p.sent[message.MessageID-1].ChatID == message.ChatID {
+		p.markupEdits = append(p.markupEdits, message)
+		respond(w, map[string]any{"ok": true, "result": telegram.Message{
+			ID: message.MessageID, Chat: telegram.Chat{ID: message.ChatID},
+		}})
+		return
+	}
+	w.WriteHeader(http.StatusBadRequest)
+	respond(w, map[string]any{"ok": false, "error_code": 400, "description": "Bad Request: message to edit not found"})
+}
+
+func (p *peers) telegramEditText(w http.ResponseWriter, r *http.Request) {
+	var message telegram.EditMessageRequest
+	err := json.NewDecoder(r.Body).Decode(&message)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if err == nil && p.messageEdits != nil && message.MessageID > 0 && message.MessageID <= int64(len(p.sent)) &&
+		p.sent[message.MessageID-1].ChatID == message.ChatID {
+		p.messageEdits = append(p.messageEdits, message)
+		respond(w, map[string]any{
+			"ok":     true,
+			"result": map[string]any{"message_id": message.MessageID, "chat": map[string]int64{"id": message.ChatID}},
+		})
+		return
+	}
+	w.WriteHeader(http.StatusBadRequest)
+	respond(w, map[string]any{"ok": false, "error_code": 400, "description": "Bad Request: message to edit not found"})
+}
+
 func (p *peers) telegram(w http.ResponseWriter, r *http.Request) {
+	if strings.HasSuffix(r.URL.Path, "/editMessageReplyMarkup") {
+		p.telegramEditMarkup(w, r)
+		return
+	}
+	if strings.HasSuffix(r.URL.Path, "/editMessageText") {
+		p.telegramEditText(w, r)
+		return
+	}
 	if strings.HasSuffix(r.URL.Path, "/sendMessage") {
 		p.telegramSendMessage(w, r)
 		return

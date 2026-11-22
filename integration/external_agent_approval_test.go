@@ -14,6 +14,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/db"
@@ -76,6 +77,119 @@ func TestExternalAgentApprovalUsesTelegramWithoutAgentRun(t *testing.T) {
 	defer p.mu.Unlock()
 	require.Empty(t, p.runs)
 	require.Equal(t, []string{"all"}, p.mcpDecisions)
+}
+
+func TestExternalConnectionApprovesOnlyOwnerAndEditsOriginalMessage(t *testing.T) {
+	t.Parallel()
+	p := newPeers(t)
+	p.mcpWriteSecret = "fixture-mcp-delivery-secret"
+	p.messageEdits = []telegram.EditMessageRequest{}
+	h := setup(t, p)
+	owner := scopedAccount(t, h, 123, 456, "external-owner")
+	other := scopedAccount(t, h, 123, 457, "other-owner")
+	_, _, issuer := h.iam.DeploymentScope()
+	approval := loom.ExternalConnectionApproval{
+		ID: uuid.NewString(), Issuer: issuer, Subject: owner.Subject, OrgID: owner.Organization,
+		Client: "Desktop agent", Redirect: "http://127.0.0.1:52817/callback",
+		ExpiresAt: time.Now().Add(time.Minute),
+	}
+	body, err := json.Marshal(map[string]any{"protocol_version": 1, "connection_approval": approval})
+	require.NoError(t, err)
+	notify := func(secret string) int {
+		request := httptest.NewRequest(http.MethodPost, "/internal/agent/external-agent/token", bytes.NewReader(body))
+		request.Header.Set("Authorization", "Bearer "+secret)
+		return postExternalApproval(h, request)
+	}
+	require.Equal(t, http.StatusUnauthorized, notify("wrong"))
+	for range 2 {
+		require.Equal(t, http.StatusOK, notify(p.mcpWriteSecret))
+	}
+	p.mu.Lock()
+	require.Len(t, p.sent, 1)
+	require.Contains(t, p.sent[0].Text, approval.Client)
+	markup := p.sent[0].ReplyMarkup.(*telegram.InlineKeyboardMarkup)
+	p.mu.Unlock()
+	choice := markup.InlineKeyboard[0][0].CallbackData
+	communicationClick(t, knowledgeFixture{h: h}, other.TelegramUserID, choice, 468)
+	wrongMessage := registrationButton(t, h, 469, 99, owner.TelegramUserID, choice)
+	h.await(t, wrongMessage, "completed")
+	h.awaitReplies(t, 3)
+	p.mu.Lock()
+	require.Empty(t, p.mcpDecisions)
+	p.mu.Unlock()
+	communicationClick(t, knowledgeFixture{h: h}, owner.TelegramUserID, choice, 470)
+	require.Eventually(t, func() bool {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return len(p.messageEdits) == 1
+	}, 5*time.Second, 25*time.Millisecond)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	require.Empty(t, p.runs)
+	require.Equal(t, []string{"approve"}, p.mcpDecisions)
+	require.Len(t, p.sent, 3)
+	require.Len(t, p.messageEdits, 1)
+	require.EqualValues(t, 1, p.messageEdits[0].MessageID)
+	require.Empty(t, p.messageEdits[0].ReplyMarkup.InlineKeyboard)
+}
+
+func TestExpiredExternalApprovalsEditDeliveredPromptsWithoutDeciding(t *testing.T) {
+	t.Parallel()
+	p := newPeers(t)
+	p.mcpWriteSecret = "fixture-mcp-delivery-secret"
+	p.messageEdits = []telegram.EditMessageRequest{}
+	h := setup(t, p)
+	owner := scopedAccount(t, h, 123, 456, "external-owner")
+	_, _, issuer := h.iam.DeploymentScope()
+	connectionID, writeID := uuid.New(), uuid.New()
+	expiresAt := time.Now().Add(time.Minute)
+	body, err := json.Marshal(map[string]any{
+		"protocol_version": 1,
+		"connection_approval": loom.ExternalConnectionApproval{
+			ID: connectionID.String(), Issuer: issuer, Subject: owner.Subject, OrgID: owner.Organization,
+			Client: "Desktop agent", Redirect: "http://127.0.0.1:52817/callback", ExpiresAt: expiresAt,
+		},
+	})
+	require.NoError(t, err)
+	request := httptest.NewRequest(http.MethodPost, "/internal/agent/external-agent/token", bytes.NewReader(body))
+	request.Header.Set("Authorization", "Bearer "+p.mcpWriteSecret)
+	require.Equal(t, http.StatusOK, postExternalApproval(h, request))
+	write := loom.ExternalApproval{
+		ID: writeID.String(), Subject: owner.Subject, OrgID: owner.Organization, Client: "Desktop agent",
+		Service: "zinusya", Module: "zinusya_knowledge", Method: "suggest", Description: "Suggest a change.",
+		Arguments: json.RawMessage(`{"title":"Proposal","body":"Proposed change"}`), ExpiresAt: expiresAt,
+	}
+	require.Equal(t, http.StatusOK, notifyExternalApproval(t, h, write, p.mcpWriteSecret))
+	p.mu.Lock()
+	sent := append([]telegram.SendMessageRequest(nil), p.sent...)
+	p.mu.Unlock()
+	require.Len(t, sent, 2)
+	tag, err := h.store.Pool().Exec(t.Context(), `UPDATE shuttle_external_approval_messages
+		SET expires_at=clock_timestamp()-interval '1 second' WHERE operation_id IN ($1,$2)`, connectionID, writeID)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, tag.RowsAffected())
+
+	for index, message := range sent {
+		markup := message.ReplyMarkup.(*telegram.InlineKeyboardMarkup)
+		messageID := int64(index + 1)
+		taskID := registrationButton(t, h, int64(471+index), messageID, owner.TelegramUserID,
+			markup.InlineKeyboard[0][0].CallbackData)
+		h.await(t, taskID, "completed")
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			if assert.Len(c, p.messageEdits, index+1) {
+				edit := p.messageEdits[index]
+				assert.Equal(c, messageID, edit.MessageID)
+				assert.Empty(c, edit.ReplyMarkup.InlineKeyboard)
+			}
+		}, 15*time.Second, 25*time.Millisecond)
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	require.Len(t, p.sent, 2)
+	require.Empty(t, p.mcpDecisions)
+	require.Empty(t, p.runs)
 }
 
 func notifyExternalApproval(t *testing.T, h *harness, approval loom.ExternalApproval, secret string) int {
@@ -232,9 +346,9 @@ func TestExternalAgentApprovalResumesAfterTelegramRateLimit(t *testing.T) {
 		FROM shuttle_external_approval_messages WHERE operation_id=$1`, id).Scan(&nextPart, &hasRetryDelay))
 	require.Equal(t, 1, nextPart)
 	require.True(t, hasRetryDelay)
-	allowed, err := h.store.CanAnswerExternalApproval(t.Context(), id, owner.ID, 1)
+	matched, _, err := h.store.ExternalApprovalCallback(t.Context(), id, owner.ID, 1)
 	require.NoError(t, err)
-	require.False(t, allowed, "The first part cannot authorize the action")
+	require.False(t, matched, "The first part cannot authorize the action")
 	require.Equal(t, http.StatusServiceUnavailable, notifyExternalApproval(t, h, a, p.mcpWriteSecret))
 	h.awaitReplies(t, 2)
 
@@ -253,12 +367,13 @@ func TestExternalAgentApprovalResumesAfterTelegramRateLimit(t *testing.T) {
 		require.Nil(t, message.ReplyMarkup)
 	}
 	require.NotNil(t, p.sent[len(p.sent)-1].ReplyMarkup)
-	allowed, err = h.store.CanAnswerExternalApproval(t.Context(), id, owner.ID, 1)
+	matched, _, err = h.store.ExternalApprovalCallback(t.Context(), id, owner.ID, 1)
 	require.NoError(t, err)
-	require.False(t, allowed, "A different message remains invalid after final delivery")
-	allowed, err = h.store.CanAnswerExternalApproval(t.Context(), id, owner.ID, int64(len(p.sent)))
+	require.False(t, matched, "A different message remains invalid after final delivery")
+	matched, expired, err := h.store.ExternalApprovalCallback(t.Context(), id, owner.ID, int64(len(p.sent)))
 	require.NoError(t, err)
-	require.True(t, allowed, "Only the recorded final message can authorize the action")
+	require.True(t, matched, "Only the recorded final message can authorize the action")
+	require.False(t, expired)
 }
 
 func TestExternalAgentCatalogApprovalShowsExactReplacementPrices(t *testing.T) {
